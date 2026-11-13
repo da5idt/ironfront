@@ -1,6 +1,8 @@
 # Ironfront
 
-A personal, original real-time strategy game (base building, resource gathering, unit control) in the spirit of 1990s RTS games. It is not a recreation of any existing game: no names, characters, art, music, maps or text from one. No game code exists yet; the first game spec picks the stack and adds its CI checks.
+A personal, original real-time strategy game (base building, resource gathering, unit control) in the spirit of 1990s RTS games. It is not a recreation of any existing game: no names, characters, art, music, maps or text from one.
+
+Stack (ADR 0001): TypeScript (strict), Vite, Vitest and plain Canvas 2D on Node 22; no engine. `npm run dev`, `npm test`, `npm run typecheck`, `npm run build`. All game rules live in `src/sim` behind the seam in `src/sim/index.ts` (ADR 0002: fixed Ticks, seeded random only, no DOM or clock); drawing and input live in `src/client`. Balance numbers live in `src/sim/tuning.ts`.
 
 ## Agent skills
 
