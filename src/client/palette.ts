@@ -35,3 +35,9 @@ export const DRAG_BOX_FILL = "rgba(200, 240, 200, 0.12)";
 
 export const HUD_TEXT = "#f2f2f2";
 export const HUD_BG = "rgba(10, 12, 16, 0.75)";
+
+export const PANEL_BG = "#15181e";
+export const PANEL_EDGE = "#2c323c";
+export const MINIMAP_BACK = "#000";
+export const MINIMAP_BORDER = "#3a414c";
+export const MINIMAP_FRAME = "#f2f2f2";

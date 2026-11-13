@@ -10,7 +10,9 @@ import {
   scrollDirection,
   type Size,
 } from "./camera";
+import { computeLayout, contains, type Layout } from "./layout";
 import { type Clock, interpolationAlpha, stepClock } from "./loop";
+import { cameraOnMinimapPoint } from "./minimap";
 import { Renderer } from "./renderer";
 import {
   boxSelect,
@@ -33,16 +35,19 @@ const renderer = new Renderer(canvas);
 const match = createMatch(RIVERFORD, Date.now() >>> 0);
 
 let screen: Size = { width: window.innerWidth, height: window.innerHeight };
+let layout: Layout = computeLayout(screen);
+/** The camera's screen size: the Map view, not the whole window, so nothing sits under the side panel. */
+let viewSize: Size = layout.mapView;
 let view = getPlayerView(match, HUMAN);
 const mapSize = { width: view.map.width, height: view.map.height };
 
 const hq = view.buildings.find((b) => b.owner === HUMAN && b.kind === "hq");
 let camera: Camera = clampCamera(
   {
-    x: ((hq?.x ?? 0) + 1.5) * CELL_PX - screen.width / 2,
-    y: ((hq?.y ?? 0) + 1.5) * CELL_PX - screen.height / 2,
+    x: ((hq?.x ?? 0) + 1.5) * CELL_PX - viewSize.width / 2,
+    y: ((hq?.y ?? 0) + 1.5) * CELL_PX - viewSize.height / 2,
   },
-  screen,
+  viewSize,
   mapSize,
 );
 
@@ -53,7 +58,9 @@ function resize(): void {
   canvas.height = Math.round(screen.height * dpr);
   canvas.style.width = `${screen.width}px`;
   canvas.style.height = `${screen.height}px`;
-  camera = clampCamera(camera, screen, mapSize);
+  layout = computeLayout(screen);
+  viewSize = layout.mapView;
+  camera = clampCamera(camera, viewSize, mapSize);
 }
 window.addEventListener("resize", resize);
 resize();
@@ -72,6 +79,12 @@ const MOVE_MARKER_MS = 600;
 let selection: Selection = new Set();
 let drag: { start: { x: number; y: number }; now: { x: number; y: number } } | null = null;
 let moveMarker: { cell: CellPos; at: number } | null = null;
+/** True while the left button, pressed on the minimap, is held: the camera follows the mouse there. */
+let minimapDrag = false;
+
+function moveCameraToMinimap(at: { x: number; y: number }): void {
+  camera = cameraOnMinimapPoint(layout.minimap, mapSize, viewSize, at.x, at.y);
+}
 
 function issue(command: Command): void {
   issueCommand(match, HUMAN, command);
@@ -93,6 +106,13 @@ function orderTo(cell: CellPos): void {
 canvas.addEventListener("contextmenu", (e) => e.preventDefault());
 canvas.addEventListener("mousedown", (e) => {
   const at = { x: e.clientX, y: e.clientY };
+  if (e.button === 0 && contains(layout.minimap, at.x, at.y)) {
+    minimapDrag = true;
+    moveCameraToMinimap(at);
+    return;
+  }
+  // The side panel is not the Map: no selection box or order starts there.
+  if (!contains(layout.mapView, at.x, at.y)) return;
   if (e.button === 0) {
     drag = { start: at, now: at };
   } else if (e.button === 2 && selection.size > 0) {
@@ -108,9 +128,11 @@ canvas.addEventListener("mousedown", (e) => {
   }
 });
 window.addEventListener("mousemove", (e) => {
+  if (minimapDrag) moveCameraToMinimap({ x: e.clientX, y: e.clientY });
   if (drag) drag.now = { x: e.clientX, y: e.clientY };
 });
 window.addEventListener("mouseup", (e) => {
+  if (e.button === 0) minimapDrag = false;
   if (e.button !== 0 || !drag) return;
   const end = { x: e.clientX, y: e.clientY };
   if (isDrag(drag.start, end)) {
@@ -161,10 +183,12 @@ function frame(now: number): void {
   }
 
   const cameraSeconds = Math.min(frameMs, MAX_CAMERA_FRAME_MS) / 1000;
-  camera = scrollCamera(camera, scrollDirection(keys, mouse, screen), cameraSeconds, screen, mapSize);
+  // Only a mouse over the Map view edge-scrolls; resting on the side panel must not.
+  const edgeMouse = mouse && contains(layout.mapView, mouse.x, mouse.y) ? mouse : null;
+  camera = scrollCamera(camera, scrollDirection(keys, edgeMouse, viewSize), cameraSeconds, viewSize, mapSize);
   const markerAge = moveMarker ? (now - moveMarker.at) / MOVE_MARKER_MS : 1;
   if (markerAge >= 1) moveMarker = null;
-  renderer.draw(view, camera, screen, interpolationAlpha(clock), {
+  renderer.draw(view, camera, screen, layout, interpolationAlpha(clock), {
     selection,
     dragBox: drag && isDrag(drag.start, drag.now) ? { a: drag.start, b: drag.now } : null,
     moveMarker: moveMarker ? { cell: moveMarker.cell, age: Math.max(0, markerAge) } : null,
