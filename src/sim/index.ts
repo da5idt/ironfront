@@ -8,4 +8,7 @@ export type { MatchStatus } from "./state";
 export type { PlayerView, UnitView, BuildingView, MapView, ShotView } from "./view";
 export type { Visibility } from "./fog";
 export * from "./types";
-export { UNIT_STATS, BUILDING_STATS, ECONOMY, TICKS_PER_SECOND } from "./tuning";
+export { HQ_BUILDS } from "./building";
+export type { ProductionView } from "./building";
+export { UNIT_STATS, BUILDING_STATS, ECONOMY, PLACEMENT, TICKS_PER_SECOND } from "./tuning";
+export { canPlaceBuilding } from "./placement";

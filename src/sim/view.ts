@@ -1,3 +1,4 @@
+import { productionView, type ProductionView } from "./building";
 import { type BuildingSighting, isFootprintVisible, isVisible, type Visibility, visibilityAt } from "./fog";
 import { cellIndex, type MatchState } from "./state";
 import { BUILDING_STATS, UNIT_STATS } from "./tuning";
@@ -71,6 +72,8 @@ export interface PlayerView {
   readonly buildings: readonly BuildingView[];
   /** Shots fired during the last Tick, for drawing tracers. */
   readonly shots: readonly ShotView[];
+  /** What this Player's HQ is building, or null when it is free. */
+  readonly production: ProductionView | null;
 }
 
 /** One shot, from shooter to target, in Cell units. */
@@ -140,5 +143,6 @@ export function buildPlayerView(m: MatchState, playerId: PlayerId): PlayerView {
     units,
     buildings,
     shots: m.shots.map((s) => ({ ...s })),
+    production: productionView(m, playerId),
   };
 }

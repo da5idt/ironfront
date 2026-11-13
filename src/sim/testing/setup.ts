@@ -28,6 +28,11 @@ export function removeTestBuilding(match: Match, id: EntityId): void {
   if (building) removeBuilding(m, building);
 }
 
+/** Sets a Player's Credits, so tests reach "can't afford" without a long economy run. */
+export function setTestCredits(match: Match, player: PlayerId, credits: number): void {
+  (match as unknown as MatchState).players[player].credits = credits;
+}
+
 /**
  * Puts a Unit on the Map directly, skipping training, so tests can stage a
  * fight before training exists. Returns the new Unit's id.

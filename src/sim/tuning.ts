@@ -131,6 +131,11 @@ export const BUILDING_STATS: Readonly<Record<BuildingKind, BuildingStats>> = {
   },
 };
 
+export const PLACEMENT = {
+  /** Most empty Cells allowed between a new Building and the nearest own Building. */
+  maxGap: 3,
+} as const;
+
 export const MOVEMENT = {
   /** Speed on rough ground as a share of speed on open ground. */
   roughSpeedMultiplier: 0.5,

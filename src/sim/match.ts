@@ -30,8 +30,8 @@ export function createMatch(map: MapDef, seed: number): Match {
   const parsed = parseMap(map);
   const cells = parsed.width * parsed.height;
   const players: [PlayerState, PlayerState] = [
-    { id: 0, credits: ECONOMY.startingCredits },
-    { id: 1, credits: ECONOMY.startingCredits },
+    { id: 0, credits: ECONOMY.startingCredits, production: null },
+    { id: 1, credits: ECONOMY.startingCredits, production: null },
   ];
   const m: MatchState = {
     tick: 0,

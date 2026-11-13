@@ -56,9 +56,17 @@ export interface BuildingState {
   hp: number;
 }
 
+/** The Building the HQ is working on. It is finished once `ticksDone` reaches its build time. */
+export interface ProductionState {
+  readonly kind: BuildingKind;
+  ticksDone: number;
+}
+
 export interface PlayerState {
   readonly id: PlayerId;
   credits: number;
+  /** One Building at a time, from start until it is placed or cancelled. */
+  production: ProductionState | null;
 }
 
 export type MatchStatus =

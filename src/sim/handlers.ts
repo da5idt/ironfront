@@ -1,5 +1,6 @@
 import type { CommandOf, CommandResult, CommandType } from "./commands";
 import { OK, reject } from "./commands";
+import { handleCancelBuilding, handlePlaceBuilding, handleStartBuilding } from "./building";
 import { handleAttack } from "./combat";
 import { handleHarvest } from "./harvest";
 import { handleMove } from "./movement";
@@ -31,9 +32,9 @@ export const COMMAND_HANDLERS: { readonly [K in CommandType]: CommandHandler<K> 
   harvest: handleHarvest,
   stop,
   setRallyPoint: notYetAvailable,
-  startBuilding: notYetAvailable,
-  cancelBuilding: notYetAvailable,
-  placeBuilding: notYetAvailable,
+  startBuilding: handleStartBuilding,
+  cancelBuilding: handleCancelBuilding,
+  placeBuilding: handlePlaceBuilding,
   train: notYetAvailable,
   cancelTraining: notYetAvailable,
 };
