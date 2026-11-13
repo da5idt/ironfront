@@ -156,3 +156,8 @@ export const ECONOMY = {
   /** How long a Harvester with nothing to do waits before looking for Ore or a Refinery again. */
   harvestRetryTicks: TICKS_PER_SECOND,
 } as const;
+
+export const TRAINING = {
+  /** Most Units one Building can have queued, the one in training included. */
+  queueSize: 5,
+} as const;

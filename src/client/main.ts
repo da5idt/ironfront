@@ -6,6 +6,7 @@ import {
   type CellPos,
   type Command,
   createMatch,
+  type EntityId,
   getPlayerView,
   issueCommand,
   type PlayerId,
@@ -30,11 +31,13 @@ import {
   clickSelect,
   enemyUnitAt,
   isDrag,
+  ownBuildingAt,
   pruneSelection,
   type Selection,
   unitAt,
   unitsInBox,
 } from "./selection";
+import { trainButtonAt, trainButtons, trainClick, trainerOf } from "./trainPanel";
 
 // Wires the browser to the Simulation: a fixed-Tick clock, the camera, input
 // (selection stays here; Commands go to the Simulation) and drawing.
@@ -91,6 +94,8 @@ document.addEventListener("mouseleave", () => (mouse = null));
 const MOVE_MARKER_MS = 600;
 
 let selection: Selection = new Set();
+/** The selected own Building. Selecting Units clears it, and selecting it clears the Units. */
+let selectedBuilding: EntityId | null = null;
 let drag: { start: { x: number; y: number }; now: { x: number; y: number } } | null = null;
 let moveMarker: { cell: CellPos; at: number } | null = null;
 /** True while the left button, pressed on the minimap, is held: the camera follows the mouse there. */
@@ -118,6 +123,21 @@ function orderTo(cell: CellPos): void {
 
 /** The finished Building being placed, while the person picks a spot; null otherwise. */
 let placing: BuildingKind | null = null;
+
+/** With a Barracks or Vehicle Factory selected the side panel trains; otherwise it is the HQ's build panel. */
+function clickSidePanel(at: { x: number; y: number }, button: "left" | "right"): void {
+  const trainer = trainerOf(view.buildings, selectedBuilding);
+  if (!trainer) {
+    clickBuildPanel(at, button);
+    return;
+  }
+  const kind = trainButtonAt(trainButtons(layout.buttons, trainer.kind), at.x, at.y);
+  const command = kind ? trainClick(trainer.id, trainer.training, view.credits, kind, button) : null;
+  if (!command) return;
+  issue(command);
+  // Show the new queue at once rather than on the next Tick.
+  view = getPlayerView(match, HUMAN);
+}
 
 function clickBuildPanel(at: { x: number; y: number }, button: "left" | "right"): void {
   const kind = buttonAt(buildButtons(layout.buttons), at.x, at.y);
@@ -150,7 +170,7 @@ canvas.addEventListener("mousedown", (e) => {
     return;
   }
   if (contains(layout.buttons, at.x, at.y)) {
-    clickBuildPanel(at, e.button === 0 ? "left" : "right");
+    clickSidePanel(at, e.button === 0 ? "left" : "right");
     return;
   }
   // The side panel is not the Map: no selection box or order starts there.
@@ -170,6 +190,12 @@ canvas.addEventListener("mousedown", (e) => {
   }
   if (e.button === 0) {
     drag = { start: at, now: at };
+  } else if (e.button === 2 && selection.size === 0 && selectedBuilding !== null) {
+    const cell = screenToCell(camera, at.x, at.y);
+    if (issueCommand(match, HUMAN, { type: "setRallyPoint", buildingId: selectedBuilding, target: cell }).ok) {
+      view = getPlayerView(match, HUMAN);
+      moveMarker = { cell, at: performance.now() };
+    }
   } else if (e.button === 2 && selection.size > 0) {
     const cell = screenToCell(camera, at.x, at.y);
     if (cell.x < 0 || cell.y < 0 || cell.x >= mapSize.width || cell.y >= mapSize.height) return;
@@ -194,9 +220,14 @@ window.addEventListener("mouseup", (e) => {
     const a = screenToMap(camera, drag.start.x, drag.start.y);
     const b = screenToMap(camera, end.x, end.y);
     selection = boxSelect(selection, unitsInBox(view.units, a, b, HUMAN), e.shiftKey);
+    selectedBuilding = null;
   } else {
-    const hit = unitAt(view.units, screenToMap(camera, end.x, end.y), HUMAN);
-    selection = clickSelect(selection, hit?.id ?? null, e.shiftKey);
+    const point = screenToMap(camera, end.x, end.y);
+    const hit = unitAt(view.units, point, HUMAN);
+    // A Unit wins over the Building behind it; a plain click on an own Building selects just that.
+    const building = !hit && !e.shiftKey ? ownBuildingAt(view.buildings, point, HUMAN) : null;
+    selection = building ? new Set() : clickSelect(selection, hit?.id ?? null, e.shiftKey);
+    selectedBuilding = building?.id ?? null;
   }
   drag = null;
 });
@@ -235,6 +266,7 @@ function frame(now: number): void {
   if (stepped.ticks > 0) {
     view = getPlayerView(match, HUMAN);
     selection = pruneSelection(selection, view.units);
+    if (!view.buildings.some((b) => b.id === selectedBuilding)) selectedBuilding = null;
   }
   // Nothing left to place (cancelled, or the Match ended): leave placement mode.
   if (placing && !view.production?.ready) placing = null;
@@ -250,6 +282,7 @@ function frame(now: number): void {
     dragBox: drag && isDrag(drag.start, drag.now) ? { a: drag.start, b: drag.now } : null,
     moveMarker: moveMarker ? { cell: moveMarker.cell, age: Math.max(0, markerAge) } : null,
     placement: placementPreview(),
+    selectedBuilding,
   });
   requestAnimationFrame(frame);
 }

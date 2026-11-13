@@ -1,4 +1,4 @@
-import type { EntityId, PlayerId, UnitView } from "../sim";
+import type { BuildingView, EntityId, PlayerId, UnitView } from "../sim";
 
 // Which Units the person has selected. This is client state, not part of the
 // Match: selecting changes nothing until a Command is issued. Kept pure so the
@@ -25,6 +25,15 @@ export function unitAt(units: readonly UnitView[], p: Point, player: PlayerId): 
 /** The other Player's Unit nearest to the point within hit range, or null. */
 export function enemyUnitAt(units: readonly UnitView[], p: Point, player: PlayerId): UnitView | null {
   return nearestHit(units, p, (u) => u.owner !== player);
+}
+
+/** The player's own Building whose footprint holds the point, or null. */
+export function ownBuildingAt(buildings: readonly BuildingView[], p: Point, player: PlayerId): BuildingView | null {
+  return (
+    buildings.find(
+      (b) => b.owner === player && p.x >= b.x && p.x < b.x + b.width && p.y >= b.y && p.y < b.y + b.height,
+    ) ?? null
+  );
 }
 
 function nearestHit(units: readonly UnitView[], p: Point, wanted: (u: UnitView) => boolean): UnitView | null {

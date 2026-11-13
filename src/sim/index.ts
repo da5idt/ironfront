@@ -10,5 +10,7 @@ export type { Visibility } from "./fog";
 export * from "./types";
 export { HQ_BUILDS } from "./building";
 export type { ProductionView } from "./building";
-export { UNIT_STATS, BUILDING_STATS, ECONOMY, PLACEMENT, TICKS_PER_SECOND } from "./tuning";
+export { UNIT_STATS, BUILDING_STATS, ECONOMY, PLACEMENT, TRAINING, TICKS_PER_SECOND } from "./tuning";
+export { TRAINS } from "./training";
+export type { TrainingView } from "./training";
 export { canPlaceBuilding } from "./placement";

@@ -54,6 +54,12 @@ export interface BuildingState {
   readonly width: number;
   readonly height: number;
   hp: number;
+  /** Units waiting to be trained, oldest first; only the first one progresses. Empty for Buildings that don't train. */
+  readonly queue: UnitKind[];
+  /** Ticks spent on the first Unit in the queue. */
+  trainTicksDone: number;
+  /** Where newly trained Units head, or null to stay by the Building. */
+  rallyPoint: CellPos | null;
 }
 
 /** The Building the HQ is working on. It is finished once `ticksDone` reaches its build time. */
@@ -148,6 +154,9 @@ export function addBuilding(m: MatchState, owner: PlayerId, kind: BuildingKind, 
     width: stats.width,
     height: stats.height,
     hp: stats.maxHp,
+    queue: [],
+    trainTicksDone: 0,
+    rallyPoint: null,
   };
   for (let dy = 0; dy < building.height; dy++) {
     for (let dx = 0; dx < building.width; dx++) {
