@@ -3,7 +3,7 @@ import type { UnitView } from "../sim";
 import { boxSelect, clickSelect, isDrag, pruneSelection, unitAt, unitsInBox } from "./selection";
 
 function u(id: number, owner: 0 | 1, x: number, y: number): UnitView {
-  return { id, kind: "rifleman", owner, x, y, prevX: x, prevY: y, hp: 50, maxHp: 50 };
+  return { id, kind: "rifleman", owner, x, y, prevX: x, prevY: y, hp: 50, maxHp: 50, cargo: 0 };
 }
 
 const units = [u(1, 0, 2.5, 2.5), u(2, 0, 3.5, 2.5), u(3, 1, 5.5, 5.5), u(4, 0, 8.5, 8.5)];

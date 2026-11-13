@@ -163,8 +163,13 @@ export class Renderer {
     ctx.fill();
     ctx.stroke();
     if (u.kind === "harvester") {
+      // The hopper fills from the bottom with the load, so a full Harvester reads at a glance.
+      const size = 8;
+      const filled = Math.round(size * Math.min(1, u.cargo / ECONOMY.harvesterCapacity));
+      ctx.fillStyle = team.dark;
+      ctx.fillRect(p.x - size / 2, p.y - size / 2, size, size);
       ctx.fillStyle = ORE_COLOUR;
-      ctx.fillRect(p.x - 3, p.y - 3, 6, 6);
+      ctx.fillRect(p.x - size / 2, p.y + size / 2 - filled, size, filled);
     }
     if (selected) this.drawHealthBar(p, u.hp / u.maxHp);
   }

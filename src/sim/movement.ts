@@ -26,7 +26,7 @@ function terrainSpeed(m: MatchState, cell: CellPos): number {
 }
 
 /** The Match as the pathfinder sees it: slow ground costs more to cross. */
-function matchGrid(m: MatchState): Grid {
+export function matchGrid(m: MatchState): Grid {
   return {
     width: m.width,
     height: m.height,

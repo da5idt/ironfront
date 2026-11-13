@@ -1,5 +1,7 @@
+import type { HarvestOrder } from "./harvest";
 import type { MovePlan } from "./movement";
 import type { Rng } from "./rng";
+import { startHarvesting } from "./harvest";
 import { BUILDING_STATS, UNIT_STATS } from "./tuning";
 import type { BuildingKind, CellPos, EntityId, PlayerId, Terrain, UnitKind } from "./types";
 import { isPassableTerrain } from "./types";
@@ -8,7 +10,10 @@ import { isPassableTerrain } from "./types";
 // outside reads a PlayerView (view.ts). Tests use the public seam in index.ts.
 
 /** What a Unit is currently doing. Later features add their own variants. */
-export type UnitOrder = { readonly type: "idle" } | { readonly type: "move"; readonly plan: MovePlan };
+export type UnitOrder =
+  | { readonly type: "idle" }
+  | { readonly type: "move"; readonly plan: MovePlan }
+  | HarvestOrder;
 
 export interface UnitState {
   readonly id: EntityId;
@@ -22,6 +27,8 @@ export interface UnitState {
   prevY: number;
   hp: number;
   order: UnitOrder;
+  /** Ore carried; only Harvesters ever hold any. */
+  cargo: number;
 }
 
 export interface BuildingState {
@@ -95,7 +102,9 @@ export function spawnUnit(m: MatchState, owner: PlayerId, kind: UnitKind, cell: 
     prevX: x,
     prevY: y,
     hp: UNIT_STATS[kind].maxHp,
-    order: { type: "idle" },
+    // Harvesters go to work as soon as they exist, so nobody has to tell them.
+    order: kind === "harvester" ? startHarvesting() : { type: "idle" },
+    cargo: 0,
   };
   m.units.set(unit.id, unit);
   return unit;

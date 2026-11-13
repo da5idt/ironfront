@@ -16,6 +16,8 @@ export interface UnitView {
   readonly prevY: number;
   readonly hp: number;
   readonly maxHp: number;
+  /** Ore carried; 0 for anything but a Harvester. */
+  readonly cargo: number;
 }
 
 export interface BuildingView {
@@ -60,6 +62,7 @@ export function buildPlayerView(m: MatchState, playerId: PlayerId): PlayerView {
       prevY: u.prevY,
       hp: u.hp,
       maxHp: UNIT_STATS[u.kind].maxHp,
+      cargo: u.cargo,
     });
   }
   const buildings: BuildingView[] = [];

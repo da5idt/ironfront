@@ -123,6 +123,40 @@ export function nearbyCells(grid: Grid, target: CellPos, count: number): CellPos
   }
 }
 
+/**
+ * The Cell matching `test` that is fewest 8-way steps from `start` (the start
+ * itself counts), walking only through walkable Cells and never cutting a
+ * corner. Only walkable Cells (and the start) are tested. Ties go to the fixed
+ * neighbour order. Null when nothing matching is reachable.
+ */
+export function nearestReachable(
+  grid: Grid,
+  start: CellPos,
+  test: (x: number, y: number) => boolean,
+): CellPos | null {
+  const { width, height } = grid;
+  const inside = (x: number, y: number) => x >= 0 && y >= 0 && x < width && y < height;
+  if (!inside(start.x, start.y)) return null;
+  const seen = new Uint8Array(width * height);
+  seen[start.y * width + start.x] = 1;
+  const queue: number[] = [start.y * width + start.x];
+  for (let head = 0; head < queue.length; head++) {
+    const i = queue[head]!;
+    const x = i % width;
+    const y = (i - x) / width;
+    if (test(x, y)) return { x, y };
+    for (const [dx, dy] of NEIGHBOURS) {
+      const nx = x + dx;
+      const ny = y + dy;
+      if (!inside(nx, ny) || seen[ny * width + nx] || !grid.walkable(nx, ny)) continue;
+      if (dx !== 0 && dy !== 0 && (!grid.walkable(x + dx, y) || !grid.walkable(x, y + dy))) continue;
+      seen[ny * width + nx] = 1;
+      queue.push(ny * width + nx);
+    }
+  }
+  return null;
+}
+
 /** Binary min-heap of Cell indices by f, then h, then insertion order. */
 class MinHeap {
   private readonly items: { i: number; f: number; h: number; seq: number }[] = [];

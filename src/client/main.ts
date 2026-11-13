@@ -76,6 +76,18 @@ function issue(command: Command): void {
   issueCommand(match, HUMAN, command);
 }
 
+/** Right-click: on Ore, selected Harvesters harvest it and everything else walks there. */
+function orderTo(cell: CellPos): void {
+  const ids = [...selection];
+  const onOre = (view.map.ore[cell.y * view.map.width + cell.x] ?? 0) > 0;
+  const harvesters = onOre
+    ? view.units.filter((u) => selection.has(u.id) && u.kind === "harvester").map((u) => u.id)
+    : [];
+  const others = ids.filter((id) => !harvesters.includes(id));
+  if (harvesters.length > 0) issue({ type: "harvest", unitIds: harvesters, target: cell });
+  if (others.length > 0) issue({ type: "move", unitIds: others, target: cell });
+}
+
 // Right-click is the move button, so the browser menu must not open over the Map.
 canvas.addEventListener("contextmenu", (e) => e.preventDefault());
 canvas.addEventListener("mousedown", (e) => {
@@ -85,7 +97,7 @@ canvas.addEventListener("mousedown", (e) => {
   } else if (e.button === 2 && selection.size > 0) {
     const cell = screenToCell(camera, at.x, at.y);
     if (cell.x < 0 || cell.y < 0 || cell.x >= mapSize.width || cell.y >= mapSize.height) return;
-    issue({ type: "move", unitIds: [...selection], target: cell });
+    orderTo(cell);
     moveMarker = { cell, at: performance.now() };
   }
 });

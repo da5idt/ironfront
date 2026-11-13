@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { findPath, nearbyCells, type Grid } from "./pathfinding";
+import { findPath, nearbyCells, nearestReachable, type Grid } from "./pathfinding";
 
 /** A Grid from rows: `#` blocked, `,` costs 2 to enter, anything else costs 1. */
 function grid(rows: readonly string[]): Grid {
@@ -119,5 +119,26 @@ describe("nearbyCells", () => {
 
   it("returns fewer Cells when the Map runs out of room", () => {
     expect(nearbyCells(grid([".#", "##"]), { x: 1, y: 1 }, 4)).toEqual([{ x: 0, y: 0 }]);
+  });
+});
+
+describe("nearestReachable", () => {
+  const isStar = (rows: readonly string[]) => (x: number, y: number) => rows[y]![x] === "*";
+
+  it("finds the matching Cell fewest steps away, counting the start itself", () => {
+    const rows = ["*.....", "......", "....*."];
+    expect(nearestReachable(grid(rows), { x: 3, y: 2 }, isStar(rows))).toEqual({ x: 4, y: 2 });
+    expect(nearestReachable(grid(rows), { x: 1, y: 1 }, isStar(rows))).toEqual({ x: 0, y: 0 });
+    expect(nearestReachable(grid(rows), { x: 4, y: 2 }, isStar(rows))).toEqual({ x: 4, y: 2 });
+  });
+
+  it("measures by walking, so a Cell behind a wall loses to a farther open one", () => {
+    const rows = ["..#*", "..##", "....", "....", "...*"];
+    expect(nearestReachable(grid(rows), { x: 1, y: 0 }, isStar(rows))).toEqual({ x: 3, y: 4 });
+  });
+
+  it("returns null when no matching Cell can be reached", () => {
+    const rows = ["..#*", "..##"];
+    expect(nearestReachable(grid(rows), { x: 0, y: 0 }, isStar(rows))).toBeNull();
   });
 });

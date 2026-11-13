@@ -140,4 +140,14 @@ export const ECONOMY = {
   startingCredits: 2500,
   /** Ore in each Ore Cell when the Match starts. */
   orePerCell: 500,
+  /** Ore a Harvester carries when full. */
+  harvesterCapacity: 200,
+  /** Ore a Harvester digs out of its Cell each Tick. */
+  harvestPerTick: 2,
+  /** Ticks a Harvester spends at the Refinery emptying a load. */
+  unloadTicks: 2 * TICKS_PER_SECOND,
+  /** Credits paid for each unit of Ore unloaded. */
+  creditsPerOre: 1,
+  /** How long a Harvester with nothing to do waits before looking for Ore or a Refinery again. */
+  harvestRetryTicks: TICKS_PER_SECOND,
 } as const;
