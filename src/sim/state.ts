@@ -1,3 +1,4 @@
+import type { MovePlan } from "./movement";
 import type { Rng } from "./rng";
 import { BUILDING_STATS, UNIT_STATS } from "./tuning";
 import type { BuildingKind, CellPos, EntityId, PlayerId, Terrain, UnitKind } from "./types";
@@ -7,7 +8,7 @@ import { isPassableTerrain } from "./types";
 // outside reads a PlayerView (view.ts). Tests use the public seam in index.ts.
 
 /** What a Unit is currently doing. Later features add their own variants. */
-export type UnitOrder = { readonly type: "idle" };
+export type UnitOrder = { readonly type: "idle" } | { readonly type: "move"; readonly plan: MovePlan };
 
 export interface UnitState {
   readonly id: EntityId;

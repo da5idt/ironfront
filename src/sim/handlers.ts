@@ -1,5 +1,6 @@
 import type { CommandOf, CommandResult, CommandType } from "./commands";
 import { OK, reject } from "./commands";
+import { handleMove } from "./movement";
 import type { MatchState } from "./state";
 import { ownUnits } from "./state";
 import type { PlayerId } from "./types";
@@ -23,7 +24,7 @@ const stop: CommandHandler<"stop"> = (m, player, command) => {
 };
 
 export const COMMAND_HANDLERS: { readonly [K in CommandType]: CommandHandler<K> } = {
-  move: notYetAvailable,
+  move: handleMove,
   attack: notYetAvailable,
   harvest: notYetAvailable,
   stop,

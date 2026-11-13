@@ -91,21 +91,28 @@ describe("Commands", () => {
 });
 
 describe("determinism", () => {
-  // Placeholder strength: until movement lands (#4) only the Tick count changes,
-  // so this can't yet catch a stray Math.random. Each rule ticket extends the
-  // Commands below so the run exercises it.
+  // Each rule ticket extends the Commands below so the run exercises it.
   it("produces identical views from the same Map, seed and Commands", () => {
+    // Targets across rough ground, past rock and over the river's fords, so groups path and spread.
+    const targets = [
+      { x: 32, y: 32 },
+      { x: 20, y: 6 },
+      { x: 45, y: 20 },
+      { x: 10, y: 40 },
+    ];
     const run = () => {
       const match = createMatch(RIVERFORD, 42);
+      const start = getPlayerView(match, 0).units.map((u) => [u.x, u.y]);
       const views: string[] = [];
       for (let t = 0; t < 600; t++) {
         if (t % 50 === 0) {
           for (const player of [0, 1] as const) {
             const view = getPlayerView(match, player);
             const ids = view.units.filter((u) => u.owner === player).map((u) => u.id);
+            const target = targets[(t / 50 + player) % targets.length]!;
             const commands: Command[] = [
-              { type: "stop", unitIds: ids },
-              { type: "move", unitIds: ids, target: { x: 32, y: 32 } },
+              { type: "stop", unitIds: ids.slice(0, 1) },
+              { type: "move", unitIds: ids, target },
             ];
             for (const c of commands) issueCommand(match, player, c);
           }
@@ -113,10 +120,13 @@ describe("determinism", () => {
         advanceTick(match);
         if (t % 100 === 99) views.push(JSON.stringify([getPlayerView(match, 0), getPlayerView(match, 1)]));
       }
-      return views;
+      const end = getPlayerView(match, 0).units.map((u) => [u.x, u.y]);
+      return { views, start, end };
     };
     const first = run();
-    expect(first).toEqual(run());
-    expect(new Set(first).size).toBe(first.length);
+    expect(first.views).toEqual(run().views);
+    expect(new Set(first.views).size).toBe(first.views.length);
+    // Every Unit really moved, so the run exercises movement and not just the Tick count.
+    first.end.forEach((p, i) => expect(p, `Unit ${i}`).not.toEqual(first.start[i]));
   });
 });

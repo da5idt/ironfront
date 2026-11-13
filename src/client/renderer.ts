@@ -1,6 +1,21 @@
-import { type BuildingKind, type BuildingView, ECONOMY, type PlayerView, type UnitView } from "../sim";
+import { type BuildingKind, type BuildingView, type CellPos, ECONOMY, type PlayerView, type UnitView } from "../sim";
 import { type Camera, CELL_PX, mapToScreen, type Size } from "./camera";
-import { HUD_BG, HUD_TEXT, ORE_COLOUR, ORE_SHADOW, TEAM_COLOURS, TERRAIN_COLOURS } from "./palette";
+import {
+  DRAG_BOX_FILL,
+  DRAG_BOX_LINE,
+  HEALTH_BACK,
+  HEALTH_GOOD,
+  HEALTH_LOW,
+  HUD_BG,
+  HUD_TEXT,
+  MOVE_MARKER,
+  ORE_COLOUR,
+  ORE_SHADOW,
+  SELECTION_MARKER,
+  TEAM_COLOURS,
+  TERRAIN_COLOURS,
+} from "./palette";
+import type { Selection } from "./selection";
 
 // Draws a PlayerView. It only reads; it never changes the Match (ADR 0002).
 
@@ -11,6 +26,15 @@ const BUILDING_LABELS: Record<BuildingKind, string> = {
   vehicleFactory: "VF",
   turret: "T",
 };
+
+/** Client-only things to draw on top of the Match. */
+export interface Overlay {
+  readonly selection: Selection;
+  /** Screen corners of the box being dragged, if any. */
+  readonly dragBox: { readonly a: { x: number; y: number }; readonly b: { x: number; y: number } } | null;
+  /** The Cell of the last move Command, and how far its fade-out has got (0..1). */
+  readonly moveMarker: { readonly cell: CellPos; readonly age: number } | null;
+}
 
 export class Renderer {
   private readonly ctx: CanvasRenderingContext2D;
@@ -24,7 +48,7 @@ export class Renderer {
   }
 
   /** Draws one frame. `alpha` (0..1) is how far we are between the last Tick and the next. */
-  draw(view: PlayerView, cam: Camera, screen: Size, alpha: number): void {
+  draw(view: PlayerView, cam: Camera, screen: Size, alpha: number, overlay: Overlay): void {
     const { ctx } = this;
     const dpr = this.canvas.width / screen.width;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -34,7 +58,9 @@ export class Renderer {
     this.drawTerrain(view, cam);
     this.drawOre(view, cam, screen);
     for (const b of view.buildings) this.drawBuilding(b, cam);
-    for (const u of view.units) this.drawUnit(u, cam, alpha);
+    if (overlay.moveMarker) this.drawMoveMarker(overlay.moveMarker.cell, overlay.moveMarker.age, cam);
+    for (const u of view.units) this.drawUnit(u, cam, alpha, overlay.selection.has(u.id));
+    if (overlay.dragBox) this.drawDragBox(overlay.dragBox.a, overlay.dragBox.b);
     this.drawHud(view, screen);
   }
 
@@ -105,12 +131,13 @@ export class Renderer {
     }
   }
 
-  private drawUnit(u: UnitView, cam: Camera, alpha: number): void {
+  private drawUnit(u: UnitView, cam: Camera, alpha: number, selected: boolean): void {
     const { ctx } = this;
     const team = TEAM_COLOURS[u.owner];
     const mx = u.prevX + (u.x - u.prevX) * alpha;
     const my = u.prevY + (u.y - u.prevY) * alpha;
     const p = mapToScreen(cam, mx, my);
+    if (selected) this.drawSelectionMarker(p);
     ctx.lineWidth = 2;
     ctx.strokeStyle = team.dark;
     ctx.fillStyle = team.fill;
@@ -139,6 +166,66 @@ export class Renderer {
       ctx.fillStyle = ORE_COLOUR;
       ctx.fillRect(p.x - 3, p.y - 3, 6, 6);
     }
+    if (selected) this.drawHealthBar(p, u.hp / u.maxHp);
+  }
+
+  /** Corner brackets around the Unit, so the selection reads even in a crowd. */
+  private drawSelectionMarker(p: { x: number; y: number }): void {
+    const { ctx } = this;
+    const h = CELL_PX * 0.5;
+    const arm = CELL_PX * 0.2;
+    ctx.strokeStyle = SELECTION_MARKER;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    for (const [sx, sy] of [
+      [-1, -1],
+      [1, -1],
+      [-1, 1],
+      [1, 1],
+    ] as const) {
+      const cx = p.x + sx * h;
+      const cy = p.y + sy * h;
+      ctx.moveTo(cx - sx * arm, cy);
+      ctx.lineTo(cx, cy);
+      ctx.lineTo(cx, cy - sy * arm);
+    }
+    ctx.stroke();
+  }
+
+  private drawHealthBar(p: { x: number; y: number }, share: number): void {
+    const { ctx } = this;
+    const w = CELL_PX * 0.9;
+    const x = p.x - w / 2;
+    const y = p.y - CELL_PX * 0.5 - 6;
+    ctx.fillStyle = HEALTH_BACK;
+    ctx.fillRect(x - 1, y - 1, w + 2, 5);
+    ctx.fillStyle = share > 0.35 ? HEALTH_GOOD : HEALTH_LOW;
+    ctx.fillRect(x, y, w * Math.max(0, Math.min(1, share)), 3);
+  }
+
+  private drawMoveMarker(cell: CellPos, age: number, cam: Camera): void {
+    const { ctx } = this;
+    const p = mapToScreen(cam, cell.x + 0.5, cell.y + 0.5);
+    ctx.globalAlpha = 1 - age;
+    ctx.strokeStyle = MOVE_MARKER;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, CELL_PX * (0.15 + 0.3 * age), 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+  }
+
+  private drawDragBox(a: { x: number; y: number }, b: { x: number; y: number }): void {
+    const { ctx } = this;
+    const x = Math.min(a.x, b.x);
+    const y = Math.min(a.y, b.y);
+    const w = Math.abs(a.x - b.x);
+    const h = Math.abs(a.y - b.y);
+    ctx.fillStyle = DRAG_BOX_FILL;
+    ctx.fillRect(x, y, w, h);
+    ctx.strokeStyle = DRAG_BOX_LINE;
+    ctx.lineWidth = 1;
+    ctx.strokeRect(x + 0.5, y + 0.5, w, h);
   }
 
   private drawHud(view: PlayerView, screen: Size): void {
