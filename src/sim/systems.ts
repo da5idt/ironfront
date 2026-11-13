@@ -3,6 +3,7 @@ import { fight, removeDead } from "./combat";
 import { updateFog } from "./fog";
 import { harvestOre } from "./harvest";
 import { moveUnits } from "./movement";
+import { trainUnits } from "./training";
 import type { MatchState } from "./state";
 import { decideVictory } from "./victory";
 
@@ -13,6 +14,7 @@ export type System = (m: MatchState) => void;
 
 export const SYSTEMS: readonly System[] = [
   buildProgress,
+  trainUnits,
   moveUnits,
   harvestOre,
   fight,

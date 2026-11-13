@@ -1,6 +1,7 @@
 import { productionView, type ProductionView } from "./building";
 import { type BuildingSighting, isFootprintVisible, isVisible, type Visibility, visibilityAt } from "./fog";
 import { cellIndex, type MatchState } from "./state";
+import { type TrainingView, trainingView } from "./training";
 import { BUILDING_STATS, UNIT_STATS } from "./tuning";
 import type { BuildingKind, EntityId, PlayerId, Terrain, UnitKind } from "./types";
 
@@ -41,6 +42,11 @@ export interface BuildingView {
    * is the real Building's, so an attack Command on it still names the target.
    */
   readonly remembered: boolean;
+  /**
+   * Queue, progress and rally point of the Player's own Barracks or Vehicle
+   * Factory. Null for every other Building, so enemy queues never leak.
+   */
+  readonly training: TrainingView | null;
 }
 
 export interface MapView {
@@ -86,7 +92,7 @@ export interface ShotView {
   readonly tick: number;
 }
 
-function buildingView(b: BuildingSighting, remembered: boolean): BuildingView {
+function buildingView(b: BuildingSighting, remembered: boolean, training: TrainingView | null = null): BuildingView {
   return {
     id: b.id,
     kind: b.kind,
@@ -98,6 +104,7 @@ function buildingView(b: BuildingSighting, remembered: boolean): BuildingView {
     hp: b.hp,
     maxHp: BUILDING_STATS[b.kind].maxHp,
     remembered,
+    training,
   };
 }
 
@@ -121,7 +128,7 @@ export function buildPlayerView(m: MatchState, playerId: PlayerId): PlayerView {
   }
   const buildings: BuildingView[] = [];
   for (const b of m.buildings.values()) {
-    if (b.owner === playerId) buildings.push(buildingView(b, false));
+    if (b.owner === playerId) buildings.push(buildingView(b, false, trainingView(b)));
   }
   for (const seen of fog.sightings.values()) {
     const live = m.buildings.get(seen.id);

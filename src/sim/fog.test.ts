@@ -119,23 +119,23 @@ describe("Ore under Fog of War", () => {
 
 describe("enemy Buildings under Fog of War", () => {
   /**
-   * A Map with an enemy Barracks out of sight of Player 0's base, and Player 0's
+   * A Map with an enemy Refinery out of sight of Player 0's base, and Player 0's
    * first Rifleman to scout it. The scout looks from (16, 4): in sight, but out
    * of range, so it doesn't open fire.
    */
   function setup() {
     const match = createMatch(openMap(40, 40), 1);
-    addTestBuilding(match, 1, "barracks", { x: 20, y: 2 });
-    // A Tick so the Fog of War catches up with the Barracks added mid-Match.
+    addTestBuilding(match, 1, "refinery", { x: 20, y: 2 });
+    // A Tick so the Fog of War catches up with the Refinery added mid-Match.
     advanceTick(match);
-    const barracks = getPlayerView(match, 1).buildings.find((b) => b.kind === "barracks")!;
+    const building = getPlayerView(match, 1).buildings.find((b) => b.x === 20 && b.y === 2)!;
     const scout = ownUnits(match, 0).find((u) => u.kind === "rifleman")!;
     const walkTo = (target: { x: number; y: number }) => {
       issueCommand(match, 0, { type: "move", unitIds: [scout.id], target });
       run(match, 20 * TICKS_PER_SECOND);
     };
     const seen = () => getPlayerView(match, 0).buildings.filter((b) => b.owner === 1);
-    return { match, barracks, walkTo, seen };
+    return { match, building, walkTo, seen };
   }
 
   it("hides enemy Buildings in Unexplored Cells", () => {
@@ -144,20 +144,20 @@ describe("enemy Buildings under Fog of War", () => {
   });
 
   it("shows an enemy Building while it is seen, and remembers it once its Cells are Fogged", () => {
-    const { barracks, walkTo, seen } = setup();
+    const { building, walkTo, seen } = setup();
     walkTo({ x: 16, y: 4 });
-    expect(seen()).toEqual([{ ...barracks, remembered: false }]);
+    expect(seen()).toEqual([{ ...building, remembered: false }]);
     walkTo({ x: 0, y: 6 });
-    expect(seen()).toEqual([{ ...barracks, remembered: true }]);
+    expect(seen()).toEqual([{ ...building, remembered: true }]);
   });
 
   it("keeps showing a Building destroyed out of sight until its Cells are seen again", () => {
-    const { match, barracks, walkTo, seen } = setup();
+    const { match, building, walkTo, seen } = setup();
     walkTo({ x: 16, y: 4 });
     walkTo({ x: 0, y: 6 });
-    removeTestBuilding(match, barracks.id);
+    removeTestBuilding(match, building.id);
     advanceTick(match);
-    expect(seen()).toEqual([{ ...barracks, remembered: true }]);
+    expect(seen()).toEqual([{ ...building, remembered: true }]);
     walkTo({ x: 16, y: 4 });
     expect(seen()).toEqual([]);
     walkTo({ x: 0, y: 6 });

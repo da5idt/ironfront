@@ -3,6 +3,7 @@ import { OK, reject } from "./commands";
 import { handleCancelBuilding, handlePlaceBuilding, handleStartBuilding } from "./building";
 import { handleAttack } from "./combat";
 import { handleHarvest } from "./harvest";
+import { handleCancelTraining, handleSetRallyPoint, handleTrain } from "./training";
 import { handleMove } from "./movement";
 import type { MatchState } from "./state";
 import { ownUnits } from "./state";
@@ -17,8 +18,6 @@ export type CommandHandler<T extends CommandType> = (
   command: CommandOf<T>,
 ) => CommandResult;
 
-const notYetAvailable = (): CommandResult => reject("not available yet");
-
 const stop: CommandHandler<"stop"> = (m, player, command) => {
   const units = ownUnits(m, player, command.unitIds);
   if (units.length === 0) return reject("no own Units selected");
@@ -31,10 +30,10 @@ export const COMMAND_HANDLERS: { readonly [K in CommandType]: CommandHandler<K> 
   attack: handleAttack,
   harvest: handleHarvest,
   stop,
-  setRallyPoint: notYetAvailable,
+  setRallyPoint: handleSetRallyPoint,
   startBuilding: handleStartBuilding,
   cancelBuilding: handleCancelBuilding,
   placeBuilding: handlePlaceBuilding,
-  train: notYetAvailable,
-  cancelTraining: notYetAvailable,
+  train: handleTrain,
+  cancelTraining: handleCancelTraining,
 };

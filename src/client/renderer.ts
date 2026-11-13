@@ -4,6 +4,7 @@ import {
   type BuildingView,
   type CellPos,
   ECONOMY,
+  type EntityId,
   type PlayerView,
   type ShotView,
   type UnitView,
@@ -35,7 +36,10 @@ import {
   TEAM_COLOURS,
   TERRAIN_COLOURS,
 } from "./palette";
+import { drawSelectedBuilding } from "./selectedBuildingPainter";
 import type { Selection } from "./selection";
+import { trainerOf } from "./trainPanel";
+import { drawTrainPanel } from "./trainPanelPainter";
 
 // Draws a PlayerView. It only reads; it never changes the Match (ADR 0002).
 
@@ -58,6 +62,8 @@ export interface Overlay {
   readonly placement: { readonly kind: BuildingKind; readonly at: CellPos; readonly valid: boolean } | null;
   /** The Victory, defeat or Paused screen over everything, if one shows. */
   readonly screen: ScreenOverlay | null;
+  /** The selected own Building, if any; a Barracks or Vehicle Factory turns the side panel into its train buttons. */
+  readonly selectedBuilding: EntityId | null;
 }
 
 export class Renderer {
@@ -95,6 +101,8 @@ export class Renderer {
     // After the ground and Buildings, so remembered Buildings sit dimmed under it;
     // before Units, which are only ever listed where the Player can see.
     this.drawFog(view, cam);
+    const selectedBuilding = view.buildings.find((b) => b.id === overlay.selectedBuilding);
+    if (selectedBuilding) drawSelectedBuilding(ctx, selectedBuilding, cam);
     if (overlay.moveMarker) this.drawMoveMarker(overlay.moveMarker.cell, overlay.moveMarker.age, cam);
     for (const u of view.units) this.drawUnit(u, cam, alpha, overlay.selection.has(u.id));
     for (const s of view.shots) this.drawShot(s, cam, alpha);
@@ -105,7 +113,9 @@ export class Renderer {
 
     this.drawPanel(layout.panel);
     this.minimap.draw(ctx, view, layout.minimap, cam, mapView, alpha);
-    drawBuildPanel(ctx, view, layout.buttons);
+    const trainer = trainerOf(view.buildings, overlay.selectedBuilding);
+    if (trainer) drawTrainPanel(ctx, view.credits, trainer, layout.buttons);
+    else drawBuildPanel(ctx, view, layout.buttons);
     if (overlay.screen) drawScreenOverlay(ctx, overlay.screen, screen);
   }
 

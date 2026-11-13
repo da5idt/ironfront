@@ -113,7 +113,7 @@ export const handlePlaceBuilding: CommandHandler<"placeBuilding"> = (m, player, 
 const MAX_SPAWN_RING = 3;
 
 /** The first walkable Cell with no Unit on it, ring by ring around the footprint; null if crowded out. */
-function freeCellAround(m: MatchState, b: BuildingState): CellPos | null {
+export function freeCellAround(m: MatchState, b: BuildingState): CellPos | null {
   const taken = new Set<number>();
   for (const u of m.units.values()) taken.add(cellIndex(m, Math.floor(u.x), Math.floor(u.y)));
   for (let r = 1; r <= MAX_SPAWN_RING; r++) {

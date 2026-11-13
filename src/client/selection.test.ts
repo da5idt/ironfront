@@ -1,6 +1,16 @@
 import { describe, expect, it } from "vitest";
 import type { BuildingView, UnitView } from "../sim";
-import { boxSelect, clickSelect, enemyBuildingAt, enemyUnitAt, isDrag, pruneSelection, unitAt, unitsInBox } from "./selection";
+import {
+  boxSelect,
+  clickSelect,
+  enemyBuildingAt,
+  enemyUnitAt,
+  isDrag,
+  ownBuildingAt,
+  pruneSelection,
+  unitAt,
+  unitsInBox,
+} from "./selection";
 
 function u(id: number, owner: 0 | 1, x: number, y: number): UnitView {
   return { id, kind: "rifleman", owner, x, y, prevX: x, prevY: y, hp: 50, maxHp: 50, cargo: 0 };
@@ -104,6 +114,7 @@ describe("enemyBuildingAt", () => {
     hp: 900,
     maxHp: 900,
     remembered,
+    training: null,
   });
   const buildings = [b(1, 0, 0, 0), b(2, 1, 10, 10), b(3, 1, 20, 10, true)];
 
@@ -118,5 +129,23 @@ describe("enemyBuildingAt", () => {
 
   it("ignores own Buildings", () => {
     expect(enemyBuildingAt(buildings, { x: 1, y: 1 }, 0)).toBeNull();
+  });
+});
+
+describe("ownBuildingAt", () => {
+  function b(id: number, owner: 0 | 1, x: number, y: number, remembered = false): BuildingView {
+    return { id, kind: "barracks", owner, x, y, width: 2, height: 2, hp: 600, maxHp: 600, remembered, training: null };
+  }
+  const buildings = [b(10, 0, 4, 4), b(11, 1, 10, 4)];
+
+  it("finds the own Building whose footprint holds the point, edges included", () => {
+    expect(ownBuildingAt(buildings, { x: 4.0, y: 4.0 }, 0)?.id).toBe(10);
+    expect(ownBuildingAt(buildings, { x: 5.9, y: 5.9 }, 0)?.id).toBe(10);
+  });
+
+  it("finds nothing just outside the footprint, or on an enemy Building", () => {
+    expect(ownBuildingAt(buildings, { x: 6.0, y: 4.5 }, 0)).toBeNull();
+    expect(ownBuildingAt(buildings, { x: 3.9, y: 4.5 }, 0)).toBeNull();
+    expect(ownBuildingAt(buildings, { x: 10.5, y: 4.5 }, 0)).toBeNull();
   });
 });

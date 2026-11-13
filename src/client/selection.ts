@@ -27,16 +27,21 @@ export function enemyUnitAt(units: readonly UnitView[], p: Point, player: Player
   return nearestHit(units, p, (u) => u.owner !== player);
 }
 
+/** The player's own Building whose footprint holds the point, or null. */
+export function ownBuildingAt(buildings: readonly BuildingView[], p: Point, player: PlayerId): BuildingView | null {
+  return buildings.find((b) => b.owner === player && onFootprint(b, p)) ?? null;
+}
+
 /**
  * The other Player's Building whose footprint holds the point, or null.
  * Remembered Buildings count: the Simulation accepts an attack on one.
  */
 export function enemyBuildingAt(buildings: readonly BuildingView[], p: Point, player: PlayerId): BuildingView | null {
-  return (
-    buildings.find(
-      (b) => b.owner !== player && p.x >= b.x && p.x < b.x + b.width && p.y >= b.y && p.y < b.y + b.height,
-    ) ?? null
-  );
+  return buildings.find((b) => b.owner !== player && onFootprint(b, p)) ?? null;
+}
+
+function onFootprint(b: BuildingView, p: Point): boolean {
+  return p.x >= b.x && p.x < b.x + b.width && p.y >= b.y && p.y < b.y + b.height;
 }
 
 function nearestHit(units: readonly UnitView[], p: Point, wanted: (u: UnitView) => boolean): UnitView | null {
