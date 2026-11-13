@@ -19,5 +19,16 @@ jobs:
       - run: pip install pyyaml
       - name: door_gate.py classifies the door table correctly
         run: python3 -m unittest discover -s tests -v 2>&1 | tee -a "$GITHUB_STEP_SUMMARY"
-      # Game lint / typecheck / test steps arrive with the first game spec, which picks the stack.
+      # Game checks (ADR 0001). No linter yet, to keep dependencies minimal.
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - name: typecheck
+        run: npm run typecheck
+      - name: test
+        run: npm test
+      - name: build
+        run: npm run build
       # Print anything an agent must read to $GITHUB_STEP_SUMMARY and as ::error annotations.
