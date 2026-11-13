@@ -47,6 +47,7 @@ export function createMatch(map: MapDef, seed: number): Match {
     fog: [createFog(parsed.width, parsed.height), createFog(parsed.width, parsed.height)],
     nextId: 1,
     status: { state: "running" },
+    shots: [],
   };
   for (const player of PLAYER_IDS) {
     const start = map.starts[player];

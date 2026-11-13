@@ -1,4 +1,4 @@
-import { type BuildingKind, type BuildingView, type CellPos, ECONOMY, type PlayerView, type UnitView } from "../sim";
+import { type BuildingKind, type BuildingView, type CellPos, ECONOMY, type PlayerView, type ShotView, type UnitView } from "../sim";
 import { type Camera, CELL_PX, mapToScreen, type Size } from "./camera";
 import {
   DRAG_BOX_FILL,
@@ -13,6 +13,7 @@ import {
   ORE_COLOUR,
   ORE_SHADOW,
   SELECTION_MARKER,
+  SHOT_TRACER,
   TEAM_COLOURS,
   TERRAIN_COLOURS,
 } from "./palette";
@@ -67,6 +68,7 @@ export class Renderer {
     this.drawFog(view, cam);
     if (overlay.moveMarker) this.drawMoveMarker(overlay.moveMarker.cell, overlay.moveMarker.age, cam);
     for (const u of view.units) this.drawUnit(u, cam, alpha, overlay.selection.has(u.id));
+    for (const s of view.shots) this.drawShot(s, cam, alpha);
     if (overlay.dragBox) this.drawDragBox(overlay.dragBox.a, overlay.dragBox.b);
     this.drawHud(view, screen);
   }
@@ -188,7 +190,27 @@ export class Renderer {
       ctx.fillStyle = ORE_COLOUR;
       ctx.fillRect(p.x - 3, p.y - 3, 6, 6);
     }
-    if (selected) this.drawHealthBar(p, u.hp / u.maxHp);
+    // Damaged Units always show their health, so a fight reads without selecting anything.
+    if (selected || u.hp < u.maxHp) this.drawHealthBar(p, u.hp / u.maxHp);
+  }
+
+  /** A short bright line per shot, fading out before the next Tick. */
+  private drawShot(s: ShotView, cam: Camera, alpha: number): void {
+    const { ctx } = this;
+    const a = mapToScreen(cam, s.fromX, s.fromY);
+    const b = mapToScreen(cam, s.toX, s.toY);
+    ctx.globalAlpha = 1 - 0.6 * alpha;
+    ctx.strokeStyle = SHOT_TRACER;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(a.x, a.y);
+    ctx.lineTo(b.x, b.y);
+    ctx.stroke();
+    ctx.fillStyle = SHOT_TRACER;
+    ctx.beginPath();
+    ctx.arc(b.x, b.y, 3, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalAlpha = 1;
   }
 
   /** Corner brackets around the Unit, so the selection reads even in a crowd. */

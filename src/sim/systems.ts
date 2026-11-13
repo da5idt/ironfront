@@ -1,3 +1,4 @@
+import { fight, removeDead } from "./combat";
 import { updateFog } from "./fog";
 import { moveUnits } from "./movement";
 import type { MatchState } from "./state";
@@ -6,4 +7,4 @@ import type { MatchState } from "./state";
 // Fog of War stays last so it sees where everything ended up this Tick.
 export type System = (m: MatchState) => void;
 
-export const SYSTEMS: readonly System[] = [moveUnits, updateFog];
+export const SYSTEMS: readonly System[] = [moveUnits, fight, removeDead, updateFog];

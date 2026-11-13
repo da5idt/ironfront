@@ -1,6 +1,6 @@
 import type { Match } from "../match";
-import { addBuilding, cellIndex, type MatchState, removeBuilding } from "../state";
-import type { BuildingKind, CellPos, EntityId, PlayerId } from "../types";
+import { addBuilding, cellIndex, type MatchState, removeBuilding, spawnUnit } from "../state";
+import type { BuildingKind, CellPos, EntityId, PlayerId, UnitKind } from "../types";
 
 /**
  * Puts a Building on the Map directly, skipping cost and placement rules, so
@@ -26,4 +26,12 @@ export function removeTestBuilding(match: Match, id: EntityId): void {
   const m = match as unknown as MatchState;
   const building = m.buildings.get(id);
   if (building) removeBuilding(m, building);
+}
+
+/**
+ * Puts a Unit on the Map directly, skipping training, so tests can stage a
+ * fight before training exists. Returns the new Unit's id.
+ */
+export function addTestUnit(match: Match, owner: PlayerId, kind: UnitKind, at: CellPos): EntityId {
+  return spawnUnit(match as unknown as MatchState, owner, kind, at).id;
 }
