@@ -45,6 +45,7 @@ export function createMatch(map: MapDef, seed: number): Match {
     buildings: new Map(),
     nextId: 1,
     status: { state: "running" },
+    shots: [],
   };
   for (const player of PLAYER_IDS) {
     const start = map.starts[player];

@@ -19,10 +19,19 @@ export const DRAG_THRESHOLD_PX = 5;
 
 /** The player's own Unit nearest to the point within hit range, or null. */
 export function unitAt(units: readonly UnitView[], p: Point, player: PlayerId): UnitView | null {
+  return nearestHit(units, p, (u) => u.owner === player);
+}
+
+/** The other Player's Unit nearest to the point within hit range, or null. */
+export function enemyUnitAt(units: readonly UnitView[], p: Point, player: PlayerId): UnitView | null {
+  return nearestHit(units, p, (u) => u.owner !== player);
+}
+
+function nearestHit(units: readonly UnitView[], p: Point, wanted: (u: UnitView) => boolean): UnitView | null {
   let best: UnitView | null = null;
   let bestD = UNIT_HIT_RADIUS;
   for (const u of units) {
-    if (u.owner !== player) continue;
+    if (!wanted(u)) continue;
     const d = Math.hypot(u.x - p.x, u.y - p.y);
     if (d <= bestD) {
       best = u;

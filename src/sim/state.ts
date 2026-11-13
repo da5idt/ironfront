@@ -8,7 +8,19 @@ import { isPassableTerrain } from "./types";
 // outside reads a PlayerView (view.ts). Tests use the public seam in index.ts.
 
 /** What a Unit is currently doing. Later features add their own variants. */
-export type UnitOrder = { readonly type: "idle" } | { readonly type: "move"; readonly plan: MovePlan };
+export type UnitOrder =
+  | { readonly type: "idle" }
+  | { readonly type: "move"; readonly plan: MovePlan }
+  | { readonly type: "attack"; readonly targetId: EntityId; chase: MovePlan | null };
+
+/** A shot fired during a Tick, kept so drawing can show a tracer. Positions in Cell units. */
+export interface Shot {
+  readonly fromX: number;
+  readonly fromY: number;
+  readonly toX: number;
+  readonly toY: number;
+  readonly tick: number;
+}
 
 export interface UnitState {
   readonly id: EntityId;
@@ -21,6 +33,8 @@ export interface UnitState {
   prevX: number;
   prevY: number;
   hp: number;
+  /** Ticks until the Unit's weapon can fire again. */
+  cooldown: number;
   order: UnitOrder;
 }
 
@@ -62,6 +76,8 @@ export interface MatchState {
   readonly buildings: Map<EntityId, BuildingState>;
   nextId: EntityId;
   status: MatchStatus;
+  /** Shots fired during the last Tick; replaced every Tick. */
+  shots: Shot[];
 }
 
 export function cellIndex(m: MatchState, x: number, y: number): number {
@@ -95,6 +111,7 @@ export function spawnUnit(m: MatchState, owner: PlayerId, kind: UnitKind, cell: 
     prevX: x,
     prevY: y,
     hp: UNIT_STATS[kind].maxHp,
+    cooldown: 0,
     order: { type: "idle" },
   };
   m.units.set(unit.id, unit);

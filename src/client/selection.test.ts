@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { UnitView } from "../sim";
-import { boxSelect, clickSelect, isDrag, pruneSelection, unitAt, unitsInBox } from "./selection";
+import { boxSelect, clickSelect, enemyUnitAt, isDrag, pruneSelection, unitAt, unitsInBox } from "./selection";
 
 function u(id: number, owner: 0 | 1, x: number, y: number): UnitView {
   return { id, kind: "rifleman", owner, x, y, prevX: x, prevY: y, hp: 50, maxHp: 50 };
@@ -23,6 +23,17 @@ describe("unitAt", () => {
 
   it("ignores enemy Units", () => {
     expect(unitAt(units, { x: 5.5, y: 5.5 }, 0)).toBeNull();
+  });
+});
+
+describe("enemyUnitAt", () => {
+  it("finds the enemy Unit under the point, for a right-click attack", () => {
+    expect(enemyUnitAt(units, { x: 5.2, y: 5.7 }, 0)?.id).toBe(3);
+  });
+
+  it("ignores own Units and empty ground", () => {
+    expect(enemyUnitAt(units, { x: 2.5, y: 2.5 }, 0)).toBeNull();
+    expect(enemyUnitAt(units, { x: 6.5, y: 1.5 }, 0)).toBeNull();
   });
 });
 

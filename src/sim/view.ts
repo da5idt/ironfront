@@ -45,6 +45,18 @@ export interface PlayerView {
   readonly map: MapView;
   readonly units: readonly UnitView[];
   readonly buildings: readonly BuildingView[];
+  /** Shots fired during the last Tick, for drawing tracers. */
+  readonly shots: readonly ShotView[];
+}
+
+/** One shot, from shooter to target, in Cell units. */
+export interface ShotView {
+  readonly fromX: number;
+  readonly fromY: number;
+  readonly toX: number;
+  readonly toY: number;
+  /** The Tick it was fired in. */
+  readonly tick: number;
 }
 
 export function buildPlayerView(m: MatchState, playerId: PlayerId): PlayerView {
@@ -83,5 +95,6 @@ export function buildPlayerView(m: MatchState, playerId: PlayerId): PlayerView {
     map: { width: m.width, height: m.height, terrain: m.terrain.slice(), ore: m.ore.slice() },
     units,
     buildings,
+    shots: m.shots.map((s) => ({ ...s })),
   };
 }
