@@ -1,6 +1,6 @@
 import { BUILDING_STATS, PLACEMENT } from "./tuning";
 import type { BuildingKind, CellPos, Terrain } from "./types";
-import { isPassableTerrain } from "./types";
+import { cellIndexIn, isPassableTerrain } from "./types";
 import type { PlayerView } from "./view";
 
 // Where a Player may place a Building. One rule, two callers: the Simulation
@@ -36,7 +36,7 @@ export function placementProblem(ground: PlacementGround, kind: BuildingKind, at
   for (let y = at.y; y < at.y + height; y++) {
     for (let x = at.x; x < at.x + width; x++) {
       if (x < 0 || y < 0 || x >= ground.width || y >= ground.height) return "off the Map";
-      if (!isPassableTerrain(ground.terrain[y * ground.width + x]!)) return "impassable ground";
+      if (!isPassableTerrain(ground.terrain[cellIndexIn(ground, x, y)]!)) return "impassable ground";
       if (!ground.explored(x, y)) return "Unexplored ground";
       if (ground.occupied(x, y)) return "something is in the way";
     }
@@ -68,7 +68,7 @@ export function canPlaceBuilding(view: PlayerView, kind: BuildingKind, at: CellP
     width: map.width,
     height: map.height,
     terrain: map.terrain,
-    explored: (x, y) => map.visibility[y * map.width + x] !== "unexplored",
+    explored: (x, y) => map.visibility[cellIndexIn(map, x, y)] !== "unexplored",
     occupied: (x, y) =>
       view.buildings.some((b) => covers(b, x, y)) ||
       view.units.some((u) => Math.floor(u.x) === x && Math.floor(u.y) === y),

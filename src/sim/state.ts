@@ -5,7 +5,7 @@ import type { Rng } from "./rng";
 import { startHarvesting } from "./harvest";
 import { BUILDING_STATS, UNIT_STATS } from "./tuning";
 import type { BuildingKind, CellPos, EntityId, PlayerId, Terrain, UnitKind } from "./types";
-import { isPassableTerrain } from "./types";
+import { cellIndexIn, isPassableTerrain } from "./types";
 
 // Internal state of a Match. Only code inside src/sim may touch it; everything
 // outside reads a PlayerView (view.ts). Tests use the public seam in index.ts.
@@ -107,7 +107,7 @@ export interface MatchState {
 }
 
 export function cellIndex(m: MatchState, x: number, y: number): number {
-  return y * m.width + x;
+  return cellIndexIn(m, x, y);
 }
 
 export function inBounds(m: MatchState, x: number, y: number): boolean {

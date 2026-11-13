@@ -3,7 +3,9 @@ import {
   type BuildingKind,
   type BuildingView,
   type CellPos,
+  cellIndexIn,
   type Command,
+  OPPONENT,
   type PlayerView,
   TRAINS,
   UNIT_STATS,
@@ -27,20 +29,6 @@ export const BUILD_ORDER: readonly (readonly [BuildingKind, number])[] = [
   ["turret", 1],
 ];
 
-/** After the build order: how many of each the Opponent adds while Credits allow. */
-const MOST_BARRACKS = 3;
-const MOST_TURRETS = 6;
-
-/** Harvesters wanted per Refinery, and in all. */
-const HARVESTERS_PER_REFINERY = 2;
-const MOST_HARVESTERS = 5;
-
-/** Army size (Riflemen and Raiders) the Opponent stops training at. */
-const MOST_ARMY = 40;
-
-/** Units each training Building keeps queued; a short queue keeps Credits free for the build order. */
-const QUEUE_DEPTH = 2;
-
 /** Cells from the HQ towards the Map's middle where new Units gather and Turrets go. */
 const RALLY_DISTANCE = 7;
 
@@ -62,8 +50,8 @@ export function nextInOrder(own: readonly BuildingView[]): BuildingKind | null {
 function nextExtra(own: readonly BuildingView[]): BuildingKind | null {
   const barracks = count(own, "barracks");
   const turrets = count(own, "turret");
-  if (turrets < MOST_TURRETS && (turrets < barracks * 2 || barracks >= MOST_BARRACKS)) return "turret";
-  if (barracks < MOST_BARRACKS) return "barracks";
+  if (turrets < OPPONENT.mostTurrets && (turrets < barracks * 2 || barracks >= OPPONENT.mostBarracks)) return "turret";
+  if (barracks < OPPONENT.mostBarracks) return "barracks";
   return null;
 }
 
@@ -111,7 +99,7 @@ export function nearestOre(view: PlayerView, from: { x: number; y: number }): Ce
   let bestD = Infinity;
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
-      if (ore[y * width + x]! <= 0) continue;
+      if (ore[cellIndexIn(view.map, x, y)]! <= 0) continue;
       const d = (x + 0.5 - from.x) ** 2 + (y + 0.5 - from.y) ** 2;
       if (d < bestD) {
         best = { x, y };
@@ -169,9 +157,9 @@ export function trainCommands(view: PlayerView): Command[] {
   const riflemen = owned(view, "rifleman");
   const raiders = owned(view, "raider");
   const wants: UnitKind[] = [];
-  const harvestersWanted = Math.min(MOST_HARVESTERS, count(own, "refinery") * HARVESTERS_PER_REFINERY);
+  const harvestersWanted = Math.min(OPPONENT.mostHarvesters, count(own, "refinery") * OPPONENT.harvestersPerRefinery);
   if (owned(view, "harvester") < harvestersWanted) wants.push("harvester");
-  if (riflemen + raiders < MOST_ARMY) wants.push(...(raiders * 2 < riflemen ? RAIDER_FIRST : RIFLEMAN_FIRST));
+  if (riflemen + raiders < OPPONENT.mostArmy) wants.push(...(raiders * 2 < riflemen ? RAIDER_FIRST : RIFLEMAN_FIRST));
   // A Harvester pays for itself, so it may spend what the build order holds back.
   const reserve = buildReserve(view);
   let spent = 0;
@@ -179,7 +167,7 @@ export function trainCommands(view: PlayerView): Command[] {
   for (const kind of wants) {
     const budget = view.credits - spent - (kind === "harvester" ? 0 : reserve);
     const trainer = own.find(
-      (b) => b.training && TRAINS[b.kind]?.includes(kind) && b.training.queue.length < QUEUE_DEPTH,
+      (b) => b.training && TRAINS[b.kind]?.includes(kind) && b.training.queue.length < OPPONENT.queueDepth,
     );
     if (!trainer) continue;
     if (budget < UNIT_STATS[kind].cost) break;

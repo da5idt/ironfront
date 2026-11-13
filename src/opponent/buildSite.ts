@@ -1,4 +1,11 @@
-import { BUILDING_STATS, type BuildingKind, canPlaceBuilding, type CellPos, type PlayerView } from "../sim";
+import {
+  BUILDING_STATS,
+  type BuildingKind,
+  canPlaceBuilding,
+  type CellPos,
+  cellIndexIn,
+  type PlayerView,
+} from "../sim";
 
 // Where the Computer Opponent puts a finished Building. It asks the same
 // placement rule the person's preview uses, so it never tries a spot the
@@ -37,7 +44,7 @@ export function findBuildSite(view: PlayerView, kind: BuildingKind, near: CellPo
 
 function coversOre(view: PlayerView, at: CellPos, width: number, height: number): boolean {
   for (let y = at.y; y < at.y + height; y++) {
-    for (let x = at.x; x < at.x + width; x++) if (view.map.ore[y * view.map.width + x]! > 0) return true;
+    for (let x = at.x; x < at.x + width; x++) if (view.map.ore[cellIndexIn(view.map, x, y)]! > 0) return true;
   }
   return false;
 }

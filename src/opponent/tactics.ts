@@ -1,30 +1,12 @@
-import {
-  type BuildingView,
-  type EntityId,
-  type PlayerView,
-  TICKS_PER_SECOND,
-  UNIT_STATS,
-  type UnitView,
-  type Vec,
-} from "../sim";
+import { type BuildingView, type EntityId, OPPONENT, type PlayerView, UNIT_STATS, type UnitView, type Vec } from "../sim";
 
 // The Computer Opponent's fighting decisions that are worth testing on their own:
 // how big an attack wave must be, and what a Unit should shoot.
 
-/** Units in the first attack wave; each wave after asks for WAVE_GROWTH more, up to WAVE_CAP. */
-export const FIRST_WAVE = 6;
-export const WAVE_GROWTH = 3;
-export const WAVE_CAP = 24;
-
 /** Idle army Units the Opponent waits for before sending wave `wave` (counting from 0). */
 export function waveThreshold(wave: number): number {
-  return Math.min(WAVE_CAP, FIRST_WAVE + WAVE_GROWTH * wave);
+  return Math.min(OPPONENT.waveCap, OPPONENT.firstWave + OPPONENT.waveGrowth * wave);
 }
-
-/** No wave before this Tick, so the person has time to build before the first attack (4.5 minutes). */
-export const FIRST_WAVE_TICK = 270 * TICKS_PER_SECOND;
-/** Least time from one wave setting off to the next. */
-export const WAVE_INTERVAL_TICKS = 90 * TICKS_PER_SECOND;
 
 export interface WaveState {
   /** Waves sent so far. */
@@ -38,8 +20,8 @@ export interface WaveState {
 
 /** Whether the Opponent sends its next attack wave now. */
 export function waveReady(s: WaveState): boolean {
-  if (s.tick < FIRST_WAVE_TICK) return false;
-  if (s.lastWaveTick !== null && s.tick - s.lastWaveTick < WAVE_INTERVAL_TICKS) return false;
+  if (s.tick < OPPONENT.firstWaveTick) return false;
+  if (s.lastWaveTick !== null && s.tick - s.lastWaveTick < OPPONENT.waveIntervalTicks) return false;
   return s.army >= waveThreshold(s.wave);
 }
 
@@ -73,8 +55,15 @@ export function distanceTo(t: UnitView | BuildingView, from: Vec): number {
   return Math.hypot(x - from.x, y - from.y);
 }
 
-/** Ties go to the lowest id so the choice is the same every run. */
-function nearest<T extends UnitView | BuildingView>(candidates: readonly T[], from: Vec, range: number): T | null {
+/**
+ * The candidate nearest `from` (distanceTo) within `range`, or null. Ties go
+ * to the lowest id so the choice is the same every run, whatever the order.
+ */
+export function nearest<T extends UnitView | BuildingView>(
+  candidates: readonly T[],
+  from: Vec,
+  range = Infinity,
+): T | null {
   let best: T | null = null;
   let bestD = Infinity;
   for (const t of candidates) {

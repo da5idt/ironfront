@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { createMatch, getPlayerView, type PlayerView, TICKS_PER_SECOND } from "../sim";
 import { openMap } from "../sim/testing/maps";
 import { addTestBuilding, addTestUnit } from "../sim/testing/setup";
-import { chooseTarget, waveReady, waveThreshold } from "./tactics";
+import { chooseTarget, nearest, waveReady, waveThreshold } from "./tactics";
 
 describe("attack wave threshold", () => {
   it("starts at six Units and asks for three more each wave", () => {
@@ -84,6 +84,18 @@ describe("target choice", () => {
     });
     const turret = view.buildings.find((b) => b.kind === "turret")!;
     expect(chooseTarget(view, { x: 30.5, y: 30.5 })).toBe(turret.id);
+  });
+
+  it("breaks a tie for nearest by the lowest id, whatever order they are listed in", () => {
+    const view = sceneFor((m) => {
+      addTestUnit(m, 0, "harvester", { x: 30, y: 30 });
+      addTestUnit(m, 0, "harvester", { x: 28, y: 30 });
+    });
+    const enemies = view.units.filter((u) => u.owner === 0 && u.y === 30.5).reverse();
+    const lowest = Math.min(...enemies.map((u) => u.id));
+    expect(enemies[0]!.id).not.toBe(lowest);
+    expect(nearest(enemies, { x: 29.5, y: 30.5 })?.id).toBe(lowest);
+    expect(nearest(enemies, { x: 20.5, y: 30.5 }, 5)).toBeNull();
   });
 
   it("gives null when no enemy is known", () => {

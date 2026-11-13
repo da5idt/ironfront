@@ -1,10 +1,14 @@
 import {
   type BuildingView,
   type CellPos,
+  cellIndexIn,
   type Command,
+  createRng,
   type EntityId,
+  nextInt,
   type PlayerId,
   type PlayerView,
+  type Rng,
   UNIT_STATS,
   type UnitView,
 } from "../sim";
@@ -17,8 +21,7 @@ import {
   rallyPoint,
   trainCommands,
 } from "./economy";
-import { createRng, nextInt, type Rng } from "./rng";
-import { chooseTarget, distanceTo, waveReady, waveThreshold } from "./tactics";
+import { chooseTarget, distanceTo, nearest, waveReady, waveThreshold } from "./tactics";
 
 // The Computer Opponent. It plays by the person's rules: it reads only its own
 // PlayerView, so Fog of War applies, and answers with Commands the caller
@@ -70,6 +73,8 @@ export function createOpponent(playerId: PlayerId, seed: number): Opponent {
   const notes = new Map<EntityId, UnitNotes>();
   const buildingHp = new Map<EntityId, number>();
   const placeFailures = { count: 0 };
+  // Its own generator, apart from the Match's, so its choices never disturb the
+  // Simulation's and a Match with an Opponent replays exactly from the two seeds.
   const rng: Rng = createRng(seed);
   let wavesSent = 0;
   let lastWaveTick: number | null = null;
@@ -166,7 +171,7 @@ export function createOpponent(playerId: PlayerId, seed: number): Opponent {
       return sendHome(view, idleDefenders);
     }
     for (const u of defenders) notes.get(u.id)!.role = "defend";
-    return attackOrders(view, defenders, (u) => nearestId(threats, u));
+    return attackOrders(view, defenders, (u) => nearest(threats, u)?.id ?? null);
   }
 
   /** Launches a wave once enough Units wait at home, then leads it: gather short of the target, then attack. */
@@ -242,22 +247,12 @@ function inRange(view: PlayerView, u: UnitView, targetId: EntityId): boolean {
   return t !== undefined && distanceTo(t, u) <= UNIT_STATS[u.kind].range;
 }
 
-function nearestId(candidates: readonly UnitView[], from: UnitView): EntityId | null {
-  let best: UnitView | null = null;
-  for (const c of candidates) {
-    if (!best || distanceTo(c, from) < distanceTo(best, from)) best = c;
-  }
-  return best?.id ?? null;
-}
-
-/** The known enemy Building nearest `from`, remembered ones included; ties to the lowest id. */
+/** The known enemy Building nearest `from`, remembered ones included. */
 function nearestEnemyBuilding(view: PlayerView, from: CellPos): BuildingView | null {
-  let best: BuildingView | null = null;
-  for (const b of view.buildings) {
-    if (b.owner === view.playerId) continue;
-    if (!best || distanceTo(b, from) < distanceTo(best, from)) best = b;
-  }
-  return best;
+  return nearest(
+    view.buildings.filter((b) => b.owner !== view.playerId),
+    from,
+  );
 }
 
 /** A Cell `distance` from a Building, on the way back to `home`. */
@@ -274,7 +269,7 @@ function stepToward(
 }
 
 function explored(view: PlayerView, c: CellPos): boolean {
-  return view.map.visibility[c.y * view.map.width + c.x] !== "unexplored";
+  return view.map.visibility[cellIndexIn(view.map, c.x, c.y)] !== "unexplored";
 }
 
 /** The corner opposite the HQ: on a two-Player Map the likeliest place for the other base. */

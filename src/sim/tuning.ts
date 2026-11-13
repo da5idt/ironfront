@@ -158,6 +158,28 @@ export const ECONOMY = {
   harvestRetryTicks: TICKS_PER_SECOND,
 } as const;
 
+/** How hard the Computer Opponent plays. */
+export const OPPONENT = {
+  /** Units in the first attack wave; each wave after asks for waveGrowth more, up to waveCap. */
+  firstWave: 6,
+  waveGrowth: 3,
+  waveCap: 24,
+  /** No wave before this Tick, so the person has time to build before the first attack (4.5 minutes). */
+  firstWaveTick: 270 * TICKS_PER_SECOND,
+  /** Least time from one wave setting off to the next. */
+  waveIntervalTicks: 90 * TICKS_PER_SECOND,
+  /** After the build order: most Barracks and Turrets the Opponent adds while Credits allow. */
+  mostBarracks: 3,
+  mostTurrets: 6,
+  /** Harvesters wanted per Refinery, and in all. */
+  harvestersPerRefinery: 2,
+  mostHarvesters: 5,
+  /** Army size (Riflemen and Raiders) the Opponent stops training at. */
+  mostArmy: 40,
+  /** Units each training Building keeps queued; a short queue keeps Credits free for the build order. */
+  queueDepth: 2,
+} as const;
+
 export const TRAINING = {
   /** Most Units one Building can have queued, the one in training included. */
   queueSize: 5,
