@@ -62,7 +62,8 @@ describe("harvesting Ore", () => {
     const ore = () => getPlayerView(match, 0).map.ore;
     let ticks = 0;
     while (ore()[near]! > 0 && ticks < 300 * TICKS_PER_SECOND) {
-      expect(ore()[far]).toBe(ECONOMY.orePerCell);
+      // Untouched: Unexplored (shown as 0) until the Harvester comes near, then full.
+      expect([0, ECONOMY.orePerCell]).toContain(ore()[far]);
       advanceTick(match);
       ticks++;
     }

@@ -12,8 +12,11 @@ import {
 import { openMap, testMap } from "./testing/maps";
 import { addTestUnit } from "./testing/setup";
 
+// Reads each Unit from its owner's view: a Player always sees its own Units,
+// while Fog of War may hide an enemy target from the attacker.
 const find = (match: Match, id: number): UnitView | undefined =>
-  getPlayerView(match, 0).units.find((u) => u.id === id);
+  getPlayerView(match, 0).units.find((u) => u.id === id && u.owner === 0) ??
+  getPlayerView(match, 1).units.find((u) => u.id === id && u.owner === 1);
 
 function run(match: Match, ticks: number): void {
   for (let t = 0; t < ticks; t++) advanceTick(match);

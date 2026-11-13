@@ -3,6 +3,7 @@ import { type Camera, CELL_PX, mapToScreen, type Size } from "./camera";
 import {
   DRAG_BOX_FILL,
   DRAG_BOX_LINE,
+  FOG_ALPHA,
   HEALTH_BACK,
   HEALTH_GOOD,
   HEALTH_LOW,
@@ -41,6 +42,9 @@ export class Renderer {
   private readonly ctx: CanvasRenderingContext2D;
   /** Terrain never changes, so it is drawn once and copied each frame. */
   private terrainLayer: HTMLCanvasElement | null = null;
+  private fogLayer: HTMLCanvasElement | null = null;
+  /** The view the fog layer was painted from; views are rebuilt each Tick, so identity means "unchanged". */
+  private fogFor: PlayerView | null = null;
 
   constructor(private readonly canvas: HTMLCanvasElement) {
     const ctx = canvas.getContext("2d");
@@ -59,6 +63,9 @@ export class Renderer {
     this.drawTerrain(view, cam);
     this.drawOre(view, cam, screen);
     for (const b of view.buildings) this.drawBuilding(b, cam);
+    // After the ground and Buildings, so remembered Buildings sit dimmed under it;
+    // before Units, which are only ever listed where the Player can see.
+    this.drawFog(view, cam);
     if (overlay.moveMarker) this.drawMoveMarker(overlay.moveMarker.cell, overlay.moveMarker.age, cam);
     for (const u of view.units) this.drawUnit(u, cam, alpha, overlay.selection.has(u.id));
     for (const s of view.shots) this.drawShot(s, cam, alpha);
@@ -69,6 +76,21 @@ export class Renderer {
   private drawTerrain(view: PlayerView, cam: Camera): void {
     if (!this.terrainLayer) this.terrainLayer = buildTerrainLayer(view);
     this.ctx.drawImage(this.terrainLayer, -cam.x, -cam.y);
+  }
+
+  /**
+   * Fog of War as one pixel per Cell, scaled up without smoothing. Rebuilding
+   * a 64x64 image only when a new view arrives keeps this to one drawImage a frame.
+   */
+  private drawFog(view: PlayerView, cam: Camera): void {
+    if (this.fogFor !== view) {
+      this.fogLayer = paintFogLayer(view, this.fogLayer);
+      this.fogFor = view;
+    }
+    const { ctx } = this;
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(this.fogLayer!, -cam.x, -cam.y, view.map.width * CELL_PX, view.map.height * CELL_PX);
+    ctx.imageSmoothingEnabled = true;
   }
 
   private drawOre(view: PlayerView, cam: Camera, screen: Size): void {
@@ -267,6 +289,21 @@ export class Renderer {
     ctx.textBaseline = "middle";
     ctx.fillText(text, screen.width - 18, 22);
   }
+}
+
+function paintFogLayer(view: PlayerView, reuse: HTMLCanvasElement | null): HTMLCanvasElement {
+  const { width, height, visibility } = view.map;
+  const layer = reuse ?? document.createElement("canvas");
+  layer.width = width;
+  layer.height = height;
+  const ctx = layer.getContext("2d")!;
+  const image = ctx.createImageData(width, height);
+  for (let i = 0; i < visibility.length; i++) {
+    // RGB stays 0 (black); only the alpha channel carries the fog.
+    image.data[i * 4 + 3] = FOG_ALPHA[visibility[i]!];
+  }
+  ctx.putImageData(image, 0, 0);
+  return layer;
 }
 
 function buildTerrainLayer(view: PlayerView): HTMLCanvasElement {

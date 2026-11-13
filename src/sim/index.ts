@@ -6,5 +6,6 @@ export type { Command, CommandResult } from "./commands";
 export type { MapDef, StartDef } from "./mapdef";
 export type { MatchStatus } from "./state";
 export type { PlayerView, UnitView, BuildingView, MapView, ShotView } from "./view";
+export type { Visibility } from "./fog";
 export * from "./types";
 export { UNIT_STATS, BUILDING_STATS, ECONOMY, TICKS_PER_SECOND } from "./tuning";

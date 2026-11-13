@@ -1,3 +1,4 @@
+import type { PlayerFog } from "./fog";
 import type { HarvestOrder } from "./harvest";
 import type { MovePlan } from "./movement";
 import type { Rng } from "./rng";
@@ -79,6 +80,8 @@ export interface MatchState {
   /** Insertion-ordered, so iteration is deterministic. */
   readonly units: Map<EntityId, UnitState>;
   readonly buildings: Map<EntityId, BuildingState>;
+  /** Fog of War per Player, indexed by PlayerId. */
+  readonly fog: readonly [PlayerFog, PlayerFog];
   nextId: EntityId;
   status: MatchStatus;
   /** Shots fired during the last Tick; replaced every Tick. */
