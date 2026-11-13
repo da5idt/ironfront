@@ -62,7 +62,11 @@ A two-way PR merges only when all of these hold: the `two-way-door` label, `**Do
 
 ## Scheduled jobs
 - **auto-merge** (GitHub Actions): every 30 minutes, and on each new PR comment.
-<!-- Claude scheduled tasks, if set up, are listed here. -->
+- **Hourly pickup** (Claude scheduled task): at :20 past each hour Central, starts the next approved spec (one at a time) from the build step, in a new thread.
+- **PR watch** (Claude scheduled task): every 2 hours at :50 Central, fixes failing CI and review comments on agent PRs.
+- **Daily digest** (Claude scheduled task): 7:50 PM Central, opens a `digest` issue only on days with auto-merges or shadow-mode `would-auto-merge` labels.
+
+The Claude tasks sit at :20 and :50 so they never share a 15-minute slot with the auto-merge runs at :00 and :30.
 
 ## Where things live
 | What | Where |
