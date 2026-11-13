@@ -13,7 +13,17 @@ import { isPassableTerrain } from "./types";
 export type UnitOrder =
   | { readonly type: "idle" }
   | { readonly type: "move"; readonly plan: MovePlan }
+  | { readonly type: "attack"; readonly targetId: EntityId; chase: MovePlan | null }
   | HarvestOrder;
+
+/** A shot fired during a Tick, kept so drawing can show a tracer. Positions in Cell units. */
+export interface Shot {
+  readonly fromX: number;
+  readonly fromY: number;
+  readonly toX: number;
+  readonly toY: number;
+  readonly tick: number;
+}
 
 export interface UnitState {
   readonly id: EntityId;
@@ -26,6 +36,8 @@ export interface UnitState {
   prevX: number;
   prevY: number;
   hp: number;
+  /** Ticks until the Unit's weapon can fire again. */
+  cooldown: number;
   order: UnitOrder;
   /** Ore carried; only Harvesters ever hold any. */
   cargo: number;
@@ -69,6 +81,8 @@ export interface MatchState {
   readonly buildings: Map<EntityId, BuildingState>;
   nextId: EntityId;
   status: MatchStatus;
+  /** Shots fired during the last Tick; replaced every Tick. */
+  shots: Shot[];
 }
 
 export function cellIndex(m: MatchState, x: number, y: number): number {
@@ -102,6 +116,7 @@ export function spawnUnit(m: MatchState, owner: PlayerId, kind: UnitKind, cell: 
     prevX: x,
     prevY: y,
     hp: UNIT_STATS[kind].maxHp,
+    cooldown: 0,
     // Harvesters go to work as soon as they exist, so nobody has to tell them.
     order: kind === "harvester" ? startHarvesting() : { type: "idle" },
     cargo: 0,

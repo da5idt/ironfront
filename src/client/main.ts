@@ -15,6 +15,7 @@ import { Renderer } from "./renderer";
 import {
   boxSelect,
   clickSelect,
+  enemyUnitAt,
   isDrag,
   pruneSelection,
   type Selection,
@@ -88,7 +89,7 @@ function orderTo(cell: CellPos): void {
   if (others.length > 0) issue({ type: "move", unitIds: others, target: cell });
 }
 
-// Right-click is the move button, so the browser menu must not open over the Map.
+// Right-click is the move, attack and harvest button, so the browser menu must not open over the Map.
 canvas.addEventListener("contextmenu", (e) => e.preventDefault());
 canvas.addEventListener("mousedown", (e) => {
   const at = { x: e.clientX, y: e.clientY };
@@ -97,6 +98,11 @@ canvas.addEventListener("mousedown", (e) => {
   } else if (e.button === 2 && selection.size > 0) {
     const cell = screenToCell(camera, at.x, at.y);
     if (cell.x < 0 || cell.y < 0 || cell.x >= mapSize.width || cell.y >= mapSize.height) return;
+    const enemy = enemyUnitAt(view.units, screenToMap(camera, at.x, at.y), HUMAN);
+    if (enemy) {
+      issue({ type: "attack", unitIds: [...selection], targetId: enemy.id });
+      return;
+    }
     orderTo(cell);
     moveMarker = { cell, at: performance.now() };
   }
@@ -124,6 +130,7 @@ if (import.meta.env.DEV) {
     __ironfront: {
       match,
       issue,
+      issueAs: (player: PlayerId, command: Command) => issueCommand(match, player, command),
       advance: (ticks = 1) => {
         for (let i = 0; i < ticks; i++) advanceTick(match);
         view = getPlayerView(match, HUMAN);
