@@ -5,15 +5,25 @@ import type { MapDef } from "./mapdef";
 import { parseMap } from "./mapdef";
 import { createRng } from "./rng";
 import type { MatchState, MatchStatus, PlayerState } from "./state";
-import { addBuilding, spawnUnit } from "./state";
+import { addBuilding, isWalkable, spawnUnit } from "./state";
 import { SYSTEMS } from "./systems";
-import { ECONOMY } from "./tuning";
-import type { PlayerId } from "./types";
+import { BUILDING_STATS, ECONOMY } from "./tuning";
+import type { BuildingKind, CellPos, PlayerId, UnitKind } from "./types";
 import { PLAYER_IDS } from "./types";
 import { buildPlayerView, type PlayerView } from "./view";
 
-/** A Match in progress. Opaque outside src/sim: use the functions below. */
-export type Match = MatchState;
+declare const matchBrand: unique symbol;
+/**
+ * A Match in progress. Deliberately opaque: code outside src/sim can only pass
+ * it to the functions below, which keeps the ADR 0002 seam honest.
+ */
+export interface Match {
+  readonly [matchBrand]: true;
+}
+
+function state(match: Match): MatchState {
+  return match as unknown as MatchState;
+}
 
 export function createMatch(map: MapDef, seed: number): Match {
   const parsed = parseMap(map);
@@ -38,23 +48,52 @@ export function createMatch(map: MapDef, seed: number): Match {
   };
   for (const player of PLAYER_IDS) {
     const start = map.starts[player];
-    addBuilding(m, player, "hq", start.hq);
-    addBuilding(m, player, "refinery", start.refinery);
-    spawnUnit(m, player, "harvester", start.harvester);
-    for (const cell of start.riflemen) spawnUnit(m, player, "rifleman", cell);
+    placeStartingBuilding(m, map, player, "hq", start.hq);
+    placeStartingBuilding(m, map, player, "refinery", start.refinery);
   }
-  return m;
+  // Units after all Buildings, so a Unit inside either Player's base is caught.
+  for (const player of PLAYER_IDS) {
+    const start = map.starts[player];
+    placeStartingUnit(m, map, player, "harvester", start.harvester);
+    for (const cell of start.riflemen) placeStartingUnit(m, map, player, "rifleman", cell);
+  }
+  return m as unknown as Match;
+}
+
+// A bad starting position is a mistake in the Map data, so it fails loudly
+// instead of corrupting the Building grid.
+function placeStartingBuilding(m: MatchState, map: MapDef, player: PlayerId, kind: BuildingKind, at: CellPos): void {
+  const { width, height } = BUILDING_STATS[kind];
+  for (let dy = 0; dy < height; dy++) {
+    for (let dx = 0; dx < width; dx++) {
+      if (!isWalkable(m, at.x + dx, at.y + dy)) {
+        throw new Error(
+          `Map ${map.name}: Player ${player}'s ${kind} at ${at.x},${at.y} needs clear, passable Cells on the Map`,
+        );
+      }
+    }
+  }
+  addBuilding(m, player, kind, at);
+}
+
+function placeStartingUnit(m: MatchState, map: MapDef, player: PlayerId, kind: UnitKind, at: CellPos): void {
+  if (!isWalkable(m, at.x, at.y)) {
+    throw new Error(`Map ${map.name}: Player ${player}'s ${kind} at ${at.x},${at.y} needs a clear, passable Cell`);
+  }
+  spawnUnit(m, player, kind, at);
 }
 
 /** Applies a Command for a Player at once, or rejects it and changes nothing. */
-export function issueCommand(m: Match, player: PlayerId, command: Command): CommandResult {
+export function issueCommand(match: Match, player: PlayerId, command: Command): CommandResult {
+  const m = state(match);
   if (m.status.state !== "running") return reject("the Match is over");
   const handler = COMMAND_HANDLERS[command.type] as CommandHandler<typeof command.type>;
   return handler(m, player, command as never);
 }
 
 /** Advances the Match by one Tick. Does nothing once the Match is over. */
-export function advanceTick(m: Match): void {
+export function advanceTick(match: Match): void {
+  const m = state(match);
   if (m.status.state !== "running") return;
   for (const u of m.units.values()) {
     u.prevX = u.x;
@@ -64,10 +103,10 @@ export function advanceTick(m: Match): void {
   m.tick++;
 }
 
-export function getPlayerView(m: Match, player: PlayerId): PlayerView {
-  return buildPlayerView(m, player);
+export function getPlayerView(match: Match, player: PlayerId): PlayerView {
+  return buildPlayerView(state(match), player);
 }
 
-export function getMatchStatus(m: Match): MatchStatus {
-  return m.status;
+export function getMatchStatus(match: Match): MatchStatus {
+  return state(match).status;
 }

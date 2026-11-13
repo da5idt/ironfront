@@ -80,7 +80,7 @@ export function buildPlayerView(m: MatchState, playerId: PlayerId): PlayerView {
     tick: m.tick,
     playerId,
     credits: m.players[playerId].credits,
-    map: { width: m.width, height: m.height, terrain: m.terrain, ore: m.ore.slice() },
+    map: { width: m.width, height: m.height, terrain: m.terrain.slice(), ore: m.ore.slice() },
     units,
     buildings,
   };

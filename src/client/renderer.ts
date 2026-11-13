@@ -1,4 +1,4 @@
-import type { BuildingKind, BuildingView, PlayerView, UnitView } from "../sim";
+import { type BuildingKind, type BuildingView, ECONOMY, type PlayerView, type UnitView } from "../sim";
 import { type Camera, CELL_PX, mapToScreen, type Size } from "./camera";
 import { HUD_BG, HUD_TEXT, ORE_COLOUR, ORE_SHADOW, TEAM_COLOURS, TERRAIN_COLOURS } from "./palette";
 
@@ -55,8 +55,8 @@ export class Renderer {
         const amount = ore[y * width + x] ?? 0;
         if (amount <= 0) continue;
         const p = mapToScreen(cam, x, y);
-        // Four nuggets per Cell; fewer and smaller as the Cell empties.
-        const fullness = Math.min(1, amount / 500);
+        // Fewer, smaller nuggets as the Cell empties, so depletion reads at a glance.
+        const fullness = Math.min(1, amount / ECONOMY.orePerCell);
         const r = 2 + 3 * fullness;
         const spots = [
           [0.3, 0.3],

@@ -42,6 +42,18 @@ describe("starting a Match", () => {
     expect(map.ore.find((o) => o > 0)).toBe(ECONOMY.orePerCell);
   });
 
+  it("rejects starting positions that are off the Map, blocked, or overlapping", () => {
+    const rows = ["............", "........##..", ...Array.from({ length: 6 }, () => ".".repeat(12))];
+    const ok = testMap(rows).starts;
+    const start = (p0: Partial<(typeof ok)[0]>) => [{ ...ok[0], ...p0 }, ok[1]] as const;
+    expect(() => createMatch(testMap(rows), 1)).not.toThrow();
+    expect(() => createMatch(testMap(rows, start({ hq: { x: 10, y: 0 } })), 1)).toThrow(/hq at 10,0/);
+    expect(() => createMatch(testMap(rows, start({ hq: { x: 7, y: 0 } })), 1)).toThrow(/hq at 7,0/);
+    expect(() => createMatch(testMap(rows, start({ refinery: { x: 1, y: 1 } })), 1)).toThrow(/refinery/);
+    expect(() => createMatch(testMap(rows, start({ harvester: { x: 1, y: 1 } })), 1)).toThrow(/harvester at 1,1/);
+    expect(() => createMatch(testMap(rows, start({ riflemen: [{ x: 12, y: 0 }] })), 1)).toThrow(/rifleman at 12,0/);
+  });
+
   it("rejects a Map with uneven rows or unknown Cells", () => {
     expect(() => createMatch(testMap(["........", "......."]), 1)).toThrow(/row 1/);
     expect(() => createMatch(testMap(["........", "...x...."]), 1)).toThrow(/unknown Cell/);
@@ -79,6 +91,9 @@ describe("Commands", () => {
 });
 
 describe("determinism", () => {
+  // Placeholder strength: until movement lands (#4) only the Tick count changes,
+  // so this can't yet catch a stray Math.random. Each rule ticket extends the
+  // Commands below so the run exercises it.
   it("produces identical views from the same Map, seed and Commands", () => {
     const run = () => {
       const match = createMatch(RIVERFORD, 42);
@@ -100,6 +115,8 @@ describe("determinism", () => {
       }
       return views;
     };
-    expect(run()).toEqual(run());
+    const first = run();
+    expect(first).toEqual(run());
+    expect(new Set(first).size).toBe(first.length);
   });
 });
