@@ -10,7 +10,7 @@ import {
   type UnitView,
 } from "./index";
 import { openMap, testMap } from "./testing/maps";
-import { addTestUnit } from "./testing/setup";
+import { addTestUnit, removeTestBuilding } from "./testing/setup";
 
 // Reads each Unit from its owner's view: a Player always sees its own Units,
 // while Fog of War may hide an enemy target from the attacker.
@@ -21,6 +21,12 @@ const find = (match: Match, id: number): UnitView | undefined =>
 function run(match: Match, ticks: number): void {
   for (let t = 0; t < ticks; t++) advanceTick(match);
 }
+
+/**
+ * An unarmed Player 0 Harvester beside a far target, so Player 0 can see (and
+ * so attack) it without anyone else firing. With no Ore on the Map it stays put.
+ */
+const spotter = (match: Match, cell: { x: number; y: number }) => addTestUnit(match, 0, "harvester", cell);
 
 describe("the attack Command", () => {
   it("fires on reload until the target dies, then removes it", () => {
@@ -45,7 +51,8 @@ describe("the attack Command", () => {
     const match = createMatch(openMap(20, 20), 1);
     const rifleman = addTestUnit(match, 0, "rifleman", { x: 2, y: 10 });
     const harvester = addTestUnit(match, 1, "harvester", { x: 12, y: 10 });
-    issueCommand(match, 0, { type: "attack", unitIds: [rifleman], targetId: harvester });
+    spotter(match, { x: 12, y: 8 });
+    expect(issueCommand(match, 0, { type: "attack", unitIds: [rifleman], targetId: harvester })).toEqual({ ok: true });
     run(match, 20);
     expect(find(match, harvester)!.hp).toBe(UNIT_STATS.harvester.maxHp);
     run(match, 6 * TICKS_PER_SECOND);
@@ -75,6 +82,7 @@ describe("the attack Command", () => {
     const match = createMatch(testMap(rows), 1);
     const rifleman = addTestUnit(match, 0, "rifleman", { x: 2, y: 10 });
     const harvester = addTestUnit(match, 1, "harvester", { x: 18, y: 10 });
+    spotter(match, { x: 18, y: 8 });
     issueCommand(match, 0, { type: "attack", unitIds: [rifleman], targetId: harvester });
     run(match, 10 * TICKS_PER_SECOND);
     const at = find(match, rifleman)!;
@@ -109,11 +117,37 @@ describe("the attack Command", () => {
   });
 });
 
+describe("attacking only what the Player can see", () => {
+  it("rejects an attack on an enemy Unit out of sight, changing nothing", () => {
+    const match = createMatch(openMap(20, 20), 1);
+    const rifleman = addTestUnit(match, 0, "rifleman", { x: 2, y: 10 });
+    const hidden = addTestUnit(match, 1, "harvester", { x: 12, y: 10 });
+    const before = JSON.stringify(getPlayerView(match, 0));
+    expect(issueCommand(match, 0, { type: "attack", unitIds: [rifleman], targetId: hidden }).ok).toBe(false);
+    expect(JSON.stringify(getPlayerView(match, 0))).toBe(before);
+  });
+
+  it("drops a chase when the target walks out of sight", () => {
+    const match = createMatch(openMap(40, 20), 1);
+    const rifleman = addTestUnit(match, 0, "rifleman", { x: 10, y: 10 });
+    const raider = addTestUnit(match, 1, "raider", { x: 14, y: 10 });
+    issueCommand(match, 1, { type: "move", unitIds: [raider], target: { x: 38, y: 10 } });
+    expect(issueCommand(match, 0, { type: "attack", unitIds: [rifleman], targetId: raider })).toEqual({ ok: true });
+    // The Raider is far faster, so the Rifleman loses sight of it and stops.
+    run(match, 4 * TICKS_PER_SECOND);
+    const at = find(match, rifleman)!;
+    run(match, 2 * TICKS_PER_SECOND);
+    expect(find(match, rifleman)!.x).toBe(at.x);
+    expect(at.x).toBeLessThan(15);
+  });
+});
+
 describe("the stop Command", () => {
   it("halts a chase and the attack with it", () => {
     const match = createMatch(openMap(20, 20), 1);
     const rifleman = addTestUnit(match, 0, "rifleman", { x: 2, y: 10 });
     const harvester = addTestUnit(match, 1, "harvester", { x: 14, y: 10 });
+    spotter(match, { x: 14, y: 8 });
     issueCommand(match, 0, { type: "attack", unitIds: [rifleman], targetId: harvester });
     run(match, 20);
     expect(issueCommand(match, 0, { type: "stop", unitIds: [rifleman] })).toEqual({ ok: true });
@@ -194,5 +228,81 @@ describe("Rifleman and Raider", () => {
     expect(rd.speed).toBeGreaterThan(rf.speed * 2);
     expect(rd.maxHp).toBeGreaterThan(rf.maxHp * 2);
     expect(rf.cost).toBeLessThan(rd.cost);
+  });
+});
+
+describe("attacking a Building", () => {
+  // openMap(20, 20): Player 1's Refinery covers (13..15, 18..19) and has 900 health.
+  const refineryOf = (match: Match, player: 0 | 1) =>
+    getPlayerView(match, 0).buildings.find((b) => b.owner === player && b.kind === "refinery");
+
+  it("fires at the nearest edge of the footprint until the Building is destroyed and its Cells are free", () => {
+    const match = createMatch(openMap(20, 20), 1);
+    const raider = addTestUnit(match, 0, "raider", { x: 10, y: 18 });
+    const refinery = refineryOf(match, 1)!;
+    expect(issueCommand(match, 0, { type: "attack", unitIds: [raider], targetId: refinery.id })).toEqual({ ok: true });
+    run(match, 1);
+    expect(refineryOf(match, 1)!.hp).toBe(890);
+    expect(getPlayerView(match, 0).shots).toEqual([{ fromX: 10.5, fromY: 18.5, toX: 13, toY: 18.5, tick: 0 }]);
+    // 90 shots of 10, one every 12 Ticks, the first at once.
+    run(match, 89 * UNIT_STATS.raider.reloadTicks - 1);
+    expect(refineryOf(match, 1)!.hp).toBe(10);
+    run(match, 1);
+    expect(refineryOf(match, 1)).toBeUndefined();
+    expect(issueCommand(match, 0, { type: "move", unitIds: [raider], target: { x: 14, y: 18 } })).toEqual({ ok: true });
+    run(match, 2 * TICKS_PER_SECOND);
+    expect(find(match, raider)).toMatchObject({ x: 14.5, y: 18.5 });
+  });
+
+  it("walks up to a Building out of range, then stands and fires", () => {
+    const match = createMatch(openMap(20, 20), 1);
+    // From (7, 18) the Raider sees the Refinery's nearest Cells but is 5.5 Cells from its edge.
+    const raider = addTestUnit(match, 0, "raider", { x: 7, y: 18 });
+    issueCommand(match, 0, { type: "attack", unitIds: [raider], targetId: refineryOf(match, 1)!.id });
+    run(match, 2 * TICKS_PER_SECOND);
+    const r = find(match, raider)!;
+    expect(13 - r.x).toBeLessThanOrEqual(UNIT_STATS.raider.range);
+    expect(refineryOf(match, 1)!.hp).toBeLessThan(900);
+    run(match, 20);
+    expect(find(match, raider)!.x).toBe(r.x);
+  });
+
+  it("walks to a remembered Building and gives up when it turns out to be gone", () => {
+    const match = createMatch(openMap(20, 20), 1);
+    const raider = addTestUnit(match, 0, "raider", { x: 7, y: 18 });
+    const refinery = refineryOf(match, 1)!;
+    issueCommand(match, 0, { type: "move", unitIds: [raider], target: { x: 2, y: 10 } });
+    run(match, 3 * TICKS_PER_SECOND);
+    removeTestBuilding(match, refinery.id);
+    run(match, 1);
+    expect(refineryOf(match, 1)).toMatchObject({ id: refinery.id, remembered: true });
+    expect(issueCommand(match, 0, { type: "attack", unitIds: [raider], targetId: refinery.id })).toEqual({ ok: true });
+    run(match, 4 * TICKS_PER_SECOND);
+    expect(refineryOf(match, 1)).toBeUndefined();
+    const at = find(match, raider)!;
+    run(match, 20);
+    expect(find(match, raider)).toMatchObject({ x: at.x, y: at.y });
+    expect(at.x).toBeLessThan(13 - UNIT_STATS.raider.range + 2);
+  });
+});
+
+describe("idle Units and enemy Buildings", () => {
+  const refineryHp = (match: Match) =>
+    getPlayerView(match, 0).buildings.find((b) => b.owner === 1 && b.kind === "refinery")!.hp;
+
+  it("fire at an enemy Building in range when no enemy Unit is", () => {
+    const match = createMatch(openMap(20, 20), 1);
+    addTestUnit(match, 0, "rifleman", { x: 10, y: 18 });
+    run(match, 1);
+    expect(refineryHp(match)).toBe(900 - UNIT_STATS.rifleman.damage);
+  });
+
+  it("fire at an enemy Unit in range before any Building", () => {
+    const match = createMatch(openMap(20, 20), 1);
+    addTestUnit(match, 0, "rifleman", { x: 10, y: 18 });
+    const enemy = addTestUnit(match, 1, "harvester", { x: 10, y: 15 });
+    run(match, 1);
+    expect(find(match, enemy)!.hp).toBe(UNIT_STATS.harvester.maxHp - UNIT_STATS.rifleman.damage);
+    expect(refineryHp(match)).toBe(900);
   });
 });

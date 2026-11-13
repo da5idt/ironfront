@@ -1,81 +1,138 @@
 import type { CommandResult } from "./commands";
 import { OK, reject } from "./commands";
+import { type BuildingSighting, isFootprintVisible, isVisible } from "./fog";
 import type { CommandHandler } from "./handlers";
 import { planMove, stepAlong, unitCell } from "./movement";
-import type { MatchState, UnitState } from "./state";
-import { ownUnits } from "./state";
-import { UNIT_STATS } from "./tuning";
+import type { BuildingState, MatchState, UnitState } from "./state";
+import { cellIndex, ownUnits, removeBuilding } from "./state";
+import { BUILDING_STATS, UNIT_STATS, type WeaponStats } from "./tuning";
 import type { CellPos, EntityId, PlayerId, Vec } from "./types";
 
-// Units shooting at each other. Rules:
+// Units shooting at Units and Buildings. Rules:
+// - Nobody shoots at what its Player cannot see: an attack Command needs a
+//   Visible enemy Unit, or an enemy Building seen now or remembered under Fog
+//   of War. A Unit sent at a remembered Building walks there and gives up if
+//   the Building turns out to be gone, and a chase ends when the target Unit
+//   walks out of sight.
 // - An attack order chases the target into range, fires on reload, and ends
 //   (the Unit goes idle) when the target dies or can no longer be reached.
-// - Idle Units hold their ground and fire at the nearest enemy in range, so
-//   they return fire. Units on a move order do not fire until they arrive:
+// - Idle Units hold their ground and fire at the nearest Visible enemy Unit in
+//   range, so they return fire; only with no enemy Unit in range do they fire
+//   at an enemy Building. Units on a move order do not fire until they arrive:
 //   a move is how the person pulls Units out of a fight.
+// - Turrets fire by themselves at the nearest Visible enemy Unit in range,
+//   never at Buildings: they defend a base, they don't besiege one.
 // - All shots in a Tick land before the dead are removed, so two Units that
 //   kill each other in the same Tick both die, whatever their ids.
 
+/** Anything that can be shot. */
+type Target = UnitState | BuildingState;
+
+/** A target as a Player knows it: a remembered Building may already be gone. */
+type KnownTarget = Target | BuildingSighting;
+
+function isUnit(t: KnownTarget): t is UnitState {
+  return !("width" in t);
+}
+
+function canSeeUnit(m: MatchState, player: PlayerId, u: UnitState): boolean {
+  return isVisible(m.fog[player], cellIndex(m, Math.floor(u.x), Math.floor(u.y)));
+}
+
+function canSeeBuilding(m: MatchState, player: PlayerId, b: BuildingState): boolean {
+  return isFootprintVisible(m, m.fog[player], b);
+}
+
 /**
- * Anything a Unit can shoot at. Only Units for now; Buildings join this union
- * by extending `targetById`, `aimPoint` and `chaseGoal`.
+ * The live enemy `id` names, as `player` knows it: a Visible Unit, or a
+ * Building the Player has a sighting of (seen now or remembered). For a
+ * remembered Building that has since gone, the sighting itself.
  */
-type Target = UnitState;
-
-function targetById(m: MatchState, id: EntityId): Target | undefined {
-  return m.units.get(id);
+function knownTarget(m: MatchState, player: PlayerId, id: EntityId): KnownTarget | undefined {
+  const u = m.units.get(id);
+  if (u) return u.owner !== player && u.hp > 0 && canSeeUnit(m, player, u) ? u : undefined;
+  const seen = m.fog[player].sightings.get(id);
+  if (!seen) return undefined;
+  const live = m.buildings.get(id);
+  return live && live.hp > 0 ? live : seen;
 }
 
-/** The point of the target that range is measured to, seen from `from`. */
-function aimPoint(t: Target, _from: Vec): Vec {
-  return { x: t.x, y: t.y };
+/** True when the target is really there to be hit, not a memory of a Building. */
+function isLive(m: MatchState, t: KnownTarget): t is Target {
+  return t.hp > 0 && (isUnit(t) ? m.units.get(t.id) === t : m.buildings.get(t.id) === t);
 }
 
-/** The Cell a chasing Unit walks towards. */
-function chaseGoal(t: Target): CellPos {
-  return unitCell(t);
+/**
+ * The point of the target that range is measured to, seen from `from`: a
+ * Unit's position, or the nearest point of a Building's footprint, so a big
+ * Building can be hit from any side without walking round to its middle.
+ */
+function aimPoint(t: KnownTarget, from: Vec): Vec {
+  if (isUnit(t)) return { x: t.x, y: t.y };
+  return { x: clamp(from.x, t.x, t.x + t.width), y: clamp(from.y, t.y, t.y + t.height) };
+}
+
+function clamp(v: number, lo: number, hi: number): number {
+  return Math.min(hi, Math.max(lo, v));
+}
+
+/**
+ * The Cell a chasing Unit walks towards. A footprint Cell can't be stood on,
+ * so the route ends beside it, on the side nearest the Unit.
+ */
+function chaseGoal(t: KnownTarget, from: Vec): CellPos {
+  if (isUnit(t)) return unitCell(t);
+  const p = aimPoint(t, from);
+  return { x: Math.min(Math.floor(p.x), t.x + t.width - 1), y: Math.min(Math.floor(p.y), t.y + t.height - 1) };
 }
 
 function canFight(u: UnitState): boolean {
   return UNIT_STATS[u.kind].damage > 0;
 }
 
-function inRange(u: UnitState, t: Target): boolean {
-  const p = aimPoint(t, u);
-  return Math.hypot(p.x - u.x, p.y - u.y) <= UNIT_STATS[u.kind].range;
+function distanceTo(t: KnownTarget, from: Vec): number {
+  const p = aimPoint(t, from);
+  return Math.hypot(p.x - from.x, p.y - from.y);
 }
 
-/** A target is fair game while it is alive and belongs to the other Player. */
-function isLiveEnemy(t: Target | undefined, owner: PlayerId): t is Target {
-  return t !== undefined && t.owner !== owner && t.hp > 0;
+function inRange(u: UnitState, t: KnownTarget): boolean {
+  return distanceTo(t, u) <= UNIT_STATS[u.kind].range;
 }
 
 export const handleAttack: CommandHandler<"attack"> = (m, player, command): CommandResult => {
-  const target = targetById(m, command.targetId);
-  if (!isLiveEnemy(target, player)) return reject("target is not an enemy");
+  const target = knownTarget(m, player, command.targetId);
+  if (!target) return reject("target is not an enemy this Player can see");
   const units = ownUnits(m, player, command.unitIds).filter(canFight);
   if (units.length === 0) return reject("no own armed Units selected");
   for (const u of units) u.order = { type: "attack", targetId: target.id, chase: null };
   return OK;
 };
 
-function fire(m: MatchState, u: UnitState, t: Target): void {
-  if (u.cooldown > 0) return;
-  const stats = UNIT_STATS[u.kind];
-  const p = aimPoint(t, u);
-  t.hp -= stats.damage;
-  u.cooldown = stats.reloadTicks;
-  m.shots.push({ fromX: u.x, fromY: u.y, toX: p.x, toY: p.y, tick: m.tick });
+/** A Unit or Turret firing from `from` with its weapon, if reloaded. */
+function fire(m: MatchState, shooter: { cooldown: number }, from: Vec, weapon: WeaponStats, t: Target): void {
+  if (shooter.cooldown > 0) return;
+  const p = aimPoint(t, from);
+  t.hp -= weapon.damage;
+  shooter.cooldown = weapon.reloadTicks;
+  m.shots.push({ fromX: from.x, fromY: from.y, toX: p.x, toY: p.y, tick: m.tick });
 }
 
-/** The nearest live enemy in weapon range; ties go to the lowest id so replays agree. */
-function nearestEnemyInRange(m: MatchState, u: UnitState): Target | undefined {
-  let best: Target | undefined;
+function canFire(b: BuildingState): boolean {
+  return BUILDING_STATS[b.kind].damage > 0;
+}
+
+/** A Turret shoots from the centre of its footprint. */
+function centre(b: BuildingState): Vec {
+  return { x: b.x + b.width / 2, y: b.y + b.height / 2 };
+}
+
+/** The nearest of the candidates within `range` of `from`; ties go to the lowest id so replays agree. */
+function nearest<T extends Target>(candidates: Iterable<T>, from: Vec, range: number): T | undefined {
+  let best: T | undefined;
   let bestD = Infinity;
-  for (const t of m.units.values()) {
-    if (!isLiveEnemy(t, u.owner) || !inRange(u, t)) continue;
-    const p = aimPoint(t, u);
-    const d = Math.hypot(p.x - u.x, p.y - u.y);
+  for (const t of candidates) {
+    const d = distanceTo(t, from);
+    if (d > range) continue;
     if (d < bestD || (d === bestD && best !== undefined && t.id < best.id)) {
       best = t;
       bestD = d;
@@ -84,18 +141,34 @@ function nearestEnemyInRange(m: MatchState, u: UnitState): Target | undefined {
   return best;
 }
 
+function* visibleEnemyUnits(m: MatchState, player: PlayerId): Iterable<UnitState> {
+  for (const t of m.units.values()) if (t.owner !== player && t.hp > 0 && canSeeUnit(m, player, t)) yield t;
+}
+
+function* visibleEnemyBuildings(m: MatchState, player: PlayerId): Iterable<BuildingState> {
+  for (const b of m.buildings.values()) if (b.owner !== player && b.hp > 0 && canSeeBuilding(m, player, b)) yield b;
+}
+
+/** What an idle Unit fires at: enemy Units first, as they shoot back; Buildings only when no Unit is in range. */
+function idleTarget(m: MatchState, u: UnitState): Target | undefined {
+  const range = UNIT_STATS[u.kind].range;
+  return nearest(visibleEnemyUnits(m, u.owner), u, range) ?? nearest(visibleEnemyBuildings(m, u.owner), u, range);
+}
+
 function pursue(m: MatchState, u: UnitState, order: Extract<UnitState["order"], { type: "attack" }>): void {
-  const target = targetById(m, order.targetId);
-  if (!isLiveEnemy(target, u.owner)) {
+  const target = knownTarget(m, u.owner, order.targetId);
+  if (!target) {
     u.order = { type: "idle" };
     return;
   }
   if (inRange(u, target)) {
     order.chase = null;
-    fire(m, u, target);
+    // In range of a remembered Building that is gone: wait for the Fog of War
+    // to show it gone (the next Tick, as range is within sight), which ends the order.
+    if (isLive(m, target)) fire(m, u, u, UNIT_STATS[u.kind], target);
     return;
   }
-  const goal = chaseGoal(target);
+  const goal = chaseGoal(target, u);
   if (!order.chase || order.chase.goal.x !== goal.x || order.chase.goal.y !== goal.y) {
     order.chase = planMove(m, u, goal);
   }
@@ -109,20 +182,33 @@ export function fight(m: MatchState): void {
   for (const u of m.units.values()) {
     if (u.cooldown > 0) u.cooldown--;
   }
+  for (const b of m.buildings.values()) {
+    if (b.cooldown > 0) b.cooldown--;
+  }
   for (const u of m.units.values()) {
     if (!canFight(u)) continue;
     if (u.order.type === "attack") {
       pursue(m, u, u.order);
     } else if (u.order.type === "idle") {
-      const t = nearestEnemyInRange(m, u);
-      if (t) fire(m, u, t);
+      const t = idleTarget(m, u);
+      if (t) fire(m, u, u, UNIT_STATS[u.kind], t);
     }
+  }
+  for (const b of m.buildings.values()) {
+    if (!canFire(b)) continue;
+    const weapon = BUILDING_STATS[b.kind];
+    const from = centre(b);
+    const t = nearest(visibleEnemyUnits(m, b.owner), from, weapon.range);
+    if (t) fire(m, b, from, weapon, t);
   }
 }
 
-/** Per-Tick system: Units at zero health leave the Match. */
+/** Per-Tick system: Units and Buildings at zero health leave the Match. */
 export function removeDead(m: MatchState): void {
   for (const u of [...m.units.values()]) {
     if (u.hp <= 0) m.units.delete(u.id);
+  }
+  for (const b of [...m.buildings.values()]) {
+    if (b.hp <= 0) removeBuilding(m, b);
   }
 }

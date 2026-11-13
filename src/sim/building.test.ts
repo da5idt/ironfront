@@ -11,7 +11,7 @@ import {
   TICKS_PER_SECOND,
 } from "./index";
 import { openMap, testMap } from "./testing/maps";
-import { addTestBuilding, addTestUnit, removeTestBuilding, setTestCredits } from "./testing/setup";
+import { addTestBuilding, addTestUnit, removeTestBuilding, setTestBuildingHp, setTestCredits } from "./testing/setup";
 
 function run(match: Match, ticks: number): void {
   for (let t = 0; t < ticks; t++) advanceTick(match);
@@ -210,5 +210,23 @@ describe("cancelling a Building", () => {
     const match = createMatch(openMap(30, 30), 1);
     expect(issueCommand(match, 0, { type: "cancelBuilding" }).ok).toBe(false);
     expect(getPlayerView(match, 0).credits).toBe(ECONOMY.startingCredits);
+  });
+});
+
+describe("losing the HQ", () => {
+  it("cancels what it was building and refunds the cost", () => {
+    const match = createMatch(openMap(30, 30), 1);
+    issueCommand(match, 0, { type: "startBuilding", kind: "barracks" });
+    run(match, 30);
+    const hq = getPlayerView(match, 0).buildings.find((b) => b.kind === "hq")!;
+    setTestBuildingHp(match, hq.id, 1);
+    // Beside the HQ, where Player 1 can see it.
+    const attacker = addTestUnit(match, 1, "rifleman", { x: 3, y: 1 });
+    expect(issueCommand(match, 1, { type: "attack", unitIds: [attacker], targetId: hq.id })).toEqual({ ok: true });
+    run(match, 1);
+    const view = getPlayerView(match, 0);
+    expect(view.buildings.some((b) => b.kind === "hq")).toBe(false);
+    expect(view.production).toBeNull();
+    expect(view.credits).toBe(ECONOMY.startingCredits);
   });
 });

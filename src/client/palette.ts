@@ -49,3 +49,7 @@ export const PANEL_EDGE = "#2c323c";
 export const MINIMAP_BACK = "#000";
 export const MINIMAP_BORDER = "#3a414c";
 export const MINIMAP_FRAME = "#f2f2f2";
+
+/** The Victory, defeat and Paused screens. */
+export const SCREEN_DIM = "rgba(0, 0, 0, 0.6)";
+export const SCREEN_TONES = { good: "#7fe07f", bad: "#f06a55", neutral: "#f2f2f2" } as const;

@@ -6,8 +6,10 @@ import {
   type CellPos,
   type Command,
   createMatch,
+  getMatchStatus,
   getPlayerView,
   issueCommand,
+  type Match,
   type PlayerId,
 } from "../sim";
 import { buildButtons, buttonAt, footprintAt, panelClick } from "./buildPanel";
@@ -25,9 +27,11 @@ import { computeLayout, contains, type Layout } from "./layout";
 import { type Clock, interpolationAlpha, stepClock } from "./loop";
 import { cameraOnMinimapPoint } from "./minimap";
 import { type Overlay, Renderer } from "./renderer";
+import { keyAction, type ScreenOverlay, screenOverlay } from "./screenOverlay";
 import {
   boxSelect,
   clickSelect,
+  enemyBuildingAt,
   enemyUnitAt,
   isDrag,
   pruneSelection,
@@ -43,7 +47,9 @@ const HUMAN: PlayerId = 0;
 
 const canvas = document.querySelector<HTMLCanvasElement>("#game")!;
 const renderer = new Renderer(canvas);
-const match = createMatch(RIVERFORD, Date.now() >>> 0);
+/** A fresh seed for every Match, so a restart is not a replay. */
+const newSeed = (): number => (Date.now() ^ (performance.now() * 1000)) >>> 0;
+let match: Match = createMatch(RIVERFORD, newSeed());
 
 let screen: Size = { width: window.innerWidth, height: window.innerHeight };
 let layout: Layout = computeLayout(screen);
@@ -52,15 +58,20 @@ let viewSize: Size = layout.mapView;
 let view = getPlayerView(match, HUMAN);
 const mapSize = { width: view.map.width, height: view.map.height };
 
-const hq = view.buildings.find((b) => b.owner === HUMAN && b.kind === "hq");
-let camera: Camera = clampCamera(
-  {
-    x: ((hq?.x ?? 0) + 1.5) * CELL_PX - viewSize.width / 2,
-    y: ((hq?.y ?? 0) + 1.5) * CELL_PX - viewSize.height / 2,
-  },
-  viewSize,
-  mapSize,
-);
+function cameraOnHq(): Camera {
+  const hq = view.buildings.find((b) => b.owner === HUMAN && b.kind === "hq");
+  return clampCamera(
+    {
+      x: ((hq?.x ?? 0) + 1.5) * CELL_PX - viewSize.width / 2,
+      y: ((hq?.y ?? 0) + 1.5) * CELL_PX - viewSize.height / 2,
+    },
+    viewSize,
+    mapSize,
+  );
+}
+let camera: Camera = cameraOnHq();
+/** While paused the Simulation gets no Ticks; drawing and the camera carry on. */
+let paused = false;
 
 function resize(): void {
   const dpr = window.devicePixelRatio || 1;
@@ -80,7 +91,10 @@ const keys = new Set<string>();
 let mouse: { x: number; y: number } | null = null;
 window.addEventListener("keydown", (e) => {
   keys.add(e.code);
-  if (e.code === "Escape") placing = null;
+  if (e.repeat) return;
+  const action = keyAction(e.code, placing !== null);
+  if (action === "cancelPlacement") placing = null;
+  else if (action === "togglePause") paused = !paused;
 });
 window.addEventListener("keyup", (e) => keys.delete(e.code));
 window.addEventListener("blur", () => keys.clear());
@@ -144,6 +158,12 @@ function placementPreview(): Overlay["placement"] {
 canvas.addEventListener("contextmenu", (e) => e.preventDefault());
 canvas.addEventListener("mousedown", (e) => {
   const at = { x: e.clientX, y: e.clientY };
+  // A Victory, defeat or Paused screen takes every click: nothing is ordered from under it.
+  const cover = currentScreenOverlay();
+  if (cover) {
+    if (e.button === 0 && cover.button && contains(cover.button.rect, at.x, at.y)) restart();
+    return;
+  }
   if (e.button === 0 && contains(layout.minimap, at.x, at.y)) {
     minimapDrag = true;
     moveCameraToMinimap(at);
@@ -173,7 +193,9 @@ canvas.addEventListener("mousedown", (e) => {
   } else if (e.button === 2 && selection.size > 0) {
     const cell = screenToCell(camera, at.x, at.y);
     if (cell.x < 0 || cell.y < 0 || cell.x >= mapSize.width || cell.y >= mapSize.height) return;
-    const enemy = enemyUnitAt(view.units, screenToMap(camera, at.x, at.y), HUMAN);
+    const point = screenToMap(camera, at.x, at.y);
+    // A Unit standing in front of a Building is the more urgent target.
+    const enemy = enemyUnitAt(view.units, point, HUMAN) ?? enemyBuildingAt(view.buildings, point, HUMAN);
     if (enemy) {
       issue({ type: "attack", unitIds: [...selection], targetId: enemy.id });
       return;
@@ -201,11 +223,31 @@ window.addEventListener("mouseup", (e) => {
   drag = null;
 });
 
+function currentScreenOverlay(): ScreenOverlay | null {
+  return screenOverlay(getMatchStatus(match), paused, HUMAN, screen);
+}
+
+/** Throws away the Match and everything the client kept about it, and starts a fresh one. */
+function restart(): void {
+  match = createMatch(RIVERFORD, newSeed());
+  view = getPlayerView(match, HUMAN);
+  camera = cameraOnHq();
+  selection = new Set();
+  drag = null;
+  moveMarker = null;
+  placing = null;
+  paused = false;
+  clock = { accumulatedMs: 0 };
+}
+
 // A hook for screenshots and manual poking in dev builds only; production has no way in.
 if (import.meta.env.DEV) {
   Object.assign(window, {
     __ironfront: {
-      match,
+      // A getter, as a restart replaces the Match.
+      get match() {
+        return match;
+      },
       issue,
       issueAs: (player: PlayerId, command: Command) => issueCommand(match, player, command),
       advance: (ticks = 1) => {
@@ -229,7 +271,8 @@ function frame(now: number): void {
   const frameMs = last === null ? 0 : Math.max(0, now - last);
   last = now;
 
-  const stepped = stepClock(clock, frameMs);
+  // Paused: no time builds up, so resuming doesn't burst through missed Ticks.
+  const stepped = stepClock(clock, paused ? 0 : frameMs);
   clock = stepped.clock;
   for (let i = 0; i < stepped.ticks; i++) advanceTick(match);
   if (stepped.ticks > 0) {
@@ -250,6 +293,7 @@ function frame(now: number): void {
     dragBox: drag && isDrag(drag.start, drag.now) ? { a: drag.start, b: drag.now } : null,
     moveMarker: moveMarker ? { cell: moveMarker.cell, age: Math.max(0, markerAge) } : null,
     placement: placementPreview(),
+    screen: currentScreenOverlay(),
   });
   requestAnimationFrame(frame);
 }

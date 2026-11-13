@@ -5,20 +5,24 @@ import type { BuildingKind, UnitKind } from "./types";
 
 export const TICKS_PER_SECOND = 20;
 
-export interface UnitStats {
+/** What a weapon does; Units and Turrets share the shape so one firing rule serves both. */
+export interface WeaponStats {
+  readonly damage: number;
+  readonly range: number;
+  readonly reloadTicks: number;
+}
+
+export interface UnitStats extends WeaponStats {
   readonly name: string;
   readonly cost: number;
   readonly trainTicks: number;
   readonly maxHp: number;
   /** Cells per second on open ground. */
   readonly speed: number;
-  readonly damage: number;
-  readonly range: number;
-  readonly reloadTicks: number;
   readonly sight: number;
 }
 
-export interface BuildingStats {
+export interface BuildingStats extends WeaponStats {
   readonly name: string;
   readonly cost: number;
   readonly buildTicks: number;
@@ -27,9 +31,6 @@ export interface BuildingStats {
   readonly width: number;
   readonly height: number;
   readonly sight: number;
-  readonly damage: number;
-  readonly range: number;
-  readonly reloadTicks: number;
 }
 
 export const UNIT_STATS: Readonly<Record<UnitKind, UnitStats>> = {

@@ -12,6 +12,8 @@ import { drawBuildPanel } from "./buildPanelPainter";
 import { type Camera, CELL_PX, mapToScreen, type Size } from "./camera";
 import type { Layout, Rect } from "./layout";
 import { MinimapPainter } from "./minimapPainter";
+import type { ScreenOverlay } from "./screenOverlay";
+import { drawScreenOverlay } from "./screenOverlayPainter";
 import {
   DRAG_BOX_FILL,
   DRAG_BOX_LINE,
@@ -54,6 +56,8 @@ export interface Overlay {
   readonly moveMarker: { readonly cell: CellPos; readonly age: number } | null;
   /** The footprint preview while placing a finished Building. */
   readonly placement: { readonly kind: BuildingKind; readonly at: CellPos; readonly valid: boolean } | null;
+  /** The Victory, defeat or Paused screen over everything, if one shows. */
+  readonly screen: ScreenOverlay | null;
 }
 
 export class Renderer {
@@ -102,6 +106,7 @@ export class Renderer {
     this.drawPanel(layout.panel);
     this.minimap.draw(ctx, view, layout.minimap, cam, mapView, alpha);
     drawBuildPanel(ctx, view, layout.buttons);
+    if (overlay.screen) drawScreenOverlay(ctx, overlay.screen, screen);
   }
 
   /** The footprint, tinted green where the Building may go and red where it may not. */

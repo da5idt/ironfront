@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import type { UnitView } from "../sim";
-import { boxSelect, clickSelect, enemyUnitAt, isDrag, pruneSelection, unitAt, unitsInBox } from "./selection";
+import type { BuildingView, UnitView } from "../sim";
+import { boxSelect, clickSelect, enemyBuildingAt, enemyUnitAt, isDrag, pruneSelection, unitAt, unitsInBox } from "./selection";
 
 function u(id: number, owner: 0 | 1, x: number, y: number): UnitView {
   return { id, kind: "rifleman", owner, x, y, prevX: x, prevY: y, hp: 50, maxHp: 50, cargo: 0 };
@@ -89,5 +89,34 @@ describe("isDrag", () => {
   it("treats small mouse wobbles as a click", () => {
     expect(isDrag({ x: 10, y: 10 }, { x: 12, y: 13 })).toBe(false);
     expect(isDrag({ x: 10, y: 10 }, { x: 20, y: 10 })).toBe(true);
+  });
+});
+
+describe("enemyBuildingAt", () => {
+  const b = (id: number, owner: 0 | 1, x: number, y: number, remembered = false): BuildingView => ({
+    id,
+    kind: "refinery",
+    owner,
+    x,
+    y,
+    width: 3,
+    height: 2,
+    hp: 900,
+    maxHp: 900,
+    remembered,
+  });
+  const buildings = [b(1, 0, 0, 0), b(2, 1, 10, 10), b(3, 1, 20, 10, true)];
+
+  it("finds the enemy Building whose footprint holds the point, for a right-click attack", () => {
+    expect(enemyBuildingAt(buildings, { x: 12.9, y: 11.9 }, 0)?.id).toBe(2);
+    expect(enemyBuildingAt(buildings, { x: 13.1, y: 11 }, 0)).toBeNull();
+  });
+
+  it("finds a remembered Building too, as it may still be there", () => {
+    expect(enemyBuildingAt(buildings, { x: 21, y: 11 }, 0)?.id).toBe(3);
+  });
+
+  it("ignores own Buildings", () => {
+    expect(enemyBuildingAt(buildings, { x: 1, y: 1 }, 0)).toBeNull();
   });
 });

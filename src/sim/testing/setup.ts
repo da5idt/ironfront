@@ -1,3 +1,4 @@
+import { updateFog } from "../fog";
 import type { Match } from "../match";
 import { addBuilding, cellIndex, type MatchState, removeBuilding, spawnUnit } from "../state";
 import type { BuildingKind, CellPos, EntityId, PlayerId, UnitKind } from "../types";
@@ -38,5 +39,15 @@ export function setTestCredits(match: Match, player: PlayerId, credits: number):
  * fight before training exists. Returns the new Unit's id.
  */
 export function addTestUnit(match: Match, owner: PlayerId, kind: UnitKind, at: CellPos): EntityId {
-  return spawnUnit(match as unknown as MatchState, owner, kind, at).id;
+  const m = match as unknown as MatchState;
+  const id = spawnUnit(m, owner, kind, at).id;
+  // As if it had stood there last Tick, so it can be seen and attacked at once.
+  updateFog(m);
+  return id;
+}
+
+/** Sets a Building's health, so tests can stage its destruction without a long fight. */
+export function setTestBuildingHp(match: Match, id: EntityId, hp: number): void {
+  const building = (match as unknown as MatchState).buildings.get(id);
+  if (building) building.hp = hp;
 }

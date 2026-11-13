@@ -54,6 +54,8 @@ export interface BuildingState {
   readonly width: number;
   readonly height: number;
   hp: number;
+  /** Ticks until the Building's weapon can fire again; only Turrets have one. */
+  cooldown: number;
 }
 
 /** The Building the HQ is working on. It is finished once `ticksDone` reaches its build time. */
@@ -148,6 +150,7 @@ export function addBuilding(m: MatchState, owner: PlayerId, kind: BuildingKind, 
     width: stats.width,
     height: stats.height,
     hp: stats.maxHp,
+    cooldown: 0,
   };
   for (let dy = 0; dy < building.height; dy++) {
     for (let dx = 0; dx < building.width; dx++) {

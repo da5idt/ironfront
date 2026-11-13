@@ -48,6 +48,19 @@ export function buildProgress(m: MatchState): void {
   }
 }
 
+/**
+ * Per-Tick system, after the dead are removed: a Building in production goes
+ * with a destroyed HQ, and its cost comes back as if it had been cancelled.
+ */
+export function dropOrphanedProduction(m: MatchState): void {
+  for (const player of m.players) {
+    if (player.production && !hasHq(m, player.id)) {
+      player.credits += BUILDING_STATS[player.production.kind].cost;
+      player.production = null;
+    }
+  }
+}
+
 export const handleStartBuilding: CommandHandler<"startBuilding"> = (m, player, command): CommandResult => {
   const state = m.players[player];
   if (!HQ_BUILDS.includes(command.kind)) return reject("the HQ cannot build that");
