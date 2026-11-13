@@ -1,6 +1,7 @@
 import type { Command, CommandResult } from "./commands";
 import { reject } from "./commands";
 import { COMMAND_HANDLERS, type CommandHandler } from "./handlers";
+import { createFog, updateFog } from "./fog";
 import type { MapDef } from "./mapdef";
 import { parseMap } from "./mapdef";
 import { createRng } from "./rng";
@@ -43,6 +44,7 @@ export function createMatch(map: MapDef, seed: number): Match {
     players,
     units: new Map(),
     buildings: new Map(),
+    fog: [createFog(parsed.width, parsed.height), createFog(parsed.width, parsed.height)],
     nextId: 1,
     status: { state: "running" },
   };
@@ -57,6 +59,8 @@ export function createMatch(map: MapDef, seed: number): Match {
     placeStartingUnit(m, map, player, "harvester", start.harvester);
     for (const cell of start.riflemen) placeStartingUnit(m, map, player, "rifleman", cell);
   }
+  // So Tick 0 already shows the ground around each starting base.
+  updateFog(m);
   return m as unknown as Match;
 }
 

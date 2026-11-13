@@ -81,7 +81,7 @@ describe("the move Command", () => {
     const mine = ownRiflemen(match)[0]!;
     expect(issueCommand(match, 0, { type: "move", unitIds: [mine.id, enemy.id], target: { x: 5, y: 10 } }).ok).toBe(true);
     run(match, 40);
-    expect(unit(match, enemy.id)).toMatchObject({ x: enemy.x, y: enemy.y });
+    expect(getPlayerView(match, 1).units.find((u) => u.id === enemy.id)).toMatchObject({ x: enemy.x, y: enemy.y });
     expect(unit(match, mine.id).y).toBeGreaterThan(mine.y);
   });
 

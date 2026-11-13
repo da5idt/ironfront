@@ -76,7 +76,7 @@ describe("Riverford", () => {
 describe("Commands", () => {
   it("rejects Commands for another Player's Units without changing anything", () => {
     const match = createMatch(openMap(20, 20), 1);
-    const enemy = getPlayerView(match, 0).units.find((u) => u.owner === 1)!;
+    const enemy = getPlayerView(match, 1).units.find((u) => u.owner === 1)!;
     const before = JSON.stringify(getPlayerView(match, 0));
     const result = issueCommand(match, 0, { type: "stop", unitIds: [enemy.id] });
     expect(result.ok).toBe(false);

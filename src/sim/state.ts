@@ -1,3 +1,4 @@
+import type { PlayerFog } from "./fog";
 import type { MovePlan } from "./movement";
 import type { Rng } from "./rng";
 import { BUILDING_STATS, UNIT_STATS } from "./tuning";
@@ -60,6 +61,8 @@ export interface MatchState {
   /** Insertion-ordered, so iteration is deterministic. */
   readonly units: Map<EntityId, UnitState>;
   readonly buildings: Map<EntityId, BuildingState>;
+  /** Fog of War per Player, indexed by PlayerId. */
+  readonly fog: readonly [PlayerFog, PlayerFog];
   nextId: EntityId;
   status: MatchStatus;
 }

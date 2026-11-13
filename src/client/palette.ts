@@ -1,4 +1,4 @@
-import type { PlayerId, Terrain } from "../sim";
+import type { PlayerId, Terrain, Visibility } from "../sim";
 
 // Placeholder look, drawn in code (ADR 0001). Original colours, no borrowed art.
 
@@ -7,6 +7,13 @@ export const TERRAIN_COLOURS: Record<Terrain, string> = {
   rough: "#7a6b47",
   rock: "#56565c",
   water: "#2b5f8a",
+};
+
+/** Opacity (0..255) of the black laid over each Cell: Unexplored hides all, Fogged dims. */
+export const FOG_ALPHA: Record<Visibility, number> = {
+  unexplored: 255,
+  fogged: 140,
+  visible: 0,
 };
 
 export const ORE_COLOUR = "#e0b030";
