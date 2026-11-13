@@ -1,5 +1,7 @@
 import { type BuildingKind, type BuildingView, type CellPos, ECONOMY, type PlayerView, type ShotView, type UnitView } from "../sim";
 import { type Camera, CELL_PX, mapToScreen, type Size } from "./camera";
+import type { Layout, Rect } from "./layout";
+import { MinimapPainter } from "./minimapPainter";
 import {
   DRAG_BOX_FILL,
   DRAG_BOX_LINE,
@@ -10,6 +12,8 @@ import {
   HUD_BG,
   HUD_TEXT,
   MOVE_MARKER,
+  PANEL_BG,
+  PANEL_EDGE,
   ORE_COLOUR,
   ORE_SHADOW,
   SELECTION_MARKER,
@@ -45,6 +49,7 @@ export class Renderer {
   private fogLayer: HTMLCanvasElement | null = null;
   /** The view the fog layer was painted from; views are rebuilt each Tick, so identity means "unchanged". */
   private fogFor: PlayerView | null = null;
+  private readonly minimap = new MinimapPainter();
 
   constructor(private readonly canvas: HTMLCanvasElement) {
     const ctx = canvas.getContext("2d");
@@ -53,15 +58,21 @@ export class Renderer {
   }
 
   /** Draws one frame. `alpha` (0..1) is how far we are between the last Tick and the next. */
-  draw(view: PlayerView, cam: Camera, screen: Size, alpha: number, overlay: Overlay): void {
+  draw(view: PlayerView, cam: Camera, screen: Size, layout: Layout, alpha: number, overlay: Overlay): void {
     const { ctx } = this;
     const dpr = this.canvas.width / screen.width;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.fillStyle = "#000";
     ctx.fillRect(0, 0, screen.width, screen.height);
 
+    // The Map view sits at the top-left, so screen pixels and Map-view pixels are the same.
+    const { mapView } = layout;
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(mapView.x, mapView.y, mapView.width, mapView.height);
+    ctx.clip();
     this.drawTerrain(view, cam);
-    this.drawOre(view, cam, screen);
+    this.drawOre(view, cam, mapView);
     for (const b of view.buildings) this.drawBuilding(b, cam);
     // After the ground and Buildings, so remembered Buildings sit dimmed under it;
     // before Units, which are only ever listed where the Player can see.
@@ -70,7 +81,19 @@ export class Renderer {
     for (const u of view.units) this.drawUnit(u, cam, alpha, overlay.selection.has(u.id));
     for (const s of view.shots) this.drawShot(s, cam, alpha);
     if (overlay.dragBox) this.drawDragBox(overlay.dragBox.a, overlay.dragBox.b);
-    this.drawHud(view, screen);
+    this.drawHud(view, mapView);
+    ctx.restore();
+
+    this.drawPanel(layout.panel);
+    this.minimap.draw(ctx, view, layout.minimap, cam, mapView, alpha);
+  }
+
+  private drawPanel(panel: Rect): void {
+    const { ctx } = this;
+    ctx.fillStyle = PANEL_BG;
+    ctx.fillRect(panel.x, panel.y, panel.width, panel.height);
+    ctx.fillStyle = PANEL_EDGE;
+    ctx.fillRect(panel.x, panel.y, 1, panel.height);
   }
 
   private drawTerrain(view: PlayerView, cam: Camera): void {
