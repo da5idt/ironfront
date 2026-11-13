@@ -23,6 +23,14 @@ export interface Vec {
   readonly y: number;
 }
 
+/**
+ * Where Cell (x, y) sits in a per-Cell array of a Map `width` wide (terrain,
+ * Ore, visibility), which all run row by row from the top left.
+ */
+export function cellIndexIn(map: { readonly width: number }, x: number, y: number): number {
+  return y * map.width + x;
+}
+
 export function isPassableTerrain(t: Terrain): boolean {
   return t === "open" || t === "rough";
 }

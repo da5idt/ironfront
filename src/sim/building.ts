@@ -1,0 +1,184 @@
+import type { CommandResult } from "./commands";
+import { OK, reject } from "./commands";
+import type { CommandHandler } from "./handlers";
+import { isVisible, visibilityAt } from "./fog";
+import { type PlacementGround, placementProblem } from "./placement";
+import type { BuildingState, MatchState, ProductionState } from "./state";
+import { addBuilding, cellIndex, isWalkable, spawnUnit } from "./state";
+import { BUILDING_STATS } from "./tuning";
+import type { BuildingKind, CellPos, PlayerId } from "./types";
+
+// Base building: the HQ builds one Building at a time. Credits are paid up
+// front so a Player can never start more than it can afford; a finished
+// Building waits for the Player to place it before the HQ starts another.
+
+/** What the HQ can build, in panel order. */
+export const HQ_BUILDS: readonly BuildingKind[] = ["refinery", "barracks", "vehicleFactory", "turret"];
+
+/** Production as a Player sees it. */
+export interface ProductionView {
+  readonly kind: BuildingKind;
+  /** 0 when started, 1 when finished. */
+  readonly progress: number;
+  /** Finished and waiting to be placed. */
+  readonly ready: boolean;
+}
+
+function hasHq(m: MatchState, player: PlayerId): boolean {
+  for (const b of m.buildings.values()) if (b.owner === player && b.kind === "hq") return true;
+  return false;
+}
+
+function isFinished(p: ProductionState): boolean {
+  return p.ticksDone >= BUILDING_STATS[p.kind].buildTicks;
+}
+
+export function productionView(m: MatchState, player: PlayerId): ProductionView | null {
+  const p = m.players[player].production;
+  if (!p) return null;
+  const total = BUILDING_STATS[p.kind].buildTicks;
+  return { kind: p.kind, progress: total === 0 ? 1 : Math.min(1, p.ticksDone / total), ready: isFinished(p) };
+}
+
+/** Per-Tick system: every Player's HQ works one Tick on its Building. */
+export function buildProgress(m: MatchState): void {
+  for (const player of m.players) {
+    const p = player.production;
+    if (p && !isFinished(p)) p.ticksDone++;
+  }
+}
+
+/**
+ * Per-Tick system, after the dead are removed: a Building in production goes
+ * with a destroyed HQ, and its cost comes back as if it had been cancelled.
+ */
+export function dropOrphanedProduction(m: MatchState): void {
+  for (const player of m.players) {
+    if (player.production && !hasHq(m, player.id)) {
+      player.credits += BUILDING_STATS[player.production.kind].cost;
+      player.production = null;
+    }
+  }
+}
+
+export const handleStartBuilding: CommandHandler<"startBuilding"> = (m, player, command): CommandResult => {
+  const state = m.players[player];
+  if (!HQ_BUILDS.includes(command.kind)) return reject("the HQ cannot build that");
+  if (!hasHq(m, player)) return reject("no HQ");
+  if (state.production) {
+    return reject(isFinished(state.production) ? "a finished Building waits to be placed" : "already building");
+  }
+  const cost = BUILDING_STATS[command.kind].cost;
+  if (state.credits < cost) return reject("not enough Credits");
+  state.credits -= cost;
+  state.production = { kind: command.kind, ticksDone: 0 };
+  return OK;
+};
+
+/**
+ * The real Match as the placement rule sees it for this Player. Buildings
+ * always count, seen or not, since a Building can't be moved aside. An enemy
+ * Unit counts only where the Player can see it: one hidden in Fog of War is
+ * not in the way (it is nudged aside on placing), so the answer can't be used
+ * to find Units the Player cannot see.
+ */
+function matchGround(m: MatchState, player: PlayerId): PlacementGround {
+  const fog = m.fog[player];
+  return {
+    width: m.width,
+    height: m.height,
+    terrain: m.terrain,
+    explored: (x, y) => visibilityAt(fog, cellIndex(m, x, y)) !== "unexplored",
+    occupied: (x, y) => {
+      if (m.buildingAt[cellIndex(m, x, y)] !== 0) return true;
+      for (const u of m.units.values()) {
+        if (Math.floor(u.x) !== x || Math.floor(u.y) !== y) continue;
+        if (u.owner === player || isVisible(fog, cellIndex(m, x, y))) return true;
+      }
+      return false;
+    },
+    ownBuildings: [...m.buildings.values()].filter((b) => b.owner === player),
+  };
+}
+
+/**
+ * Moves every Unit standing on a new Building's footprint (only hidden enemy
+ * Units can be there) to the nearest free Cell round it, in id order so the
+ * outcome is the same every run. A Unit with nowhere to go on the whole Map
+ * stays put; that needs a Map packed full of Units.
+ */
+function nudgeUnitsOff(m: MatchState, b: BuildingState): void {
+  const under = [...m.units.values()]
+    .filter((u) => isUnder(b, Math.floor(u.x), Math.floor(u.y)))
+    .sort((a, c) => a.id - c.id);
+  for (const u of under) {
+    const cell = freeCellAround(m, b, Math.max(m.width, m.height));
+    if (!cell) continue;
+    u.x = u.prevX = cell.x + 0.5;
+    u.y = u.prevY = cell.y + 0.5;
+  }
+}
+
+function isUnder(b: BuildingState, x: number, y: number): boolean {
+  return x >= b.x && x < b.x + b.width && y >= b.y && y < b.y + b.height;
+}
+
+export const handlePlaceBuilding: CommandHandler<"placeBuilding"> = (m, player, command): CommandResult => {
+  const state = m.players[player];
+  const p = state.production;
+  if (!p) return reject("nothing is being built");
+  if (!isFinished(p)) return reject("the Building is not finished");
+  const problem = placementProblem(matchGround(m, player), p.kind, command.at);
+  if (problem) return reject(problem);
+  const building = addBuilding(m, player, p.kind, command.at);
+  nudgeUnitsOff(m, building);
+  state.production = null;
+  if (building.kind === "refinery") {
+    building.freeHarvesterDue = true;
+    sendOutFreeHarvester(m, building);
+  }
+  return OK;
+};
+
+/**
+ * Puts a Refinery's free Harvester beside it. With every nearby Cell taken it
+ * stays due, and the per-Tick system tries again, as a trained Unit does.
+ * spawnUnit starts a Harvester harvesting, so it earns from its first Tick.
+ */
+function sendOutFreeHarvester(m: MatchState, b: BuildingState): void {
+  const cell = freeCellAround(m, b);
+  if (!cell) return;
+  spawnUnit(m, b.owner, "harvester", cell);
+  b.freeHarvesterDue = false;
+}
+
+/** Per-Tick system: free Harvesters that were crowded out step out once there is room. */
+export function deliverFreeHarvesters(m: MatchState): void {
+  for (const b of m.buildings.values()) if (b.freeHarvesterDue) sendOutFreeHarvester(m, b);
+}
+
+/** How far out from a footprint to look for a free Cell before giving up. */
+const MAX_SPAWN_RING = 3;
+
+/** The first walkable Cell with no Unit on it, ring by ring around the footprint; null if crowded out. */
+export function freeCellAround(m: MatchState, b: BuildingState, maxRing = MAX_SPAWN_RING): CellPos | null {
+  const taken = new Set<number>();
+  for (const u of m.units.values()) taken.add(cellIndex(m, Math.floor(u.x), Math.floor(u.y)));
+  for (let r = 1; r <= maxRing; r++) {
+    for (let y = b.y - r; y < b.y + b.height + r; y++) {
+      for (let x = b.x - r; x < b.x + b.width + r; x++) {
+        const onRing = y === b.y - r || y === b.y + b.height + r - 1 || x === b.x - r || x === b.x + b.width + r - 1;
+        if (onRing && isWalkable(m, x, y) && !taken.has(cellIndex(m, x, y))) return { x, y };
+      }
+    }
+  }
+  return null;
+}
+
+export const handleCancelBuilding: CommandHandler<"cancelBuilding"> = (m, player): CommandResult => {
+  const state = m.players[player];
+  if (!state.production) return reject("nothing is being built");
+  state.credits += BUILDING_STATS[state.production.kind].cost;
+  state.production = null;
+  return OK;
+};

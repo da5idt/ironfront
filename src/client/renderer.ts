@@ -1,6 +1,45 @@
-import { type BuildingKind, type BuildingView, ECONOMY, type PlayerView, type UnitView } from "../sim";
+import {
+  BUILDING_STATS,
+  type BuildingKind,
+  type BuildingView,
+  type CellPos,
+  ECONOMY,
+  type EntityId,
+  type PlayerView,
+  type ShotView,
+  type UnitView,
+} from "../sim";
+import { drawBuildPanel } from "./buildPanelPainter";
 import { type Camera, CELL_PX, mapToScreen, type Size } from "./camera";
-import { HUD_BG, HUD_TEXT, ORE_COLOUR, ORE_SHADOW, TEAM_COLOURS, TERRAIN_COLOURS } from "./palette";
+import type { Layout, Rect } from "./layout";
+import { MinimapPainter } from "./minimapPainter";
+import type { ScreenOverlay } from "./screenOverlay";
+import { drawScreenOverlay } from "./screenOverlayPainter";
+import {
+  DRAG_BOX_FILL,
+  DRAG_BOX_LINE,
+  FOG_ALPHA,
+  HEALTH_BACK,
+  HEALTH_GOOD,
+  HEALTH_LOW,
+  HUD_BG,
+  HUD_TEXT,
+  MOVE_MARKER,
+  PANEL_BG,
+  PANEL_EDGE,
+  PLACE_INVALID,
+  PLACE_VALID,
+  ORE_COLOUR,
+  ORE_SHADOW,
+  SELECTION_MARKER,
+  SHOT_TRACER,
+  TEAM_COLOURS,
+  TERRAIN_COLOURS,
+} from "./palette";
+import { drawSelectedBuilding } from "./selectedBuildingPainter";
+import type { Selection } from "./selection";
+import { trainerOf } from "./trainPanel";
+import { drawTrainPanel } from "./trainPanelPainter";
 
 // Draws a PlayerView. It only reads; it never changes the Match (ADR 0002).
 
@@ -12,10 +51,29 @@ const BUILDING_LABELS: Record<BuildingKind, string> = {
   turret: "T",
 };
 
+/** Client-only things to draw on top of the Match. */
+export interface Overlay {
+  readonly selection: Selection;
+  /** Screen corners of the box being dragged, if any. */
+  readonly dragBox: { readonly a: { x: number; y: number }; readonly b: { x: number; y: number } } | null;
+  /** The Cell of the last move Command, and how far its fade-out has got (0..1). */
+  readonly moveMarker: { readonly cell: CellPos; readonly age: number } | null;
+  /** The footprint preview while placing a finished Building. */
+  readonly placement: { readonly kind: BuildingKind; readonly at: CellPos; readonly valid: boolean } | null;
+  /** The Victory, defeat or Paused screen over everything, if one shows. */
+  readonly screen: ScreenOverlay | null;
+  /** The selected own Building, if any; a Barracks or Vehicle Factory turns the side panel into its train buttons. */
+  readonly selectedBuilding: EntityId | null;
+}
+
 export class Renderer {
   private readonly ctx: CanvasRenderingContext2D;
   /** Terrain never changes, so it is drawn once and copied each frame. */
   private terrainLayer: HTMLCanvasElement | null = null;
+  private fogLayer: HTMLCanvasElement | null = null;
+  /** The view the fog layer was painted from; views are rebuilt each Tick, so identity means "unchanged". */
+  private fogFor: PlayerView | null = null;
+  private readonly minimap = new MinimapPainter();
 
   constructor(private readonly canvas: HTMLCanvasElement) {
     const ctx = canvas.getContext("2d");
@@ -24,23 +82,81 @@ export class Renderer {
   }
 
   /** Draws one frame. `alpha` (0..1) is how far we are between the last Tick and the next. */
-  draw(view: PlayerView, cam: Camera, screen: Size, alpha: number): void {
+  draw(view: PlayerView, cam: Camera, screen: Size, layout: Layout, alpha: number, overlay: Overlay): void {
     const { ctx } = this;
     const dpr = this.canvas.width / screen.width;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.fillStyle = "#000";
     ctx.fillRect(0, 0, screen.width, screen.height);
 
+    // The Map view sits at the top-left, so screen pixels and Map-view pixels are the same.
+    const { mapView } = layout;
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(mapView.x, mapView.y, mapView.width, mapView.height);
+    ctx.clip();
     this.drawTerrain(view, cam);
-    this.drawOre(view, cam, screen);
+    this.drawOre(view, cam, mapView);
     for (const b of view.buildings) this.drawBuilding(b, cam);
-    for (const u of view.units) this.drawUnit(u, cam, alpha);
-    this.drawHud(view, screen);
+    // After the ground and Buildings, so remembered Buildings sit dimmed under it;
+    // before Units, which are only ever listed where the Player can see.
+    this.drawFog(view, cam);
+    const selectedBuilding = view.buildings.find((b) => b.id === overlay.selectedBuilding);
+    if (selectedBuilding) drawSelectedBuilding(ctx, selectedBuilding, cam);
+    if (overlay.moveMarker) this.drawMoveMarker(overlay.moveMarker.cell, overlay.moveMarker.age, cam);
+    for (const u of view.units) this.drawUnit(u, cam, alpha, overlay.selection.has(u.id));
+    for (const s of view.shots) this.drawShot(s, cam, alpha);
+    if (overlay.placement) this.drawPlacement(overlay.placement, cam);
+    if (overlay.dragBox) this.drawDragBox(overlay.dragBox.a, overlay.dragBox.b);
+    this.drawHud(view, mapView);
+    ctx.restore();
+
+    this.drawPanel(layout.panel);
+    this.minimap.draw(ctx, view, layout.minimap, cam, mapView, alpha);
+    const trainer = trainerOf(view.buildings, overlay.selectedBuilding);
+    if (trainer) drawTrainPanel(ctx, view.credits, trainer, layout.buttons);
+    else drawBuildPanel(ctx, view, layout.buttons);
+    if (overlay.screen) drawScreenOverlay(ctx, overlay.screen, screen);
+  }
+
+  /** The footprint, tinted green where the Building may go and red where it may not. */
+  private drawPlacement(p: NonNullable<Overlay["placement"]>, cam: Camera): void {
+    const { ctx } = this;
+    const { width, height } = BUILDING_STATS[p.kind];
+    const s = mapToScreen(cam, p.at.x, p.at.y);
+    ctx.fillStyle = p.valid ? PLACE_VALID : PLACE_INVALID;
+    ctx.fillRect(s.x, s.y, width * CELL_PX, height * CELL_PX);
+    ctx.strokeStyle = HUD_TEXT;
+    ctx.lineWidth = 1;
+    ctx.strokeRect(s.x + 0.5, s.y + 0.5, width * CELL_PX - 1, height * CELL_PX - 1);
+  }
+
+  private drawPanel(panel: Rect): void {
+    const { ctx } = this;
+    ctx.fillStyle = PANEL_BG;
+    ctx.fillRect(panel.x, panel.y, panel.width, panel.height);
+    ctx.fillStyle = PANEL_EDGE;
+    ctx.fillRect(panel.x, panel.y, 1, panel.height);
   }
 
   private drawTerrain(view: PlayerView, cam: Camera): void {
     if (!this.terrainLayer) this.terrainLayer = buildTerrainLayer(view);
     this.ctx.drawImage(this.terrainLayer, -cam.x, -cam.y);
+  }
+
+  /**
+   * Fog of War as one pixel per Cell, scaled up without smoothing. Rebuilding
+   * a 64x64 image only when a new view arrives keeps this to one drawImage a frame.
+   */
+  private drawFog(view: PlayerView, cam: Camera): void {
+    if (this.fogFor !== view) {
+      this.fogLayer = paintFogLayer(view, this.fogLayer);
+      this.fogFor = view;
+    }
+    const { ctx } = this;
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(this.fogLayer!, -cam.x, -cam.y, view.map.width * CELL_PX, view.map.height * CELL_PX);
+    ctx.imageSmoothingEnabled = true;
   }
 
   private drawOre(view: PlayerView, cam: Camera, screen: Size): void {
@@ -105,12 +221,13 @@ export class Renderer {
     }
   }
 
-  private drawUnit(u: UnitView, cam: Camera, alpha: number): void {
+  private drawUnit(u: UnitView, cam: Camera, alpha: number, selected: boolean): void {
     const { ctx } = this;
     const team = TEAM_COLOURS[u.owner];
     const mx = u.prevX + (u.x - u.prevX) * alpha;
     const my = u.prevY + (u.y - u.prevY) * alpha;
     const p = mapToScreen(cam, mx, my);
+    if (selected) this.drawSelectionMarker(p);
     ctx.lineWidth = 2;
     ctx.strokeStyle = team.dark;
     ctx.fillStyle = team.fill;
@@ -136,9 +253,94 @@ export class Renderer {
     ctx.fill();
     ctx.stroke();
     if (u.kind === "harvester") {
+      // The hopper fills from the bottom with the load, so a full Harvester reads at a glance.
+      const size = 8;
+      const filled = Math.round(size * Math.min(1, u.cargo / ECONOMY.harvesterCapacity));
+      ctx.fillStyle = team.dark;
+      ctx.fillRect(p.x - size / 2, p.y - size / 2, size, size);
       ctx.fillStyle = ORE_COLOUR;
-      ctx.fillRect(p.x - 3, p.y - 3, 6, 6);
+      ctx.fillRect(p.x - size / 2, p.y + size / 2 - filled, size, filled);
     }
+    // Damaged Units always show their health, so a fight reads without selecting anything.
+    if (selected || u.hp < u.maxHp) this.drawHealthBar(p, u.hp / u.maxHp);
+  }
+
+  /** A short bright line per shot, fading out before the next Tick. */
+  private drawShot(s: ShotView, cam: Camera, alpha: number): void {
+    const { ctx } = this;
+    const a = mapToScreen(cam, s.fromX, s.fromY);
+    const b = mapToScreen(cam, s.toX, s.toY);
+    ctx.globalAlpha = 1 - 0.6 * alpha;
+    ctx.strokeStyle = SHOT_TRACER;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(a.x, a.y);
+    ctx.lineTo(b.x, b.y);
+    ctx.stroke();
+    ctx.fillStyle = SHOT_TRACER;
+    ctx.beginPath();
+    ctx.arc(b.x, b.y, 3, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+  }
+
+  /** Corner brackets around the Unit, so the selection reads even in a crowd. */
+  private drawSelectionMarker(p: { x: number; y: number }): void {
+    const { ctx } = this;
+    const h = CELL_PX * 0.5;
+    const arm = CELL_PX * 0.2;
+    ctx.strokeStyle = SELECTION_MARKER;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    for (const [sx, sy] of [
+      [-1, -1],
+      [1, -1],
+      [-1, 1],
+      [1, 1],
+    ] as const) {
+      const cx = p.x + sx * h;
+      const cy = p.y + sy * h;
+      ctx.moveTo(cx - sx * arm, cy);
+      ctx.lineTo(cx, cy);
+      ctx.lineTo(cx, cy - sy * arm);
+    }
+    ctx.stroke();
+  }
+
+  private drawHealthBar(p: { x: number; y: number }, share: number): void {
+    const { ctx } = this;
+    const w = CELL_PX * 0.9;
+    const x = p.x - w / 2;
+    const y = p.y - CELL_PX * 0.5 - 6;
+    ctx.fillStyle = HEALTH_BACK;
+    ctx.fillRect(x - 1, y - 1, w + 2, 5);
+    ctx.fillStyle = share > 0.35 ? HEALTH_GOOD : HEALTH_LOW;
+    ctx.fillRect(x, y, w * Math.max(0, Math.min(1, share)), 3);
+  }
+
+  private drawMoveMarker(cell: CellPos, age: number, cam: Camera): void {
+    const { ctx } = this;
+    const p = mapToScreen(cam, cell.x + 0.5, cell.y + 0.5);
+    ctx.globalAlpha = 1 - age;
+    ctx.strokeStyle = MOVE_MARKER;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, CELL_PX * (0.15 + 0.3 * age), 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+  }
+
+  private drawDragBox(a: { x: number; y: number }, b: { x: number; y: number }): void {
+    const { ctx } = this;
+    const x = Math.min(a.x, b.x);
+    const y = Math.min(a.y, b.y);
+    const w = Math.abs(a.x - b.x);
+    const h = Math.abs(a.y - b.y);
+    ctx.fillStyle = DRAG_BOX_FILL;
+    ctx.fillRect(x, y, w, h);
+    ctx.strokeStyle = DRAG_BOX_LINE;
+    ctx.lineWidth = 1;
+    ctx.strokeRect(x + 0.5, y + 0.5, w, h);
   }
 
   private drawHud(view: PlayerView, screen: Size): void {
@@ -153,6 +355,21 @@ export class Renderer {
     ctx.textBaseline = "middle";
     ctx.fillText(text, screen.width - 18, 22);
   }
+}
+
+function paintFogLayer(view: PlayerView, reuse: HTMLCanvasElement | null): HTMLCanvasElement {
+  const { width, height, visibility } = view.map;
+  const layer = reuse ?? document.createElement("canvas");
+  layer.width = width;
+  layer.height = height;
+  const ctx = layer.getContext("2d")!;
+  const image = ctx.createImageData(width, height);
+  for (let i = 0; i < visibility.length; i++) {
+    // RGB stays 0 (black); only the alpha channel carries the fog.
+    image.data[i * 4 + 3] = FOG_ALPHA[visibility[i]!];
+  }
+  ctx.putImageData(image, 0, 0);
+  return layer;
 }
 
 function buildTerrainLayer(view: PlayerView): HTMLCanvasElement {

@@ -5,20 +5,24 @@ import type { BuildingKind, UnitKind } from "./types";
 
 export const TICKS_PER_SECOND = 20;
 
-export interface UnitStats {
+/** What a weapon does; Units and Turrets share the shape so one firing rule serves both. */
+export interface WeaponStats {
+  readonly damage: number;
+  readonly range: number;
+  readonly reloadTicks: number;
+}
+
+export interface UnitStats extends WeaponStats {
   readonly name: string;
   readonly cost: number;
   readonly trainTicks: number;
   readonly maxHp: number;
   /** Cells per second on open ground. */
   readonly speed: number;
-  readonly damage: number;
-  readonly range: number;
-  readonly reloadTicks: number;
   readonly sight: number;
 }
 
-export interface BuildingStats {
+export interface BuildingStats extends WeaponStats {
   readonly name: string;
   readonly cost: number;
   readonly buildTicks: number;
@@ -27,9 +31,6 @@ export interface BuildingStats {
   readonly width: number;
   readonly height: number;
   readonly sight: number;
-  readonly damage: number;
-  readonly range: number;
-  readonly reloadTicks: number;
 }
 
 export const UNIT_STATS: Readonly<Record<UnitKind, UnitStats>> = {
@@ -131,8 +132,61 @@ export const BUILDING_STATS: Readonly<Record<BuildingKind, BuildingStats>> = {
   },
 };
 
+export const PLACEMENT = {
+  /** Most empty Cells allowed between a new Building and the nearest own Building. */
+  maxGap: 3,
+} as const;
+
+export const MOVEMENT = {
+  /** Speed on rough ground as a share of speed on open ground. */
+  roughSpeedMultiplier: 0.5,
+} as const;
+
 export const ECONOMY = {
   startingCredits: 2500,
   /** Ore in each Ore Cell when the Match starts. */
   orePerCell: 500,
+  /** Ore a Harvester carries when full. */
+  harvesterCapacity: 200,
+  /** Ore a Harvester digs out of its Cell each Tick. */
+  harvestPerTick: 2,
+  /** Ticks a Harvester spends at the Refinery emptying a load. */
+  unloadTicks: 2 * TICKS_PER_SECOND,
+  /** Credits paid for each unit of Ore unloaded. */
+  creditsPerOre: 1,
+  /** How long a Harvester with nothing to do waits before looking for Ore or a Refinery again. */
+  harvestRetryTicks: TICKS_PER_SECOND,
+} as const;
+
+/** How hard the Computer Opponent plays. */
+export const OPPONENT = {
+  /** Units in the first attack wave; each wave after asks for waveGrowth more, up to waveCap. */
+  firstWave: 6,
+  waveGrowth: 3,
+  waveCap: 24,
+  /** No wave before this Tick, so the person has time to build before the first attack (4.5 minutes). */
+  firstWaveTick: 270 * TICKS_PER_SECOND,
+  /** Least time from one wave setting off to the next. */
+  waveIntervalTicks: 90 * TICKS_PER_SECOND,
+  /** After the build order: most Barracks and Turrets the Opponent adds while Credits allow. */
+  mostBarracks: 3,
+  mostTurrets: 6,
+  /** Harvesters wanted per Refinery, and in all. */
+  harvestersPerRefinery: 2,
+  mostHarvesters: 5,
+  /** Army size (Riflemen and Raiders) the Opponent stops training at. */
+  mostArmy: 40,
+  /** Units each training Building keeps queued; a short queue keeps Credits free for the build order. */
+  queueDepth: 2,
+  /** Ore within this many Cells of an enemy fighter seen lately is unsafe for Harvesters. */
+  dangerRadius: 8,
+  /** How long a sighting of an enemy fighter keeps ground unsafe. */
+  dangerTicks: 60 * TICKS_PER_SECOND,
+  /** Once the enemy base is found, the scout explores everything this many Cells from the HQ, looking for Ore. */
+  homeExploreRadius: 28,
+} as const;
+
+export const TRAINING = {
+  /** Most Units one Building can have queued, the one in training included. */
+  queueSize: 5,
 } as const;

@@ -1,4 +1,8 @@
+import type { PlayerFog } from "./fog";
+import type { HarvestOrder } from "./harvest";
+import type { MovePlan } from "./movement";
 import type { Rng } from "./rng";
+import { startHarvesting } from "./harvest";
 import { BUILDING_STATS, UNIT_STATS } from "./tuning";
 import type { BuildingKind, CellPos, EntityId, PlayerId, Terrain, UnitKind } from "./types";
 import { isPassableTerrain } from "./types";
@@ -7,7 +11,20 @@ import { isPassableTerrain } from "./types";
 // outside reads a PlayerView (view.ts). Tests use the public seam in index.ts.
 
 /** What a Unit is currently doing. Later features add their own variants. */
-export type UnitOrder = { readonly type: "idle" };
+export type UnitOrder =
+  | { readonly type: "idle" }
+  | { readonly type: "move"; readonly plan: MovePlan }
+  | { readonly type: "attack"; readonly targetId: EntityId; chase: MovePlan | null }
+  | HarvestOrder;
+
+/** A shot fired during a Tick, kept so drawing can show a tracer. Positions in Cell units. */
+export interface Shot {
+  readonly fromX: number;
+  readonly fromY: number;
+  readonly toX: number;
+  readonly toY: number;
+  readonly tick: number;
+}
 
 export interface UnitState {
   readonly id: EntityId;
@@ -20,7 +37,11 @@ export interface UnitState {
   prevX: number;
   prevY: number;
   hp: number;
+  /** Ticks until the Unit's weapon can fire again. */
+  cooldown: number;
   order: UnitOrder;
+  /** Ore carried; only Harvesters ever hold any. */
+  cargo: number;
 }
 
 export interface BuildingState {
@@ -33,11 +54,29 @@ export interface BuildingState {
   readonly width: number;
   readonly height: number;
   hp: number;
+  /** Ticks until the Building's weapon can fire again; only Turrets have one. */
+  cooldown: number;
+  /** Units waiting to be trained, oldest first; only the first one progresses. Empty for Buildings that don't train. */
+  readonly queue: UnitKind[];
+  /** Ticks spent on the first Unit in the queue. */
+  trainTicksDone: number;
+  /** Where newly trained Units head, or null to stay by the Building. */
+  rallyPoint: CellPos | null;
+  /** A new Refinery's free Harvester not yet out, waiting for a free Cell beside it. */
+  freeHarvesterDue: boolean;
+}
+
+/** The Building the HQ is working on. It is finished once `ticksDone` reaches its build time. */
+export interface ProductionState {
+  readonly kind: BuildingKind;
+  ticksDone: number;
 }
 
 export interface PlayerState {
   readonly id: PlayerId;
   credits: number;
+  /** One Building at a time, from start until it is placed or cancelled. */
+  production: ProductionState | null;
 }
 
 export type MatchStatus =
@@ -59,11 +98,16 @@ export interface MatchState {
   /** Insertion-ordered, so iteration is deterministic. */
   readonly units: Map<EntityId, UnitState>;
   readonly buildings: Map<EntityId, BuildingState>;
+  /** Fog of War per Player, indexed by PlayerId. */
+  readonly fog: readonly [PlayerFog, PlayerFog];
   nextId: EntityId;
   status: MatchStatus;
+  /** Shots fired during the last Tick; replaced every Tick. */
+  shots: Shot[];
 }
 
 export function cellIndex(m: MatchState, x: number, y: number): number {
+  // The same layout as cellIndexIn, written out: this runs in every hot loop.
   return y * m.width + x;
 }
 
@@ -94,7 +138,10 @@ export function spawnUnit(m: MatchState, owner: PlayerId, kind: UnitKind, cell: 
     prevX: x,
     prevY: y,
     hp: UNIT_STATS[kind].maxHp,
-    order: { type: "idle" },
+    cooldown: 0,
+    // Harvesters go to work as soon as they exist, so nobody has to tell them.
+    order: kind === "harvester" ? startHarvesting() : { type: "idle" },
+    cargo: 0,
   };
   m.units.set(unit.id, unit);
   return unit;
@@ -112,6 +159,11 @@ export function addBuilding(m: MatchState, owner: PlayerId, kind: BuildingKind, 
     width: stats.width,
     height: stats.height,
     hp: stats.maxHp,
+    cooldown: 0,
+    queue: [],
+    trainTicksDone: 0,
+    rallyPoint: null,
+    freeHarvesterDue: false,
   };
   for (let dy = 0; dy < building.height; dy++) {
     for (let dx = 0; dx < building.width; dx++) {
