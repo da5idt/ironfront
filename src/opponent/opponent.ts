@@ -5,6 +5,7 @@ import {
   type Command,
   createRng,
   type EntityId,
+  isPassableTerrain,
   nextInt,
   OPPONENT,
   type PlayerId,
@@ -14,7 +15,8 @@ import {
   type UnitView,
   type Vec,
 } from "../sim";
-import { buildCommands, hqCentre, ownBuildings, rallyCommands, rallyPoint, trainCommands } from "./economy";
+import { hqCentre, ownBuildings } from "./base";
+import { buildCommands, rallyCommands, rallyPoint, trainCommands } from "./economy";
 import { type DangerMemory, harvestCommands, rememberDanger } from "./harvesting";
 import { chooseTarget, distanceTo, nearest, waveReady, waveThreshold } from "./tactics";
 
@@ -164,11 +166,11 @@ export function createOpponent(playerId: PlayerId, seed: number): Opponent {
     );
     const defenders = [...withRole(army, "home"), ...withRole(army, "defend")];
     if (threats.length === 0) {
-      if (hit.length > 0 && defenders.length > 0) {
+      const beside = hit.length > 0 && defenders.length > 0 ? cellBeside(view, hit[0]!) : null;
+      if (beside) {
         // Something unseen is shooting: walk over and let the Units return fire.
-        const b = hit[0]!;
         for (const u of defenders) Object.assign(notes.get(u.id)!, { role: "defend", target: null });
-        return [{ type: "move", unitIds: defenders.map((u) => u.id), target: { x: b.x, y: b.y + b.height } }];
+        return [{ type: "move", unitIds: defenders.map((u) => u.id), target: beside }];
       }
       const idleDefenders = withRole(army, "defend").filter((u) => notes.get(u.id)!.still >= STUCK_THINKS);
       return sendHome(view, idleDefenders);
@@ -288,6 +290,30 @@ function stepToward(
   return { x: Math.floor(cx + ((home.x - cx) / len) * d), y: Math.floor(cy + ((home.y - cy) / len) * d) };
 }
 
+/**
+ * A walkable Cell touching the Building's footprint, or null when none is:
+ * below it first (the usual way in), then the rest of the ring top-left first,
+ * so a Building on the Map's edge or hemmed in still gets a reachable goal.
+ */
+function cellBeside(view: PlayerView, b: BuildingView): CellPos | null {
+  const ring: CellPos[] = [{ x: b.x, y: b.y + b.height }];
+  for (let y = b.y - 1; y <= b.y + b.height; y++) {
+    for (let x = b.x - 1; x <= b.x + b.width; x++) {
+      const inside = x >= b.x && x < b.x + b.width && y >= b.y && y < b.y + b.height;
+      if (!inside) ring.push({ x, y });
+    }
+  }
+  return ring.find((c) => isOpenGround(view, c)) ?? null;
+}
+
+/** On the Map, passable, and not under a Building the Player knows of. */
+function isOpenGround(view: PlayerView, c: CellPos): boolean {
+  const { width, height, terrain } = view.map;
+  if (c.x < 0 || c.y < 0 || c.x >= width || c.y >= height) return false;
+  if (!isPassableTerrain(terrain[cellIndexIn(view.map, c.x, c.y)]!)) return false;
+  return !view.buildings.some((o) => c.x >= o.x && c.x < o.x + o.width && c.y >= o.y && c.y < o.y + o.height);
+}
+
 function explored(view: PlayerView, c: CellPos): boolean {
   return view.map.visibility[cellIndexIn(view.map, c.x, c.y)] !== "unexplored";
 }
@@ -308,7 +334,7 @@ function unexploredNearHome(view: PlayerView, skip: ReadonlySet<number>, from: V
   let best: CellPos | null = null;
   let bestD = Infinity;
   for (let i = 0; i < visibility.length; i++) {
-    if (visibility[i] !== "unexplored" || skip.has(i) || (terrain[i] !== "open" && terrain[i] !== "rough")) continue;
+    if (visibility[i] !== "unexplored" || skip.has(i) || !isPassableTerrain(terrain[i]!)) continue;
     const c = { x: i % width, y: Math.floor(i / width) };
     if (Math.hypot(c.x - hq.x, c.y - hq.y) > OPPONENT.homeExploreRadius) continue;
     const d = Math.hypot(c.x + 0.5 - from.x, c.y + 0.5 - from.y);
@@ -331,7 +357,7 @@ function unexploredCell(view: PlayerView, rng: Rng): CellPos | null {
   const { width, terrain, visibility } = view.map;
   const cells: number[] = [];
   for (let i = 0; i < visibility.length; i++) {
-    if (visibility[i] === "unexplored" && (terrain[i] === "open" || terrain[i] === "rough")) cells.push(i);
+    if (visibility[i] === "unexplored" && isPassableTerrain(terrain[i]!)) cells.push(i);
   }
   if (cells.length === 0) return null;
   const i = cells[nextInt(rng, cells.length)]!;

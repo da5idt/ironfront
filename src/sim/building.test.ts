@@ -116,7 +116,7 @@ describe("placing a Building", () => {
     expect(getPlayerView(match, 0).buildings.some((b) => b.kind === "barracks")).toBe(false);
   });
 
-  it("refuses a spot where an enemy Unit stands, even one this Player cannot see", () => {
+  it("places over an enemy Unit this Player cannot see, nudging it to the nearest free Cell", () => {
     const match = createMatch(openMap(30, 30), 1);
     issueCommand(match, 0, { type: "startBuilding", kind: "vehicleFactory" });
     // An outpost Barracks sees (20,20) but not (22,22); a scout explores both, then walks off.
@@ -125,12 +125,27 @@ describe("placing a Building", () => {
     run(match, 1);
     issueCommand(match, 0, { type: "move", unitIds: [scout], target: { x: 8, y: 21 } });
     run(match, BUILDING_STATS.vehicleFactory.buildTicks);
-    addTestUnit(match, 1, "rifleman", { x: 22, y: 22 });
+    const hidden = addTestUnit(match, 1, "rifleman", { x: 22, y: 22 });
+    // Stand still, so only the placement moves it.
+    issueCommand(match, 1, { type: "stop", unitIds: [hidden] });
     const view = getPlayerView(match, 0);
     expect(view.map.visibility[22 * 30 + 22]).toBe("fogged");
     expect(canPlaceBuilding(view, "vehicleFactory", { x: 20, y: 20 })).toBe(true);
-    expect(issueCommand(match, 0, { type: "placeBuilding", at: { x: 20, y: 20 } }).ok).toBe(false);
-    expect(getPlayerView(match, 0).production?.ready).toBe(true);
+    // The answer is the one the Player's own view predicts, so it gives nothing away.
+    expect(issueCommand(match, 0, { type: "placeBuilding", at: { x: 20, y: 20 } })).toEqual({ ok: true });
+    const factory = getPlayerView(match, 0).buildings.find((b) => b.kind === "vehicleFactory")!;
+    expect(factory).toMatchObject({ x: 20, y: 20 });
+    const enemy = getPlayerView(match, 1).units.find((u) => u.id === hidden)!;
+    const cell = { x: Math.floor(enemy.x), y: Math.floor(enemy.y) };
+    // Nudged to a Cell just outside the footprint, not sent away, and unharmed.
+    const outside = Math.max(
+      factory.x - cell.x,
+      cell.x - (factory.x + factory.width - 1),
+      factory.y - cell.y,
+      cell.y - (factory.y + factory.height - 1),
+    );
+    expect(outside).toBe(1);
+    expect(enemy.hp).toBe(enemy.maxHp);
   });
 });
 

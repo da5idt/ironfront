@@ -2,7 +2,7 @@ import type { CommandResult } from "./commands";
 import { OK, reject } from "./commands";
 import type { CommandHandler } from "./handlers";
 import { type MovePlan, matchGrid, planMove, stepAlong, unitCell } from "./movement";
-import { visibilityAt } from "./fog";
+import { isVisible, visibilityAt } from "./fog";
 import { nearestReachable } from "./pathfinding";
 import type { BuildingState, MatchState, UnitState } from "./state";
 import { cellIndex, inBounds, ownUnits } from "./state";
@@ -41,18 +41,26 @@ export function startHarvesting(): HarvestOrder {
   return { type: "harvest", step: { kind: "findOre", waitTicks: 0 }, field: null };
 }
 
-function oreAt(m: MatchState, cell: CellPos): number {
-  return m.ore[cellIndex(m, cell.x, cell.y)]!;
+/**
+ * The Ore a Player believes is in a Cell: the live amount where it can see,
+ * the amount it last saw where Fogged, and none where Unexplored. Harvesters
+ * and the harvest Command use only this, so neither can be used to learn what
+ * happened to Ore out of sight. A Harvester sent to a field emptied out of
+ * sight finds out when it gets there and the Cell turns Visible.
+ */
+function believedOre(m: MatchState, owner: PlayerId, cell: CellPos): number {
+  const i = cellIndex(m, cell.x, cell.y);
+  const fog = m.fog[owner];
+  return isVisible(fog, i) ? m.ore[i]! : fog.ore[i]!;
 }
 
 /**
- * True for a Cell with Ore that the Player has explored. A Harvester looking
- * for Ore by itself only goes where its Player has been, so it can't find a
- * field through Fog of War. A harvest Command is held to the same rule, so its
+ * True for a Cell the Player believes has Ore. Unexplored Cells never do, so a
+ * Harvester can't find a field through Fog of War, and a harvest Command's
  * answer can't be used to probe for Ore under Unexplored ground.
  */
 function knownOre(m: MatchState, owner: PlayerId, x: number, y: number): boolean {
-  return m.ore[cellIndex(m, x, y)]! > 0 && explored(m, owner, { x, y });
+  return believedOre(m, owner, { x, y }) > 0;
 }
 
 function explored(m: MatchState, owner: PlayerId, cell: CellPos): boolean {
@@ -99,7 +107,7 @@ function nextStep(m: MatchState, u: UnitState, order: HarvestOrder): HarvestStep
       return { kind: "findOre", waitTicks: 0 };
     }
     case "toOre": {
-      if (oreAt(m, step.plan.goal) === 0) return { kind: "findOre", waitTicks: 0 };
+      if (believedOre(m, u.owner, step.plan.goal) === 0) return { kind: "findOre", waitTicks: 0 };
       if (stepAlong(m, u, step.plan) === "moving") return step;
       const here = unitCell(u);
       const arrived = here.x === step.plan.goal.x && here.y === step.plan.goal.y;
@@ -153,7 +161,7 @@ export const handleHarvest: CommandHandler<"harvest"> = (m, player, command): Co
   if (harvesters.length === 0) return reject("no own Harvesters selected");
   const { target } = command;
   if (!inBounds(m, target.x, target.y) || !explored(m, player, target)) return reject("that Cell is unexplored");
-  if (oreAt(m, target) === 0) return reject("no Ore there");
+  if (believedOre(m, player, target) === 0) return reject("no Ore there");
   for (const u of harvesters) {
     u.order = { type: "harvest", step: { kind: "toOre", plan: planMove(m, u, target) }, field: target };
   }

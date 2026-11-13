@@ -92,8 +92,28 @@ function placeStartingUnit(m: MatchState, map: MapDef, player: PlayerId, kind: U
 export function issueCommand(match: Match, player: PlayerId, command: Command): CommandResult {
   const m = state(match);
   if (m.status.state !== "running") return reject("the Match is over");
+  const cell = targetCell(command);
+  if (cell && !(Number.isInteger(cell.x) && Number.isInteger(cell.y))) return reject("that is not a Cell");
   const handler = COMMAND_HANDLERS[command.type] as CommandHandler<typeof command.type>;
   return handler(m, player, command as never);
+}
+
+/**
+ * The Cell a Command points at, if it has one. Checked once here because a
+ * Cell between whole positions slips past bounds and Fog of War checks
+ * (no Cell index matches it) and can leave Units chasing a goal they never reach.
+ */
+function targetCell(command: Command): CellPos | null {
+  switch (command.type) {
+    case "move":
+    case "harvest":
+    case "setRallyPoint":
+      return command.target;
+    case "placeBuilding":
+      return command.at;
+    default:
+      return null;
+  }
 }
 
 /** Advances the Match by one Tick. Does nothing once the Match is over. */

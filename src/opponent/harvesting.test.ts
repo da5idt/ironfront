@@ -74,3 +74,32 @@ describe("the Opponent short of Harvesters", () => {
     expect(trainCommands(shortOfHarvesters(600))).toEqual([]);
   });
 });
+
+describe("the Opponent's HQ with nowhere to place a finished Building", () => {
+  // Dry land only round each starting base, so no Vehicle Factory fits anywhere.
+  const cramped = Array.from({ length: 30 }, (_, y) => {
+    if (y < 6) return ".".repeat(8) + "~".repeat(22);
+    if (y >= 24) return "~".repeat(20) + ".".repeat(10);
+    return "~".repeat(30);
+  });
+  const readyFactory = (): PlayerView => ({
+    ...getPlayerView(createMatch(testMap(cramped), 1), 0),
+    production: { kind: "vehicleFactory", progress: 1, ready: true },
+  });
+  /** Thinks until the HQ cancels, returning how many it took. */
+  const thinksUntilCancel = (view: PlayerView, failures: { count: number }): number => {
+    for (let n = 1; n <= 100; n++) {
+      if (buildCommands(view, failures).some((c) => c.type === "cancelBuilding")) return n;
+    }
+    return Infinity;
+  };
+
+  it("gives every finished Building the full number of tries, even after an earlier one was cancelled", () => {
+    const failures = { count: 0 };
+    const first = thinksUntilCancel(readyFactory(), failures);
+    expect(first).toBeGreaterThan(1);
+    expect(first).toBeLessThan(Infinity);
+    // The next Building gets as long as the first did, so start and cancel can't follow each other every think.
+    expect(thinksUntilCancel(readyFactory(), failures)).toBe(first);
+  });
+});

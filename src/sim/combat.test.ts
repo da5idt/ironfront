@@ -273,6 +273,19 @@ describe("attacking a Building", () => {
   const refineryOf = (match: Match, player: 0 | 1) =>
     getPlayerView(match, 0).buildings.find((b) => b.owner === player && b.kind === "refinery");
 
+  it("lands a shot from the Building's right-hand side inside its footprint, not in the Cell beside it", () => {
+    // Between the Refinery and the HQ (17..19, 17..19) on the Map's right edge.
+    const match = createMatch(openMap(20, 20), 1);
+    const raider = addTestUnit(match, 0, "raider", { x: 16, y: 18 });
+    const refinery = refineryOf(match, 1)!;
+    issueCommand(match, 0, { type: "attack", unitIds: [raider], targetId: refinery.id });
+    run(match, 1);
+    const [shot] = getPlayerView(match, 0).shots;
+    expect(Math.floor(shot!.toX)).toBe(15);
+    expect(Math.floor(shot!.toY)).toBe(18);
+    expect(shot!.toX).toBeCloseTo(16, 3);
+  });
+
   it("fires at the nearest edge of the footprint until the Building is destroyed and its Cells are free", () => {
     const match = createMatch(openMap(20, 20), 1);
     const raider = addTestUnit(match, 0, "raider", { x: 10, y: 18 });

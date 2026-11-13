@@ -10,7 +10,7 @@ import {
   UNIT_STATS,
   type UnitView,
 } from "../sim";
-import { hqCentre, ownBuildings } from "./economy";
+import { hqCentre, ownBuildings } from "./base";
 
 // Where the Computer Opponent's Harvesters dig. The Simulation keeps a Harvester
 // working the field it was sent to, so the Opponent only has to choose fields:
@@ -117,6 +117,13 @@ const IDLE_THINKS = 6;
  * is dug out, turns unsafe, or the Harvester has stopped working. A full
  * Harvester is left to unload first. `fields` holds each Harvester's Cell
  * between thinks.
+ *
+ * A field is noted as soon as the Command is given, without waiting to hear
+ * whether it was accepted. That is sound because the Simulation judges a
+ * harvest Command by the Ore the Player believes is there, which is exactly
+ * what this view shows: a known Ore Cell picked for an own Harvester can't be
+ * refused. Should one be refused anyway, the Harvester stands still and the
+ * idle check re-chooses after IDLE_THINKS, so no order repeats every think.
  */
 export function harvestCommands(
   view: PlayerView,

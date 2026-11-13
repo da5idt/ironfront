@@ -69,8 +69,17 @@ function isLive(m: MatchState, t: KnownTarget): t is Target {
  */
 function aimPoint(t: KnownTarget, from: Vec): Vec {
   if (isUnit(t)) return { x: t.x, y: t.y };
-  return { x: clamp(from.x, t.x, t.x + t.width), y: clamp(from.y, t.y, t.y + t.height) };
+  // The far edges are a hair inside, so the point always floors into a footprint
+  // Cell: on the edge itself it would belong to the Cell beside the Building
+  // (or, on the Map's right edge, wrap to the next row of Cells).
+  return {
+    x: clamp(from.x, t.x, t.x + t.width - INSIDE_EDGE),
+    y: clamp(from.y, t.y, t.y + t.height - INSIDE_EDGE),
+  };
 }
+
+/** How far inside a footprint's far edges an aim point stays: far below anything range or drawing can tell apart. */
+const INSIDE_EDGE = 1e-6;
 
 function clamp(v: number, lo: number, hi: number): number {
   return Math.min(hi, Math.max(lo, v));

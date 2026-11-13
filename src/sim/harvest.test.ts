@@ -11,7 +11,7 @@ import {
   type UnitView,
 } from "./index";
 import { testMap } from "./testing/maps";
-import { addTestUnit } from "./testing/setup";
+import { addTestUnit, setTestOre } from "./testing/setup";
 
 function run(match: Match, ticks: number): void {
   for (let t = 0; t < ticks; t++) advanceTick(match);
@@ -90,6 +90,56 @@ describe("harvesting under Fog of War", () => {
     addTestUnit(match, 0, "rifleman", { x: 28, y: 3 });
     run(match, 30 * TICKS_PER_SECOND);
     expect(harvester(match).cargo).toBeGreaterThan(0);
+  });
+});
+
+describe("Fogged Ore is judged by what the Player last saw", () => {
+  // Near Ore at (5,6), far Ore at (15,6); a rock wall keeps Player 1 away.
+  const rows = Array.from({ length: 20 }, (_, y) =>
+    y === 6 ? ".....*.........*...." : y === 10 ? "#".repeat(20) : ".".repeat(20),
+  );
+  const FAR = 6 * 20 + 15;
+  const NEAR = 6 * 20 + 5;
+
+  /** Player 0 sees the far field full, looks away, then it is emptied out of sight (as an enemy would). */
+  function farFieldEmptiedOutOfSight() {
+    const match = createMatch(testMap(rows), 1);
+    const h = harvester(match);
+    issueCommand(match, 0, { type: "stop", unitIds: [h.id] });
+    const scout = addTestUnit(match, 0, "rifleman", { x: 15, y: 4 });
+    advanceTick(match);
+    issueCommand(match, 0, { type: "move", unitIds: [scout], target: { x: 19, y: 0 } });
+    run(match, 10 * TICKS_PER_SECOND);
+    setTestOre(match, { x: 15, y: 6 }, 0);
+    advanceTick(match);
+    return { match, h };
+  }
+
+  it("accepts a harvest Command on a remembered field emptied out of sight, as for an untouched one", () => {
+    const { match, h } = farFieldEmptiedOutOfSight();
+    expect(getPlayerView(match, 0).map.visibility[FAR]).toBe("fogged");
+    expect(getPlayerView(match, 0).map.ore[FAR]).toBe(ECONOMY.orePerCell);
+    expect(issueCommand(match, 0, { type: "harvest", unitIds: [h.id], target: { x: 15, y: 6 } })).toEqual({ ok: true });
+    expect(getPlayerView(match, 0).map.ore[FAR]).toBe(ECONOMY.orePerCell);
+    // On arrival the field is seen empty, and the Harvester moves on to the near field.
+    run(match, 90 * TICKS_PER_SECOND);
+    expect(getPlayerView(match, 0).map.ore[FAR]).toBe(0);
+    expect(getPlayerView(match, 0).map.ore[NEAR]).toBeLessThan(ECONOMY.orePerCell);
+  });
+
+  it("a Harvester looking for Ore by itself heads for remembered Ore, not the live amount", () => {
+    const { match, h } = farFieldEmptiedOutOfSight();
+    // A near field with one dig's worth left, so the Harvester soon looks for more by itself.
+    setTestOre(match, { x: 5, y: 6 }, 1);
+    issueCommand(match, 0, { type: "harvest", unitIds: [h.id], target: { x: 5, y: 6 } });
+    let furthest = 0;
+    for (let t = 0; t < 60 * TICKS_PER_SECOND; t++) {
+      advanceTick(match);
+      furthest = Math.max(furthest, harvester(match).x);
+    }
+    // It went close enough to see the far field for itself.
+    expect(furthest).toBeGreaterThan(11);
+    expect(getPlayerView(match, 0).map.ore[FAR]).toBe(0);
   });
 });
 

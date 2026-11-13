@@ -12,7 +12,8 @@ import {
   type PlayerId,
   TICKS_PER_SECOND,
 } from "../sim";
-import { addTestUnit } from "../sim/testing/setup";
+import { openMap, testMap } from "../sim/testing/maps";
+import { addTestUnit, setTestBuildingHp, setTestOre } from "../sim/testing/setup";
 import { createOpponent, type Opponent, THINK_EVERY_TICKS } from "./opponent";
 
 interface Seat {
@@ -117,6 +118,62 @@ describe("Computer Opponent scouting and defence on Riverford", () => {
     play(match, [{ player: 1, opponent }], 30 * TICKS_PER_SECOND);
     const left = getPlayerView(match, 1).units.filter((u) => raiders.includes(u.id));
     expect(left).toEqual([]);
+  });
+});
+
+describe("Computer Opponent harvesting under Fog of War", () => {
+  it("never has a harvest Command refused, even for a field emptied out of its sight", () => {
+    // Near Ore at (5,6) with one dig left; far Ore at (15,6), seen full and then dug out unseen.
+    const rows = Array.from({ length: 20 }, (_, y) =>
+      y === 6 ? ".....*.........*...." : y === 10 ? "#".repeat(20) : ".".repeat(20),
+    );
+    const match = createMatch(testMap(rows), 1);
+    setTestOre(match, { x: 5, y: 6 }, 1);
+    const harvester = getPlayerView(match, 0).units.find((u) => u.owner === 0 && u.kind === "harvester")!;
+    issueCommand(match, 0, { type: "stop", unitIds: [harvester.id] });
+    const scout = addTestUnit(match, 0, "rifleman", { x: 15, y: 4 });
+    advanceTick(match);
+    issueCommand(match, 0, { type: "move", unitIds: [scout], target: { x: 19, y: 0 } });
+    for (let t = 0; t < 10 * TICKS_PER_SECOND; t++) advanceTick(match);
+    setTestOre(match, { x: 15, y: 6 }, 0);
+    advanceTick(match);
+
+    const opponent = createOpponent(0, 1);
+    const results: boolean[] = [];
+    for (let t = 0; t < 60 * TICKS_PER_SECOND; t++) {
+      if (t % THINK_EVERY_TICKS === 0) {
+        for (const command of opponent.think(getPlayerView(match, 0))) {
+          const result = issueCommand(match, 0, command);
+          if (command.type === "harvest") results.push(result.ok);
+        }
+      }
+      advanceTick(match);
+    }
+    expect(results.length).toBeGreaterThan(0);
+    expect(results.every((ok) => ok)).toBe(true);
+  });
+});
+
+describe("Computer Opponent defending against an unseen attacker", () => {
+  it("walks its defenders to a Cell on the Map beside a Building hit on the Map's bottom edge", () => {
+    // Player 1's HQ covers (27..29, 27..29): its bottom row is the Map's last.
+    const match = createMatch(openMap(30, 30), 1);
+    const opponent = createOpponent(1, 1);
+    for (const command of opponent.think(getPlayerView(match, 1))) issueCommand(match, 1, command);
+    advanceTick(match);
+    const hq = getPlayerView(match, 1).buildings.find((b) => b.owner === 1 && b.kind === "hq")!;
+    setTestBuildingHp(match, hq.id, hq.hp - 50);
+    const commands = opponent.think(getPlayerView(match, 1));
+    const defend = commands.find(
+      (c) =>
+        c.type === "move" &&
+        c.target.x >= hq.x - 1 &&
+        c.target.x <= hq.x + hq.width &&
+        c.target.y >= hq.y - 1 &&
+        c.target.y <= hq.y + hq.height,
+    );
+    expect(defend).toBeDefined();
+    for (const command of commands) expect(issueCommand(match, 1, command), JSON.stringify(command)).toEqual({ ok: true });
   });
 });
 

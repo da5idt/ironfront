@@ -60,7 +60,8 @@ function covers(f: Footprint, x: number, y: number): boolean {
  * Whether the Player whose view this is may place `kind` with its top-left
  * Cell at `at`, judged only from what that Player knows. Remembered enemy
  * Buildings count as in the way. The Simulation applies the same rule to the
- * real Match, so it can still refuse a spot where something unseen stands.
+ * real Match, so it can still refuse a spot where an unseen Building stands
+ * (hidden enemy Units don't count there: they are nudged aside instead).
  */
 export function canPlaceBuilding(view: PlayerView, kind: BuildingKind, at: CellPos): boolean {
   const { map } = view;

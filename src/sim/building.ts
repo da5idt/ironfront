@@ -1,7 +1,7 @@
 import type { CommandResult } from "./commands";
 import { OK, reject } from "./commands";
 import type { CommandHandler } from "./handlers";
-import { visibilityAt } from "./fog";
+import { isVisible, visibilityAt } from "./fog";
 import { type PlacementGround, placementProblem } from "./placement";
 import type { BuildingState, MatchState, ProductionState } from "./state";
 import { addBuilding, cellIndex, isWalkable, spawnUnit } from "./state";
@@ -75,7 +75,13 @@ export const handleStartBuilding: CommandHandler<"startBuilding"> = (m, player, 
   return OK;
 };
 
-/** The real Match as the placement rule sees it: unlike a PlayerView, nothing standing in the way is hidden. */
+/**
+ * The real Match as the placement rule sees it for this Player. Buildings
+ * always count, seen or not, since a Building can't be moved aside. An enemy
+ * Unit counts only where the Player can see it: one hidden in Fog of War is
+ * not in the way (it is nudged aside on placing), so the answer can't be used
+ * to find Units the Player cannot see.
+ */
 function matchGround(m: MatchState, player: PlayerId): PlacementGround {
   const fog = m.fog[player];
   return {
@@ -85,11 +91,36 @@ function matchGround(m: MatchState, player: PlayerId): PlacementGround {
     explored: (x, y) => visibilityAt(fog, cellIndex(m, x, y)) !== "unexplored",
     occupied: (x, y) => {
       if (m.buildingAt[cellIndex(m, x, y)] !== 0) return true;
-      for (const u of m.units.values()) if (Math.floor(u.x) === x && Math.floor(u.y) === y) return true;
+      for (const u of m.units.values()) {
+        if (Math.floor(u.x) !== x || Math.floor(u.y) !== y) continue;
+        if (u.owner === player || isVisible(fog, cellIndex(m, x, y))) return true;
+      }
       return false;
     },
     ownBuildings: [...m.buildings.values()].filter((b) => b.owner === player),
   };
+}
+
+/**
+ * Moves every Unit standing on a new Building's footprint (only hidden enemy
+ * Units can be there) to the nearest free Cell round it, in id order so the
+ * outcome is the same every run. A Unit with nowhere to go on the whole Map
+ * stays put; that needs a Map packed full of Units.
+ */
+function nudgeUnitsOff(m: MatchState, b: BuildingState): void {
+  const under = [...m.units.values()]
+    .filter((u) => isUnder(b, Math.floor(u.x), Math.floor(u.y)))
+    .sort((a, c) => a.id - c.id);
+  for (const u of under) {
+    const cell = freeCellAround(m, b, Math.max(m.width, m.height));
+    if (!cell) continue;
+    u.x = u.prevX = cell.x + 0.5;
+    u.y = u.prevY = cell.y + 0.5;
+  }
+}
+
+function isUnder(b: BuildingState, x: number, y: number): boolean {
+  return x >= b.x && x < b.x + b.width && y >= b.y && y < b.y + b.height;
 }
 
 export const handlePlaceBuilding: CommandHandler<"placeBuilding"> = (m, player, command): CommandResult => {
@@ -100,6 +131,7 @@ export const handlePlaceBuilding: CommandHandler<"placeBuilding"> = (m, player, 
   const problem = placementProblem(matchGround(m, player), p.kind, command.at);
   if (problem) return reject(problem);
   const building = addBuilding(m, player, p.kind, command.at);
+  nudgeUnitsOff(m, building);
   state.production = null;
   if (building.kind === "refinery") {
     building.freeHarvesterDue = true;
@@ -129,10 +161,10 @@ export function deliverFreeHarvesters(m: MatchState): void {
 const MAX_SPAWN_RING = 3;
 
 /** The first walkable Cell with no Unit on it, ring by ring around the footprint; null if crowded out. */
-export function freeCellAround(m: MatchState, b: BuildingState): CellPos | null {
+export function freeCellAround(m: MatchState, b: BuildingState, maxRing = MAX_SPAWN_RING): CellPos | null {
   const taken = new Set<number>();
   for (const u of m.units.values()) taken.add(cellIndex(m, Math.floor(u.x), Math.floor(u.y)));
-  for (let r = 1; r <= MAX_SPAWN_RING; r++) {
+  for (let r = 1; r <= maxRing; r++) {
     for (let y = b.y - r; y < b.y + b.height + r; y++) {
       for (let x = b.x - r; x < b.x + b.width + r; x++) {
         const onRing = y === b.y - r || y === b.y + b.height + r - 1 || x === b.x - r || x === b.x + b.width + r - 1;

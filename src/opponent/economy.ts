@@ -3,7 +3,6 @@ import {
   type BuildingKind,
   type BuildingView,
   type CellPos,
-  cellIndexIn,
   type Command,
   OPPONENT,
   type PlayerView,
@@ -11,7 +10,9 @@ import {
   UNIT_STATS,
   type UnitKind,
 } from "../sim";
+import { hqCentre, ownBuildings } from "./base";
 import { findBuildSite } from "./buildSite";
+import { chooseOre, type DangerMemory } from "./harvesting";
 
 // The Computer Opponent's base and economy: what the HQ builds next, where it
 // goes, what the Barracks and Vehicle Factory train, and keeping Harvesters busy.
@@ -30,10 +31,6 @@ export const BUILD_ORDER: readonly (readonly [BuildingKind, number])[] = [
 
 /** Cells from the HQ towards the Map's middle where new Units gather and Turrets go. */
 const RALLY_DISTANCE = 7;
-
-export function ownBuildings(view: PlayerView): BuildingView[] {
-  return view.buildings.filter((b) => b.owner === view.playerId);
-}
 
 function count(buildings: readonly BuildingView[], kind: BuildingKind): number {
   return buildings.filter((b) => b.kind === kind).length;
@@ -68,13 +65,6 @@ function buildReserve(view: PlayerView): number {
   return next ? BUILDING_STATS[next].cost : 0;
 }
 
-export function hqCentre(view: PlayerView): CellPos {
-  const own = ownBuildings(view);
-  const hq = own.find((b) => b.kind === "hq") ?? own[0];
-  if (!hq) return { x: 0, y: 0 };
-  return { x: hq.x + Math.floor(hq.width / 2), y: hq.y + Math.floor(hq.height / 2) };
-}
-
 /** A Cell `distance` from the HQ along the line to the Map's middle: the side attacks come from. */
 export function towardsMiddle(view: PlayerView, distance: number): CellPos {
   const from = hqCentre(view);
@@ -91,31 +81,17 @@ export function rallyPoint(view: PlayerView): CellPos {
   return towardsMiddle(view, RALLY_DISTANCE);
 }
 
-/** The known Ore Cell nearest `from`, or null when the Opponent knows of none. */
-export function nearestOre(view: PlayerView, from: { x: number; y: number }): CellPos | null {
-  const { width, height, ore } = view.map;
-  let best: CellPos | null = null;
-  let bestD = Infinity;
-  for (let y = 0; y < height; y++) {
-    for (let x = 0; x < width; x++) {
-      if (ore[cellIndexIn(view.map, x, y)]! <= 0) continue;
-      const d = (x + 0.5 - from.x) ** 2 + (y + 0.5 - from.y) ** 2;
-      if (d < bestD) {
-        best = { x, y };
-        bestD = d;
-      }
-    }
-  }
-  return best;
-}
-
 /** Where a kind of Building should go: Refineries by the Ore, Turrets on the side attacks come from. */
 function siteWanted(view: PlayerView, kind: BuildingKind): CellPos {
   const hq = hqCentre(view);
-  if (kind === "refinery") return nearestOre(view, { x: hq.x + 0.5, y: hq.y + 0.5 }) ?? hq;
+  // The Ore the Harvesters would pick from home, so the new Refinery sits by the field they will work.
+  if (kind === "refinery") return chooseOre(view, NO_DANGER, { x: hq.x + 0.5, y: hq.y + 0.5 }) ?? hq;
   if (kind === "turret") return towardsMiddle(view, RALLY_DISTANCE - 2);
   return hq;
 }
+
+/** A Refinery stays put, so enemy fighters passing by do not count; only known Turrets keep it from a field. */
+const NO_DANGER: DangerMemory = new Map();
 
 /** Thinks in a row a finished Building may find no site before the HQ gives up on it. */
 const PLACE_ATTEMPTS = 30;
@@ -130,8 +106,11 @@ export function buildCommands(view: PlayerView, placeFailures: { count: number }
       return [{ type: "placeBuilding", at }];
     }
     placeFailures.count++;
+    if (placeFailures.count < PLACE_ATTEMPTS) return [];
     // Credits come back on cancel, so a Building with nowhere to go is not a loss.
-    return placeFailures.count >= PLACE_ATTEMPTS ? [{ type: "cancelBuilding" }] : [];
+    // The next Building starts with a clean count, or it would be cancelled on its first miss.
+    placeFailures.count = 0;
+    return [{ type: "cancelBuilding" }];
   }
   if (production || !ownBuildings(view).some((b) => b.kind === "hq")) return [];
   const kind = nextBuilding(ownBuildings(view));
