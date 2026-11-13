@@ -62,6 +62,8 @@ export interface BuildingState {
   trainTicksDone: number;
   /** Where newly trained Units head, or null to stay by the Building. */
   rallyPoint: CellPos | null;
+  /** A new Refinery's free Harvester not yet out, waiting for a free Cell beside it. */
+  freeHarvesterDue: boolean;
 }
 
 /** The Building the HQ is working on. It is finished once `ticksDone` reaches its build time. */
@@ -160,6 +162,7 @@ export function addBuilding(m: MatchState, owner: PlayerId, kind: BuildingKind, 
     queue: [],
     trainTicksDone: 0,
     rallyPoint: null,
+    freeHarvesterDue: false,
   };
   for (let dy = 0; dy < building.height; dy++) {
     for (let dx = 0; dx < building.width; dx++) {

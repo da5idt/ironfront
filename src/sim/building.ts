@@ -102,12 +102,28 @@ export const handlePlaceBuilding: CommandHandler<"placeBuilding"> = (m, player, 
   const building = addBuilding(m, player, p.kind, command.at);
   state.production = null;
   if (building.kind === "refinery") {
-    // spawnUnit starts a Harvester harvesting, so the free one earns from its first Tick.
-    const cell = freeCellAround(m, building);
-    if (cell) spawnUnit(m, player, "harvester", cell);
+    building.freeHarvesterDue = true;
+    sendOutFreeHarvester(m, building);
   }
   return OK;
 };
+
+/**
+ * Puts a Refinery's free Harvester beside it. With every nearby Cell taken it
+ * stays due, and the per-Tick system tries again, as a trained Unit does.
+ * spawnUnit starts a Harvester harvesting, so it earns from its first Tick.
+ */
+function sendOutFreeHarvester(m: MatchState, b: BuildingState): void {
+  const cell = freeCellAround(m, b);
+  if (!cell) return;
+  spawnUnit(m, b.owner, "harvester", cell);
+  b.freeHarvesterDue = false;
+}
+
+/** Per-Tick system: free Harvesters that were crowded out step out once there is room. */
+export function deliverFreeHarvesters(m: MatchState): void {
+  for (const b of m.buildings.values()) if (b.freeHarvesterDue) sendOutFreeHarvester(m, b);
+}
 
 /** How far out from a footprint to look for a free Cell before giving up. */
 const MAX_SPAWN_RING = 3;

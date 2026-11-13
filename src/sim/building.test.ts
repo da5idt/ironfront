@@ -179,6 +179,32 @@ describe("a new Refinery", () => {
     expect(others.some((u) => Math.floor(u.x) === Math.floor(h.x) && Math.floor(u.y) === Math.floor(h.y))).toBe(false);
   });
 
+  it("keeps its free Harvester waiting while every Cell nearby is taken, then sends it out on the first one freed", () => {
+    const match = createMatch(openMap(30, 30), 1);
+    issueCommand(match, 0, { type: "startBuilding", kind: "refinery" });
+    run(match, BUILDING_STATS.refinery.buildTicks);
+    // Pack every free Cell within three of the footprint (0..2, 6..7) with Riflemen.
+    const taken = new Set(getPlayerView(match, 0).units.map((u) => `${Math.floor(u.x)},${Math.floor(u.y)}`));
+    const blockers: number[] = [];
+    for (let y = 3; y <= 10; y++) {
+      for (let x = 0; x <= 5; x++) {
+        const footprint = x <= 2 && y >= 6 && y <= 7;
+        if (!footprint && !taken.has(`${x},${y}`)) blockers.push(addTestUnit(match, 0, "rifleman", { x, y }));
+      }
+    }
+    const harvesters = () => getPlayerView(match, 0).units.filter((u) => u.kind === "harvester");
+    const before = harvesters().length;
+    expect(issueCommand(match, 0, { type: "placeBuilding", at: { x: 0, y: 6 } }).ok).toBe(true);
+    run(match, 2 * TICKS_PER_SECOND);
+    expect(harvesters()).toHaveLength(before);
+
+    // Clear one Cell at the edge of the packed ground.
+    const last = blockers.at(-1)!;
+    issueCommand(match, 0, { type: "move", unitIds: [last], target: { x: 20, y: 20 } });
+    run(match, 2 * TICKS_PER_SECOND);
+    expect(harvesters()).toHaveLength(before + 1);
+  });
+
   it("other Buildings come with nothing", () => {
     const match = createMatch(openMap(30, 30), 1);
     issueCommand(match, 0, { type: "startBuilding", kind: "barracks" });
