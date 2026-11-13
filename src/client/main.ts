@@ -1,5 +1,16 @@
 import { RIVERFORD } from "../game/maps/riverford";
-import { advanceTick, type CellPos, type Command, createMatch, getPlayerView, issueCommand, type PlayerId } from "../sim";
+import {
+  advanceTick,
+  type BuildingKind,
+  canPlaceBuilding,
+  type CellPos,
+  type Command,
+  createMatch,
+  getPlayerView,
+  issueCommand,
+  type PlayerId,
+} from "../sim";
+import { buildButtons, buttonAt, footprintAt, panelClick } from "./buildPanel";
 import {
   type Camera,
   CELL_PX,
@@ -13,7 +24,7 @@ import {
 import { computeLayout, contains, type Layout } from "./layout";
 import { type Clock, interpolationAlpha, stepClock } from "./loop";
 import { cameraOnMinimapPoint } from "./minimap";
-import { Renderer } from "./renderer";
+import { type Overlay, Renderer } from "./renderer";
 import {
   boxSelect,
   clickSelect,
@@ -67,7 +78,10 @@ resize();
 
 const keys = new Set<string>();
 let mouse: { x: number; y: number } | null = null;
-window.addEventListener("keydown", (e) => keys.add(e.code));
+window.addEventListener("keydown", (e) => {
+  keys.add(e.code);
+  if (e.code === "Escape") placing = null;
+});
 window.addEventListener("keyup", (e) => keys.delete(e.code));
 window.addEventListener("blur", () => keys.clear());
 window.addEventListener("mousemove", (e) => (mouse = { x: e.clientX, y: e.clientY }));
@@ -102,6 +116,30 @@ function orderTo(cell: CellPos): void {
   if (others.length > 0) issue({ type: "move", unitIds: others, target: cell });
 }
 
+/** The finished Building being placed, while the person picks a spot; null otherwise. */
+let placing: BuildingKind | null = null;
+
+function clickBuildPanel(at: { x: number; y: number }, button: "left" | "right"): void {
+  const kind = buttonAt(buildButtons(layout.buttons), at.x, at.y);
+  const action = kind ? panelClick(view, kind, button) : null;
+  if (!action) return;
+  placing = null;
+  if (action.type === "place") {
+    placing = action.kind;
+  } else {
+    issue(action.command);
+    // Show the new state at once rather than on the next Tick.
+    view = getPlayerView(match, HUMAN);
+  }
+}
+
+/** The footprint preview under the mouse, or null when not placing or off the Map view. */
+function placementPreview(): Overlay["placement"] {
+  if (!placing || !mouse || !contains(layout.mapView, mouse.x, mouse.y)) return null;
+  const at = footprintAt(placing, screenToCell(camera, mouse.x, mouse.y));
+  return { kind: placing, at, valid: canPlaceBuilding(view, placing, at) };
+}
+
 // Right-click is the move, attack and harvest button, so the browser menu must not open over the Map.
 canvas.addEventListener("contextmenu", (e) => e.preventDefault());
 canvas.addEventListener("mousedown", (e) => {
@@ -111,8 +149,25 @@ canvas.addEventListener("mousedown", (e) => {
     moveCameraToMinimap(at);
     return;
   }
+  if (contains(layout.buttons, at.x, at.y)) {
+    clickBuildPanel(at, e.button === 0 ? "left" : "right");
+    return;
+  }
   // The side panel is not the Map: no selection box or order starts there.
   if (!contains(layout.mapView, at.x, at.y)) return;
+  if (placing) {
+    // Left-click places; right-click leaves placement mode without ordering anyone about.
+    if (e.button === 0) {
+      const spot = footprintAt(placing, screenToCell(camera, at.x, at.y));
+      if (issueCommand(match, HUMAN, { type: "placeBuilding", at: spot }).ok) {
+        placing = null;
+        view = getPlayerView(match, HUMAN);
+      }
+    } else if (e.button === 2) {
+      placing = null;
+    }
+    return;
+  }
   if (e.button === 0) {
     drag = { start: at, now: at };
   } else if (e.button === 2 && selection.size > 0) {
@@ -181,6 +236,8 @@ function frame(now: number): void {
     view = getPlayerView(match, HUMAN);
     selection = pruneSelection(selection, view.units);
   }
+  // Nothing left to place (cancelled, or the Match ended): leave placement mode.
+  if (placing && !view.production?.ready) placing = null;
 
   const cameraSeconds = Math.min(frameMs, MAX_CAMERA_FRAME_MS) / 1000;
   // Only a mouse over the Map view edge-scrolls; resting on the side panel must not.
@@ -192,6 +249,7 @@ function frame(now: number): void {
     selection,
     dragBox: drag && isDrag(drag.start, drag.now) ? { a: drag.start, b: drag.now } : null,
     moveMarker: moveMarker ? { cell: moveMarker.cell, age: Math.max(0, markerAge) } : null,
+    placement: placementPreview(),
   });
   requestAnimationFrame(frame);
 }

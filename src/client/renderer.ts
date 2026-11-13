@@ -1,4 +1,14 @@
-import { type BuildingKind, type BuildingView, type CellPos, ECONOMY, type PlayerView, type ShotView, type UnitView } from "../sim";
+import {
+  BUILDING_STATS,
+  type BuildingKind,
+  type BuildingView,
+  type CellPos,
+  ECONOMY,
+  type PlayerView,
+  type ShotView,
+  type UnitView,
+} from "../sim";
+import { drawBuildPanel } from "./buildPanelPainter";
 import { type Camera, CELL_PX, mapToScreen, type Size } from "./camera";
 import type { Layout, Rect } from "./layout";
 import { MinimapPainter } from "./minimapPainter";
@@ -14,6 +24,8 @@ import {
   MOVE_MARKER,
   PANEL_BG,
   PANEL_EDGE,
+  PLACE_INVALID,
+  PLACE_VALID,
   ORE_COLOUR,
   ORE_SHADOW,
   SELECTION_MARKER,
@@ -40,6 +52,8 @@ export interface Overlay {
   readonly dragBox: { readonly a: { x: number; y: number }; readonly b: { x: number; y: number } } | null;
   /** The Cell of the last move Command, and how far its fade-out has got (0..1). */
   readonly moveMarker: { readonly cell: CellPos; readonly age: number } | null;
+  /** The footprint preview while placing a finished Building. */
+  readonly placement: { readonly kind: BuildingKind; readonly at: CellPos; readonly valid: boolean } | null;
 }
 
 export class Renderer {
@@ -80,12 +94,26 @@ export class Renderer {
     if (overlay.moveMarker) this.drawMoveMarker(overlay.moveMarker.cell, overlay.moveMarker.age, cam);
     for (const u of view.units) this.drawUnit(u, cam, alpha, overlay.selection.has(u.id));
     for (const s of view.shots) this.drawShot(s, cam, alpha);
+    if (overlay.placement) this.drawPlacement(overlay.placement, cam);
     if (overlay.dragBox) this.drawDragBox(overlay.dragBox.a, overlay.dragBox.b);
     this.drawHud(view, mapView);
     ctx.restore();
 
     this.drawPanel(layout.panel);
     this.minimap.draw(ctx, view, layout.minimap, cam, mapView, alpha);
+    drawBuildPanel(ctx, view, layout.buttons);
+  }
+
+  /** The footprint, tinted green where the Building may go and red where it may not. */
+  private drawPlacement(p: NonNullable<Overlay["placement"]>, cam: Camera): void {
+    const { ctx } = this;
+    const { width, height } = BUILDING_STATS[p.kind];
+    const s = mapToScreen(cam, p.at.x, p.at.y);
+    ctx.fillStyle = p.valid ? PLACE_VALID : PLACE_INVALID;
+    ctx.fillRect(s.x, s.y, width * CELL_PX, height * CELL_PX);
+    ctx.strokeStyle = HUD_TEXT;
+    ctx.lineWidth = 1;
+    ctx.strokeRect(s.x + 0.5, s.y + 0.5, width * CELL_PX - 1, height * CELL_PX - 1);
   }
 
   private drawPanel(panel: Rect): void {
