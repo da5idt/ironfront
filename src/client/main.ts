@@ -13,6 +13,7 @@ import {
   type Match,
   type PlayerId,
 } from "../sim";
+import { createOpponent, type Opponent, THINK_EVERY_TICKS } from "../opponent/opponent";
 import { buildButtons, buttonAt, footprintAt, panelClick } from "./buildPanel";
 import {
   type Camera,
@@ -47,12 +48,28 @@ import { trainButtonAt, trainButtons, trainClick, trainerOf } from "./trainPanel
 // (selection stays here; Commands go to the Simulation) and drawing.
 
 const HUMAN: PlayerId = 0;
+const COMPUTER: PlayerId = 1;
 
 const canvas = document.querySelector<HTMLCanvasElement>("#game")!;
 const renderer = new Renderer(canvas);
 /** A fresh seed for every Match, so a restart is not a replay. */
 const newSeed = (): number => (Date.now() ^ (performance.now() * 1000)) >>> 0;
 let match: Match = createMatch(RIVERFORD, newSeed());
+let opponent: Opponent = createOpponent(COMPUTER, newSeed());
+/** Ticks run in this Match, counted here so the Opponent's cadence costs no PlayerView on the Ticks between. */
+let ticksRun = 0;
+
+/**
+ * One Tick of the Match. The Computer Opponent thinks first on its cadence,
+ * from its own view, and its Commands go in like the person's.
+ */
+function step(): void {
+  if (ticksRun % THINK_EVERY_TICKS === 0 && getMatchStatus(match).state === "running") {
+    for (const command of opponent.think(getPlayerView(match, COMPUTER))) issueCommand(match, COMPUTER, command);
+  }
+  advanceTick(match);
+  ticksRun++;
+}
 
 let screen: Size = { width: window.innerWidth, height: window.innerHeight };
 let layout: Layout = computeLayout(screen);
@@ -261,6 +278,9 @@ function currentScreenOverlay(): ScreenOverlay | null {
 /** Throws away the Match and everything the client kept about it, and starts a fresh one. */
 function restart(): void {
   match = createMatch(RIVERFORD, newSeed());
+  // The old Opponent's notes name Units of the old Match.
+  opponent = createOpponent(COMPUTER, newSeed());
+  ticksRun = 0;
   view = getPlayerView(match, HUMAN);
   camera = cameraOnHq();
   selection = new Set();
@@ -273,6 +293,9 @@ function restart(): void {
   clock = { accumulatedMs: 0 };
 }
 
+/** Set only from the dev hook below: whose view is drawn, when not the person's. */
+let peekPlayer: PlayerId | null = null;
+
 // A hook for screenshots and manual poking in dev builds only; production has no way in.
 if (import.meta.env.DEV) {
   Object.assign(window, {
@@ -284,11 +307,21 @@ if (import.meta.env.DEV) {
       issue,
       issueAs: (player: PlayerId, command: Command) => issueCommand(match, player, command),
       advance: (ticks = 1) => {
-        for (let i = 0; i < ticks; i++) advanceTick(match);
+        for (let i = 0; i < ticks; i++) step();
         view = getPlayerView(match, HUMAN);
       },
       view: () => view,
       camera: () => camera,
+      /** Centres the camera on a Cell. */
+      lookAt: (x: number, y: number) => {
+        camera = clampCamera(
+          { x: (x + 0.5) * CELL_PX - viewSize.width / 2, y: (y + 0.5) * CELL_PX - viewSize.height / 2 },
+          viewSize,
+          mapSize,
+        );
+      },
+      /** Draws another Player's view (the Opponent's base under its own eyes); null goes back to the person's. */
+      peek: (player: PlayerId | null) => (peekPlayer = player),
     },
   });
 }
@@ -307,7 +340,7 @@ function frame(now: number): void {
   // Paused: no time builds up, so resuming doesn't burst through missed Ticks.
   const stepped = stepClock(clock, paused ? 0 : frameMs);
   clock = stepped.clock;
-  for (let i = 0; i < stepped.ticks; i++) advanceTick(match);
+  for (let i = 0; i < stepped.ticks; i++) step();
   if (stepped.ticks > 0) {
     view = getPlayerView(match, HUMAN);
     selection = pruneSelection(selection, view.units);
@@ -322,7 +355,8 @@ function frame(now: number): void {
   camera = scrollCamera(camera, scrollDirection(keys, edgeMouse, viewSize), cameraSeconds, viewSize, mapSize);
   const markerAge = moveMarker ? (now - moveMarker.at) / MOVE_MARKER_MS : 1;
   if (markerAge >= 1) moveMarker = null;
-  renderer.draw(view, camera, screen, layout, interpolationAlpha(clock), {
+  const drawn = peekPlayer === null ? view : getPlayerView(match, peekPlayer);
+  renderer.draw(drawn, camera, screen, layout, interpolationAlpha(clock), {
     selection,
     dragBox: drag && isDrag(drag.start, drag.now) ? { a: drag.start, b: drag.now } : null,
     moveMarker: moveMarker ? { cell: moveMarker.cell, age: Math.max(0, markerAge) } : null,
