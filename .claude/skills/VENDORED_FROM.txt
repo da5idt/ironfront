@@ -1,0 +1,6 @@
+Source: https://github.com/mattpocock/skills (MIT, see LICENSE-mattpocock-skills)
+Upstream commit: 5863806dd4e15c63174bee4e7515a4256792ecfa (2026-11-12)
+Skills vendored: 39 of 39 (38 via `npx skills@latest add mattpocock/skills --skill '*' --agent claude-code --copy`;
+software-factory copied by hand because the CLI skipped it)
+Update via a PR: npx skills@latest update, then re-run this check
+(every upstream folder holding a SKILL.md has a matching folder here).
