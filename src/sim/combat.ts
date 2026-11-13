@@ -2,7 +2,7 @@ import type { CommandResult } from "./commands";
 import { OK, reject } from "./commands";
 import { type BuildingSighting, isFootprintVisible, isVisible } from "./fog";
 import type { CommandHandler } from "./handlers";
-import { planMove, stepAlong, unitCell } from "./movement";
+import { claimedCells, freeCellNear, planMove, stepAlong, unitCell } from "./movement";
 import type { BuildingState, MatchState, UnitState } from "./state";
 import { cellIndex, ownUnits, removeBuilding } from "./state";
 import { BUILDING_STATS, UNIT_STATS, type WeaponStats } from "./tuning";
@@ -77,13 +77,37 @@ function clamp(v: number, lo: number, hi: number): number {
 }
 
 /**
- * The Cell a chasing Unit walks towards. A footprint Cell can't be stood on,
- * so the route ends beside it, on the side nearest the Unit.
+ * The Cell of the target a chasing Unit heads for: the target Unit's own, or
+ * the footprint Cell on the side nearest the Unit.
  */
-function chaseGoal(t: KnownTarget, from: Vec): CellPos {
+function targetCell(t: KnownTarget, from: Vec): CellPos {
   if (isUnit(t)) return unitCell(t);
   const p = aimPoint(t, from);
   return { x: Math.min(Math.floor(p.x), t.x + t.width - 1), y: Math.min(Math.floor(p.y), t.y + t.height - 1) };
+}
+
+/**
+ * The Cell a chasing Unit walks towards: the free Cell nearest the target that
+ * no other own Unit stands on or is heading for, so attackers fan out round
+ * the target instead of queueing up on one Cell. A footprint can't be stood
+ * on, so for a Building that is a Cell beside it. Units are handled in id
+ * order and each keeps its Cell while the target stays put, so it is stable.
+ */
+function chaseGoal(m: MatchState, u: UnitState, t: KnownTarget): CellPos {
+  const anchor = targetCell(t, u);
+  return freeCellNear(m, anchor, claimedCells(m, u.owner, [u])) ?? anchor;
+}
+
+/** True when another own Unit has already stopped in this Unit's Cell. */
+function sharesCellWithStopped(m: MatchState, u: UnitState): boolean {
+  const here = unitCell(u);
+  for (const v of m.units.values()) {
+    if (v === u || v.owner !== u.owner) continue;
+    const walking = v.order.type === "move" || (v.order.type === "attack" && v.order.chase !== null);
+    const c = unitCell(v);
+    if (!walking && c.x === here.x && c.y === here.y) return true;
+  }
+  return false;
 }
 
 function canFight(u: UnitState): boolean {
@@ -161,14 +185,22 @@ function pursue(m: MatchState, u: UnitState, order: Extract<UnitState["order"], 
     u.order = { type: "idle" };
     return;
   }
+  let goal: CellPos | null = null;
   if (inRange(u, target)) {
-    order.chase = null;
     // In range of a remembered Building that is gone: wait for the Fog of War
     // to show it gone (the next Tick, as range is within sight), which ends the order.
     if (isLive(m, target)) fire(m, u, u, UNIT_STATS[u.kind], target);
-    return;
+    // Attackers coming the same way reach range at the same spot, so a later
+    // one walks on (still firing) to a Cell of its own. When no free Cell in
+    // range is left it shares rather than walk out of range.
+    const arrived = order.chase !== null && order.chase.path.length === 0;
+    if (!arrived && sharesCellWithStopped(m, u)) goal = chaseGoal(m, u, target);
+    if (!goal || !inRange({ ...u, x: goal.x + 0.5, y: goal.y + 0.5 }, target)) {
+      order.chase = null;
+      return;
+    }
   }
-  const goal = chaseGoal(target, u);
+  goal ??= chaseGoal(m, u, target);
   if (!order.chase || order.chase.goal.x !== goal.x || order.chase.goal.y !== goal.y) {
     order.chase = planMove(m, u, goal);
   }

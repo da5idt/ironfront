@@ -2,7 +2,7 @@ import type { CommandResult } from "./commands";
 import { OK, reject } from "./commands";
 import type { CommandHandler } from "./handlers";
 import { freeCellAround } from "./building";
-import { groupGoals, orderMoveTo } from "./movement";
+import { claimedCells, freeCellNear, orderMoveTo } from "./movement";
 import type { BuildingState, MatchState, UnitState } from "./state";
 import { inBounds, spawnUnit } from "./state";
 import { TRAINING, UNIT_STATS } from "./tuning";
@@ -10,7 +10,7 @@ import type { BuildingKind, CellPos, EntityId, PlayerId, UnitKind } from "./type
 
 // Training: a Barracks or Vehicle Factory works through its own short queue of
 // Units. Credits are paid when a Unit is queued, so the queue never stalls for
-// money; only the first Unit in the queue makes progress.
+// lack of Credits; only the first Unit in the queue makes progress.
 
 /** What each Building can train, in panel order. Buildings not listed train nothing. */
 export const TRAINS: Readonly<Partial<Record<BuildingKind, readonly UnitKind[]>>> = {
@@ -66,7 +66,7 @@ export function trainUnits(m: MatchState): void {
 }
 
 /**
- * A new Unit walks to the rally point. A new Harvester is already harvesting
+ * A new Unit walks to the rally point, or the nearest free Cell to it. A new Harvester is already harvesting
  * (spawnUnit), and a rally point only steers it: it works the Ore nearest the
  * rally point rather than parking there, because an idle Harvester earns nothing.
  */
@@ -76,7 +76,9 @@ function sendToRallyPoint(m: MatchState, u: UnitState, rally: CellPos | null): v
     u.order.field = rally;
     return;
   }
-  const goal = groupGoals(m, [u], rally).get(u);
+  // Units arrive one at a time, so each takes the nearest Cell no own Unit
+  // stands on or is heading for, and a stream of them fills the spot around the rally point.
+  const goal = freeCellNear(m, rally, claimedCells(m, u.owner, [u]));
   if (goal) orderMoveTo(m, u, goal);
 }
 

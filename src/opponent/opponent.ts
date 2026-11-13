@@ -107,20 +107,7 @@ export function createOpponent(playerId: PlayerId, seed: number): Opponent {
       ...defend(view, army),
       ...attack(view, army),
       ...scout(view, army),
-      ...spreadOut(view, army),
     ];
-  }
-
-  /**
-   * New Units each walk to the rally point on their own and end up on the same
-   * Cell. A group move gives each its own Cell, so the army waiting at home
-   * spreads out rather than sitting in one heap.
-   */
-  function spreadOut(view: PlayerView, army: readonly UnitView[]): Command[] {
-    const waiting = withRole(army, "home").filter((u) => notes.get(u.id)!.still >= 1);
-    const cells = new Set(waiting.map((u) => `${Math.floor(u.x)},${Math.floor(u.y)}`));
-    if (cells.size === waiting.length) return [];
-    return [{ type: "move", unitIds: withRole(army, "home").map((u) => u.id), target: rallyPoint(view) }];
   }
 
   function withRole(army: readonly UnitView[], role: Role): UnitView[] {

@@ -228,6 +228,24 @@ describe("rally points", () => {
     expect([unit.x, unit.y]).toEqual([20.5, 12.5]);
   });
 
+  it("spread Units trained one after another over distinct Cells next to the rally point", () => {
+    const match = createMatch(openMap(30, 30), 1);
+    const barracks = building(match, 0, "barracks", 10, 10);
+    const rally = { x: 20, y: 12 };
+    // One of the person's Units already stands on the rally point itself.
+    const waiting = addTestUnit(match, 0, "rifleman", rally);
+    setTestCredits(match, 0, 10_000);
+    issueCommand(match, 0, { type: "setRallyPoint", buildingId: barracks, target: rally });
+    for (let i = 0; i < 4; i++) issueCommand(match, 0, { type: "train", buildingId: barracks, kind: "rifleman" });
+    run(match, 4 * RIFLEMAN.trainTicks + 15 * TICKS_PER_SECOND);
+    const units = ownUnits(match).filter((u) => u.kind === "rifleman" && Math.hypot(u.x - 20.5, u.y - 12.5) < 4);
+    expect(units).toHaveLength(5);
+    const cells = new Set(units.map((u) => `${Math.floor(u.x)},${Math.floor(u.y)}`));
+    expect(cells.size).toBe(5);
+    expect(units.find((u) => u.id === waiting)).toMatchObject({ x: 20.5, y: 12.5 });
+    for (const u of units) expect(Math.hypot(u.x - 20.5, u.y - 12.5)).toBeLessThanOrEqual(1.5);
+  });
+
   it("keep an enemy Building's queue and rally point out of the other Player's view", () => {
     const match = createMatch(openMap(30, 30), 1);
     const barracks = building(match, 0, "barracks", 25, 22);

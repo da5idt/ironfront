@@ -11,7 +11,7 @@ import {
   type UnitView,
 } from "./index";
 import { openMap, testMap } from "./testing/maps";
-import { addTestBuilding } from "./testing/setup";
+import { addTestBuilding, addTestUnit } from "./testing/setup";
 
 const unit = (match: Match, id: number): UnitView => getPlayerView(match, 0).units.find((u) => u.id === id)!;
 const cellOf = (u: UnitView) => ({ x: Math.floor(u.x), y: Math.floor(u.y) });
@@ -192,6 +192,19 @@ describe("group moves", () => {
     expect(new Set(cells.map((c) => `${c.x},${c.y}`)).size).toBe(3);
     for (const c of cells) expect(Math.max(Math.abs(c.x - target.x), Math.abs(c.y - target.y))).toBeLessThanOrEqual(1);
     expect(cells).toContainEqual(target);
+  });
+
+  it("keep off Cells other own Units already stand on, so a second group joins the first without stacking", () => {
+    const match = createMatch(openMap(24, 24), 1);
+    const target = { x: 12, y: 12 };
+    const first = [addTestUnit(match, 0, "rifleman", target), addTestUnit(match, 0, "rifleman", { x: 13, y: 12 })];
+    const group = getPlayerView(match, 0).units.filter((u) => u.owner === 0 && !first.includes(u.id));
+    issueCommand(match, 0, { type: "move", unitIds: group.map((u) => u.id), target });
+    run(match, 20 * TICKS_PER_SECOND);
+    const cells = getPlayerView(match, 0)
+      .units.filter((u) => u.owner === 0)
+      .map((u) => `${cellOf(u).x},${cellOf(u).y}`);
+    expect(new Set(cells).size).toBe(cells.length);
   });
 
   it("spreads around a target that is itself blocked", () => {
