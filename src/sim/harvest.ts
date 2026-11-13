@@ -2,6 +2,7 @@ import type { CommandResult } from "./commands";
 import { OK, reject } from "./commands";
 import type { CommandHandler } from "./handlers";
 import { type MovePlan, matchGrid, planMove, stepAlong, unitCell } from "./movement";
+import { visibilityAt } from "./fog";
 import { nearestReachable } from "./pathfinding";
 import type { BuildingState, MatchState, UnitState } from "./state";
 import { cellIndex, inBounds, ownUnits } from "./state";
@@ -19,6 +20,7 @@ import type { CellPos, EntityId, PlayerId } from "./types";
 type HarvestStep =
   | { readonly kind: "findOre"; readonly waitTicks: number }
   | { readonly kind: "toOre"; readonly plan: MovePlan }
+  | { readonly kind: "toField"; readonly plan: MovePlan }
   | { readonly kind: "dig" }
   | { readonly kind: "findRefinery"; readonly waitTicks: number }
   | { readonly kind: "toRefinery"; readonly plan: MovePlan; readonly refineryId: EntityId }
@@ -41,6 +43,19 @@ export function startHarvesting(): HarvestOrder {
 
 function oreAt(m: MatchState, cell: CellPos): number {
   return m.ore[cellIndex(m, cell.x, cell.y)]!;
+}
+
+/**
+ * True for a Cell with Ore that the Player has explored. A Harvester looking
+ * for Ore by itself only goes where its Player has been, so it can't find a
+ * field through Fog of War; a harvest Command may still name any Ore Cell.
+ */
+function knownOre(m: MatchState, owner: PlayerId, x: number, y: number): boolean {
+  return m.ore[cellIndex(m, x, y)]! > 0 && explored(m, owner, { x, y });
+}
+
+function explored(m: MatchState, owner: PlayerId, cell: CellPos): boolean {
+  return visibilityAt(m.fog[owner], cellIndex(m, cell.x, cell.y)) !== "unexplored";
 }
 
 /** The Player's Refinery touching the Cell (sides or corners), if any. */
@@ -69,10 +84,18 @@ function nextStep(m: MatchState, u: UnitState, order: HarvestOrder): HarvestStep
   switch (step.kind) {
     case "findOre": {
       if (step.waitTicks > 0) return { kind: "findOre", waitTicks: step.waitTicks - 1 };
-      const ore = nearestReachable(matchGrid(m), order.field ?? unitCell(u), (x, y) => m.ore[cellIndex(m, x, y)]! > 0);
+      // Sent towards ground nobody has seen (a rally point): go and look first.
+      if (order.field && !explored(m, u.owner, order.field)) return { kind: "toField", plan: planMove(m, u, order.field) };
+      const ore = nearestReachable(matchGrid(m), order.field ?? unitCell(u), (x, y) => knownOre(m, u.owner, x, y));
       if (ore) return { kind: "toOre", plan: planMove(m, u, ore) };
       // Nothing left to dig: bank what is carried rather than sit on it.
       return u.cargo > 0 ? { kind: "findRefinery", waitTicks: 0 } : { kind: "findOre", waitTicks: retry };
+    }
+    case "toField": {
+      if (stepAlong(m, u, step.plan) === "moving") return step;
+      // There, or as close as it can get: look for Ore from here, which is now explored.
+      order.field = unitCell(u);
+      return { kind: "findOre", waitTicks: 0 };
     }
     case "toOre": {
       if (oreAt(m, step.plan.goal) === 0) return { kind: "findOre", waitTicks: 0 };

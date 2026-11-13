@@ -11,6 +11,7 @@ import {
   type UnitView,
 } from "./index";
 import { testMap } from "./testing/maps";
+import { addTestUnit } from "./testing/setup";
 
 function run(match: Match, ticks: number): void {
   for (let t = 0; t < ticks; t++) advanceTick(match);
@@ -72,6 +73,23 @@ describe("harvesting Ore", () => {
     expect(ore()[far]).toBeLessThan(ECONOMY.orePerCell);
     expect(getPlayerView(match, 0).credits).toBeGreaterThanOrEqual(ECONOMY.startingCredits + ECONOMY.orePerCell);
     expect(getPlayerView(match, 1).credits).toBe(ECONOMY.startingCredits);
+  });
+});
+
+describe("harvesting under Fog of War", () => {
+  it("a Harvester left alone looks for Ore only where its Player has explored", () => {
+    // The only Ore is far up the top row, Unexplored by Player 0; a rock wall keeps Player 1 away.
+    const rows = Array.from({ length: 20 }, (_, y) =>
+      y === 1 ? ".".repeat(30) + "*" + ".".repeat(9) : y === 10 ? "#".repeat(40) : ".".repeat(40),
+    );
+    const match = createMatch(testMap(rows), 1);
+    const start = harvester(match);
+    run(match, 10 * TICKS_PER_SECOND);
+    expect(harvester(match)).toMatchObject({ x: start.x, y: start.y });
+    // Once a scout has seen the Ore, the Harvester goes and digs it.
+    addTestUnit(match, 0, "rifleman", { x: 28, y: 3 });
+    run(match, 30 * TICKS_PER_SECOND);
+    expect(harvester(match).cargo).toBeGreaterThan(0);
   });
 });
 

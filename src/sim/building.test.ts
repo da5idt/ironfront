@@ -142,6 +142,8 @@ describe("a new Refinery", () => {
       y === 10 || y === 11 ? "......****" + ".".repeat(20) : ".".repeat(30),
     );
     const match = createMatch(testMap(rows), 1);
+    // Harvesters only look for Ore their Player has seen, so a Rifleman stands by the field.
+    addTestUnit(match, 0, "rifleman", { x: 8, y: 13 });
     issueCommand(match, 0, { type: "startBuilding", kind: "refinery" });
     run(match, BUILDING_STATS.refinery.buildTicks);
     const before = getPlayerView(match, 0).units.filter((u) => u.kind === "harvester").map((u) => u.id);
