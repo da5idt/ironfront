@@ -133,6 +133,20 @@ describe("the attack Command", () => {
   });
 });
 
+describe("shots under Fog of War", () => {
+  it("show a hidden shooter's shot only as an impact, never where it came from", () => {
+    const match = createMatch(openMap(20, 20), 1);
+    // The Harvester sees 3 Cells; the Raider fires from 4 away, out of its sight.
+    const harvester = addTestUnit(match, 0, "harvester", { x: 5, y: 10 });
+    const raider = addTestUnit(match, 1, "raider", { x: 9, y: 10 });
+    expect(issueCommand(match, 1, { type: "attack", unitIds: [raider], targetId: harvester })).toEqual({ ok: true });
+    run(match, 1);
+    expect(getPlayerView(match, 0).units.some((u) => u.id === raider)).toBe(false);
+    expect(getPlayerView(match, 0).shots).toEqual([{ fromX: 5.5, fromY: 10.5, toX: 5.5, toY: 10.5, tick: 0 }]);
+    expect(getPlayerView(match, 1).shots).toEqual([{ fromX: 9.5, fromY: 10.5, toX: 5.5, toY: 10.5, tick: 0 }]);
+  });
+});
+
 describe("attacking only what the Player can see", () => {
   it("rejects an attack on an enemy Unit out of sight, changing nothing", () => {
     const match = createMatch(openMap(20, 20), 1);

@@ -1,5 +1,12 @@
 import { productionView, type ProductionView } from "./building";
-import { type BuildingSighting, isFootprintVisible, isVisible, type Visibility, visibilityAt } from "./fog";
+import {
+  type BuildingSighting,
+  isFootprintVisible,
+  isVisible,
+  type PlayerFog,
+  type Visibility,
+  visibilityAt,
+} from "./fog";
 import { cellIndex, type MatchState } from "./state";
 import { type TrainingView, trainingView } from "./training";
 import { BUILDING_STATS, UNIT_STATS } from "./tuning";
@@ -76,7 +83,13 @@ export interface PlayerView {
   readonly map: MapView;
   readonly units: readonly UnitView[];
   readonly buildings: readonly BuildingView[];
-  /** Shots fired during the last Tick, for drawing tracers. */
+  /**
+   * Shots fired during the last Tick, for drawing tracers, under Fog of War:
+   * a shot fired from a Visible Cell is shown whole; one fired from out of
+   * sight that lands in a Visible Cell is shown as its impact alone (from =
+   * to), so the person sees the hit but not where it came from; any other
+   * shot is left out.
+   */
   readonly shots: readonly ShotView[];
   /** What this Player's HQ is building, or null when it is free. */
   readonly production: ProductionView | null;
@@ -106,6 +119,17 @@ function buildingView(b: BuildingSighting, remembered: boolean, training: Traini
     remembered,
     training,
   };
+}
+
+/** The shots a Player may see; the rule is on PlayerView.shots. */
+function visibleShots(m: MatchState, fog: PlayerFog): ShotView[] {
+  const seen = (x: number, y: number) => isVisible(fog, cellIndex(m, Math.floor(x), Math.floor(y)));
+  const shots: ShotView[] = [];
+  for (const s of m.shots) {
+    if (seen(s.fromX, s.fromY)) shots.push({ ...s });
+    else if (seen(s.toX, s.toY)) shots.push({ ...s, fromX: s.toX, fromY: s.toY });
+  }
+  return shots;
 }
 
 export function buildPlayerView(m: MatchState, playerId: PlayerId): PlayerView {
@@ -145,11 +169,11 @@ export function buildPlayerView(m: MatchState, playerId: PlayerId): PlayerView {
       terrain: m.terrain.slice(),
       // Ore can change between Ticks (a harvest Command), so Visible Cells read it live.
       ore: m.ore.map((amount, i) => (isVisible(fog, i) ? amount : fog.ore[i]!)),
-      visibility: Array.from(m.fog[playerId].cells, (_, i) => visibilityAt(m.fog[playerId], i)),
+      visibility: Array.from(fog.cells, (_, i) => visibilityAt(fog, i)),
     },
     units,
     buildings,
-    shots: m.shots.map((s) => ({ ...s })),
+    shots: visibleShots(m, fog),
     production: productionView(m, playerId),
   };
 }
