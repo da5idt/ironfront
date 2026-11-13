@@ -8,6 +8,7 @@ import {
   issueCommand,
   type Match,
   type MatchStatus,
+  OPPONENT,
   type PlayerId,
   TICKS_PER_SECOND,
 } from "../sim";
@@ -87,6 +88,22 @@ describe("Computer Opponent scouting and defence on Riverford", () => {
     expect(known.length).toBeGreaterThan(0);
   });
 
+  it("then explores round its own base, so it knows every Ore Field near home within four minutes", () => {
+    const match = createMatch(RIVERFORD, 7);
+    play(match, [{ player: 1, opponent: createOpponent(1, 7) }], 4 * MINUTES);
+    const { map } = getPlayerView(match, 1);
+    // Player 1's HQ centre is (58,58); its side of the river holds four Ore Fields within 28 Cells.
+    const unseenOre: number[] = [];
+    for (let i = 0; i < map.terrain.length; i++) {
+      const x = i % map.width;
+      const y = Math.floor(i / map.width);
+      if (Math.hypot(x - 58, y - 58) <= OPPONENT.homeExploreRadius && RIVERFORD.rows[y]![x] === "*") {
+        if (map.visibility[i] === "unexplored") unseenOre.push(i);
+      }
+    }
+    expect(unseenOre).toEqual([]);
+  });
+
   it("turns its army on enemy Units shooting at its base", () => {
     const match = createMatch(RIVERFORD, 7);
     const opponent = createOpponent(1, 7);
@@ -101,6 +118,21 @@ describe("Computer Opponent scouting and defence on Riverford", () => {
     const left = getPlayerView(match, 1).units.filter((u) => raiders.includes(u.id));
     expect(left).toEqual([]);
   });
+});
+
+describe("Computer Opponent against itself on Riverford", () => {
+  it("one side wins within thirty minutes; neither economy starves into a stalemate", () => {
+    const match = createMatch(RIVERFORD, 3);
+    play(
+      match,
+      [
+        { player: 0, opponent: createOpponent(0, 11) },
+        { player: 1, opponent: createOpponent(1, 12) },
+      ],
+      30 * MINUTES,
+    );
+    expect(getMatchStatus(match).state).toBe("victory");
+  }, 60_000);
 });
 
 describe("Computer Opponent determinism", () => {

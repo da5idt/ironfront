@@ -10,7 +10,6 @@ import {
   TRAINS,
   UNIT_STATS,
   type UnitKind,
-  type UnitView,
 } from "../sim";
 import { findBuildSite } from "./buildSite";
 
@@ -136,7 +135,24 @@ export function buildCommands(view: PlayerView, placeFailures: { count: number }
   }
   if (production || !ownBuildings(view).some((b) => b.kind === "hq")) return [];
   const kind = nextBuilding(ownBuildings(view));
-  return kind && view.credits >= BUILDING_STATS[kind].cost ? [{ type: "startBuilding", kind }] : [];
+  if (!kind) return [];
+  // Short of Harvesters, the HQ leaves enough for one: Ore pays for everything else.
+  const held = kind === "vehicleFactory" || kind === "refinery" ? 0 : harvesterHoldBack(view);
+  return view.credits - held >= BUILDING_STATS[kind].cost ? [{ type: "startBuilding", kind }] : [];
+}
+
+function harvestersWanted(view: PlayerView): number {
+  return Math.min(OPPONENT.mostHarvesters, count(ownBuildings(view), "refinery") * OPPONENT.harvestersPerRefinery);
+}
+
+/**
+ * Credits kept back for a Harvester while the Opponent has fewer than it wants
+ * and a Vehicle Factory to train one, so army and Turrets never spend the
+ * economy into a corner it cannot climb out of.
+ */
+function harvesterHoldBack(view: PlayerView): number {
+  const short = owned(view, "harvester") < harvestersWanted(view);
+  return short && count(ownBuildings(view), "vehicleFactory") > 0 ? UNIT_STATS.harvester.cost : 0;
 }
 
 /** Units of a kind the Player has, counting those queued. */
@@ -157,11 +173,11 @@ export function trainCommands(view: PlayerView): Command[] {
   const riflemen = owned(view, "rifleman");
   const raiders = owned(view, "raider");
   const wants: UnitKind[] = [];
-  const harvestersWanted = Math.min(OPPONENT.mostHarvesters, count(own, "refinery") * OPPONENT.harvestersPerRefinery);
-  if (owned(view, "harvester") < harvestersWanted) wants.push("harvester");
+  if (owned(view, "harvester") < harvestersWanted(view)) wants.push("harvester");
   if (riflemen + raiders < OPPONENT.mostArmy) wants.push(...(raiders * 2 < riflemen ? RAIDER_FIRST : RIFLEMAN_FIRST));
-  // A Harvester pays for itself, so it may spend what the build order holds back.
-  const reserve = buildReserve(view);
+  // A Harvester pays for itself, so it may spend what the build order holds back;
+  // everything else leaves a Harvester's worth while Harvesters are short.
+  const reserve = buildReserve(view) + harvesterHoldBack(view);
   let spent = 0;
   const commands: Command[] = [];
   for (const kind of wants) {
@@ -186,18 +202,4 @@ export function rallyCommands(view: PlayerView): Command[] {
   return ownBuildings(view)
     .filter((b) => b.training && (b.training.rallyPoint?.x !== target.x || b.training.rallyPoint?.y !== target.y))
     .map((b) => ({ type: "setRallyPoint", buildingId: b.id, target }));
-}
-
-/** Thinks a Harvester may stand still with the same load before it counts as idle. */
-const IDLE_THINKS = 6;
-
-/** Sends Harvesters that stopped working back to the nearest Ore the Opponent knows of. */
-export function harvestCommands(view: PlayerView, stillFor: (u: UnitView) => number): Command[] {
-  const commands: Command[] = [];
-  for (const u of view.units) {
-    if (u.owner !== view.playerId || u.kind !== "harvester" || stillFor(u) < IDLE_THINKS) continue;
-    const ore = nearestOre(view, u);
-    if (ore) commands.push({ type: "harvest", unitIds: [u.id], target: ore });
-  }
-  return commands;
 }

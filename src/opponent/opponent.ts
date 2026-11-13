@@ -6,21 +6,16 @@ import {
   createRng,
   type EntityId,
   nextInt,
+  OPPONENT,
   type PlayerId,
   type PlayerView,
   type Rng,
   UNIT_STATS,
   type UnitView,
+  type Vec,
 } from "../sim";
-import {
-  buildCommands,
-  harvestCommands,
-  hqCentre,
-  ownBuildings,
-  rallyCommands,
-  rallyPoint,
-  trainCommands,
-} from "./economy";
+import { buildCommands, hqCentre, ownBuildings, rallyCommands, rallyPoint, trainCommands } from "./economy";
+import { type DangerMemory, harvestCommands, rememberDanger } from "./harvesting";
 import { chooseTarget, distanceTo, nearest, waveReady, waveThreshold } from "./tactics";
 
 // The Computer Opponent. It plays by the person's rules: it reads only its own
@@ -80,6 +75,12 @@ export function createOpponent(playerId: PlayerId, seed: number): Opponent {
   let lastWaveTick: number | null = null;
   let wave: Wave | null = null;
   let scoutGoal: CellPos | null = null;
+  /** Home Cells the scout could not reach, as indexes, so it stops trying them. */
+  const unreachable = new Set<number>();
+  /** Set once nothing near home is left to explore, so the Map isn't scanned every think. */
+  let homeExplored = false;
+  const danger: DangerMemory = new Map();
+  const fields = new Map<EntityId, CellPos>();
 
   function note(u: UnitView): UnitNotes {
     let n = notes.get(u.id);
@@ -101,14 +102,16 @@ export function createOpponent(playerId: PlayerId, seed: number): Opponent {
     const own = view.units.filter((u) => u.owner === playerId);
     const alive = new Set(own.map((u) => u.id));
     for (const id of notes.keys()) if (!alive.has(id)) notes.delete(id);
+    for (const id of fields.keys()) if (!alive.has(id)) fields.delete(id);
     for (const u of own) note(u);
+    rememberDanger(danger, view);
     const army = own.filter((u) => UNIT_STATS[u.kind].damage > 0);
 
     return [
       ...buildCommands(view, placeFailures),
       ...trainCommands(view),
       ...rallyCommands(view),
-      ...harvestCommands(view, (u) => notes.get(u.id)!.still),
+      ...harvestCommands(view, danger, fields, (u) => notes.get(u.id)!.still),
       ...defend(view, army),
       ...attack(view, army),
       ...scout(view, army),
@@ -211,13 +214,23 @@ export function createOpponent(playerId: PlayerId, seed: number): Opponent {
     return [...commands, ...attackOrders(view, inWave, (u) => chooseTarget(view, u))];
   }
 
-  /** While no enemy Building is known, one Unit walks into the unknown: first the far corner, then anywhere unexplored. */
+  /**
+   * One Unit walks into the unknown. While no enemy Building is known it looks
+   * for the other base: first the far corner, then anywhere unexplored. Once
+   * the base is found it sweeps the ground round its own HQ, always on to the
+   * unexplored Cell nearest itself, so the Harvesters know every Ore Field near
+   * home before the first one runs dry.
+   */
   function scout(view: PlayerView, army: readonly UnitView[]): Command[] {
     const scouts = withRole(army, "scout");
-    if (view.buildings.some((b) => b.owner !== playerId)) {
+    const enemyKnown = view.buildings.some((b) => b.owner !== playerId);
+    if (enemyKnown && (homeExplored || !unexploredNearHome(view, unreachable, hqCentre(view)))) {
+      homeExplored = true;
       scoutGoal = null;
       return sendHome(view, scouts);
     }
+    // The enemy base was just found: stop heading for it.
+    if (enemyKnown && scoutGoal && !isNearHome(view, scoutGoal)) scoutGoal = null;
     let scoutUnit = scouts[0];
     if (!scoutUnit) {
       // The fastest Unit at home; ties to the lowest id.
@@ -231,9 +244,16 @@ export function createOpponent(playerId: PlayerId, seed: number): Opponent {
     }
     const n = notes.get(scoutUnit.id)!;
     // A goal is done once seen (sight reaches it before the Unit does), or given up when the Unit is stuck.
-    if (scoutGoal && !explored(view, scoutGoal) && n.still < STUCK_THINKS) return [];
-    const far = farCorner(view);
-    scoutGoal = scoutGoal === null && !explored(view, far) ? far : unexploredCell(view, rng);
+    if (scoutGoal && !explored(view, scoutGoal)) {
+      if (n.still < STUCK_THINKS) return [];
+      if (enemyKnown) unreachable.add(cellIndexIn(view.map, scoutGoal.x, scoutGoal.y));
+    }
+    if (enemyKnown) {
+      scoutGoal = unexploredNearHome(view, unreachable, scoutUnit);
+    } else {
+      const far = farCorner(view);
+      scoutGoal = scoutGoal === null && !explored(view, far) ? far : unexploredCell(view, rng);
+    }
     if (!scoutGoal) return [];
     n.still = 0;
     return [{ type: "move", unitIds: [scoutUnit.id], target: scoutGoal }];
@@ -270,6 +290,34 @@ function stepToward(
 
 function explored(view: PlayerView, c: CellPos): boolean {
   return view.map.visibility[cellIndexIn(view.map, c.x, c.y)] !== "unexplored";
+}
+
+function isNearHome(view: PlayerView, c: CellPos): boolean {
+  const hq = hqCentre(view);
+  return Math.hypot(c.x - hq.x, c.y - hq.y) <= OPPONENT.homeExploreRadius;
+}
+
+/**
+ * The walkable Unexplored Cell within OPPONENT.homeExploreRadius of the HQ that
+ * is nearest `from`, skipping `skip`; ties to the top-most, then left-most.
+ * Null once home is explored.
+ */
+function unexploredNearHome(view: PlayerView, skip: ReadonlySet<number>, from: Vec): CellPos | null {
+  const { width, terrain, visibility } = view.map;
+  const hq = hqCentre(view);
+  let best: CellPos | null = null;
+  let bestD = Infinity;
+  for (let i = 0; i < visibility.length; i++) {
+    if (visibility[i] !== "unexplored" || skip.has(i) || (terrain[i] !== "open" && terrain[i] !== "rough")) continue;
+    const c = { x: i % width, y: Math.floor(i / width) };
+    if (Math.hypot(c.x - hq.x, c.y - hq.y) > OPPONENT.homeExploreRadius) continue;
+    const d = Math.hypot(c.x + 0.5 - from.x, c.y + 0.5 - from.y);
+    if (d < bestD) {
+      best = c;
+      bestD = d;
+    }
+  }
+  return best;
 }
 
 /** The corner opposite the HQ: on a two-Player Map the likeliest place for the other base. */

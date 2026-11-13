@@ -178,6 +178,12 @@ export const OPPONENT = {
   mostArmy: 40,
   /** Units each training Building keeps queued; a short queue keeps Credits free for the build order. */
   queueDepth: 2,
+  /** Ore within this many Cells of an enemy fighter seen lately is unsafe for Harvesters. */
+  dangerRadius: 8,
+  /** How long a sighting of an enemy fighter keeps ground unsafe. */
+  dangerTicks: 60 * TICKS_PER_SECOND,
+  /** Once the enemy base is found, the scout explores everything this many Cells from the HQ, looking for Ore. */
+  homeExploreRadius: 28,
 } as const;
 
 export const TRAINING = {
