@@ -1,0 +1,29 @@
+name: door-gate
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, edited]
+permissions:
+  contents: read
+  pull-requests: write
+jobs:
+  door-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - run: pip install pyyaml
+      - id: classify
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+        run: python3 tools/door_gate.py "$BASE" "$HEAD" | tee -a "$GITHUB_STEP_SUMMARY"
+      - name: Label the PR
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DOOR: ${{ steps.classify.outputs.door }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          other=$([ "$DOOR" = one-way ] && echo two-way || echo one-way)
+          gh pr edit "$PR" --repo "$GITHUB_REPOSITORY" --add-label "$DOOR-door" --remove-label "$other-door"

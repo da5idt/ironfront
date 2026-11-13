@@ -1,0 +1,36 @@
+human: da5idt                  # merges one-way doors; posts door-review comments
+timezone: America/Chicago
+merge_window: [0, 24]          # local hours [start, end) when auto-merge may merge; da5idt chose any time
+merge_method: squash
+caps: {specs: 1, subagents: 4, minutes_per_run: 60}
+freeze_command: ""             # optional; non-zero exit = frozen (fails closed)
+# Strictest signal wins: any match makes the PR a one-way door.
+one_way_paths:                 # regexes on changed file paths
+  # The workflow itself: CI, door rules, house rules, skills
+  - ^\.github/
+  - ^tools/
+  - ^\.claude/
+  - ^CLAUDE\.md$
+  - ^CODING_STANDARDS\.md$
+  - ^docs/agents/
+  - ^docs/workflow\.md$
+  # Dependencies and lockfiles
+  - (^|/)package(-lock)?\.json$
+  - (^|/)(pnpm-lock\.yaml|yarn\.lock|bun\.lockb?|skills-lock\.json)$
+  - (^|/)(Cargo\.(toml|lock)|go\.(mod|sum)|pyproject\.toml|uv\.lock|requirements[^/]*\.txt)$
+  # Build and deploy config
+  - (^|/)(vite|webpack|rollup|esbuild|tsconfig)[^/]*\.(js|mjs|cjs|ts|json)$
+  - (^|/)Dockerfile$
+  - ^deploy/
+  # Save-game and map file formats (existing saves could break)
+  - (^|/)(save|saves|save-format|schemas?)/
+  - \.schema\.json$
+  # Legal text and third-party assets
+  - ^LICENSE
+  - ^README\.md$
+  - (^|/)(assets|sprites|audio|sounds?|music|fonts)/
+  - \.(png|jpe?g|gif|webp|svg|wav|ogg|mp3|flac|ttf|otf|woff2?)$
+one_way_content:               # name: regex on added/removed lines
+  network: \bfetch\(|XMLHttpRequest|WebSocket|sendBeacon|EventSource|RTCPeerConnection
+  telemetry: \b(analytics|telemetry|tracking)\b
+removed_id_pattern: ""         # optional regex with one group; removing an id not re-added = a deletion

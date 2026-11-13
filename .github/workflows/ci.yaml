@@ -1,0 +1,23 @@
+name: ci
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: actionlint (workflow bugs review would otherwise catch by hand)
+        run: |
+          bash <(curl -fsSL https://raw.githubusercontent.com/rhysd/actionlint/v1.7.7/scripts/download-actionlint.bash) 1.7.7
+          ./actionlint -color
+      - name: door_gate.py compiles
+        run: python3 -m py_compile tools/door_gate.py tools/auto_merge.py
+      - run: pip install pyyaml
+      - name: door_gate.py classifies the door table correctly
+        run: python3 -m unittest discover -s tests -v 2>&1 | tee -a "$GITHUB_STEP_SUMMARY"
+      # Game lint / typecheck / test steps arrive with the first game spec, which picks the stack.
+      # Print anything an agent must read to $GITHUB_STEP_SUMMARY and as ::error annotations.
