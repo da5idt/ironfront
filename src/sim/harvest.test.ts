@@ -114,9 +114,15 @@ describe("the harvest Command", () => {
   const FAR = 6 * 20 + 15;
   const riflemen = (match: Match) =>
     getPlayerView(match, 0).units.filter((u) => u.owner === 0 && u.kind === "rifleman");
+  /** The far field starts Unexplored; a Rifleman standing by it lets Player 0 order Harvesters there. */
+  const scoutFarField = (match: Match) => {
+    addTestUnit(match, 0, "rifleman", { x: 15, y: 4 });
+    advanceTick(match);
+  };
 
   it("sends a Harvester to dig at the chosen Ore Cell instead of the nearest", () => {
     const match = createMatch(TWO_FIELDS, 1);
+    scoutFarField(match);
     const h = harvester(match);
     expect(issueCommand(match, 0, { type: "harvest", unitIds: [h.id], target: { x: 15, y: 6 } })).toEqual({ ok: true });
     run(match, 30 * TICKS_PER_SECOND);
@@ -127,6 +133,7 @@ describe("the harvest Command", () => {
 
   it("ignores other Units in the Command, which carry on as they were", () => {
     const match = createMatch(TWO_FIELDS, 1);
+    scoutFarField(match);
     const h = harvester(match);
     const r = riflemen(match)[0]!;
     expect(issueCommand(match, 0, { type: "harvest", unitIds: [h.id, r.id], target: { x: 15, y: 6 } }).ok).toBe(true);
@@ -149,6 +156,16 @@ describe("the harvest Command", () => {
     expect(harvest(riflemen(match).map((u) => u.id), 15, 6)).toBe(false);
     expect(harvest([999], 15, 6)).toBe(false);
     expect(JSON.stringify(getPlayerView(match, 0))).toBe(before);
+  });
+
+  it("rejects Ore Cells the Player hasn't explored, so the answer can't reveal hidden Ore", () => {
+    const rows = Array.from({ length: 40 }, (_, y) => (y === 30 ? ".".repeat(30) + "*" + ".".repeat(9) : ".".repeat(40)));
+    const match = createMatch(testMap(rows), 1);
+    const h = harvester(match);
+    const withOre = issueCommand(match, 0, { type: "harvest", unitIds: [h.id], target: { x: 30, y: 30 } });
+    const without = issueCommand(match, 0, { type: "harvest", unitIds: [h.id], target: { x: 29, y: 30 } });
+    expect(withOre).toEqual(without);
+    expect(withOre.ok).toBe(false);
   });
 
   it("a Harvester given a move Command stops harvesting until told to harvest again", () => {

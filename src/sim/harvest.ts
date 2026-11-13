@@ -48,7 +48,8 @@ function oreAt(m: MatchState, cell: CellPos): number {
 /**
  * True for a Cell with Ore that the Player has explored. A Harvester looking
  * for Ore by itself only goes where its Player has been, so it can't find a
- * field through Fog of War; a harvest Command may still name any Ore Cell.
+ * field through Fog of War. A harvest Command is held to the same rule, so its
+ * answer can't be used to probe for Ore under Unexplored ground.
  */
 function knownOre(m: MatchState, owner: PlayerId, x: number, y: number): boolean {
   return m.ore[cellIndex(m, x, y)]! > 0 && explored(m, owner, { x, y });
@@ -151,7 +152,8 @@ export const handleHarvest: CommandHandler<"harvest"> = (m, player, command): Co
   const harvesters = ownUnits(m, player, command.unitIds).filter((u) => u.kind === "harvester");
   if (harvesters.length === 0) return reject("no own Harvesters selected");
   const { target } = command;
-  if (!inBounds(m, target.x, target.y) || oreAt(m, target) === 0) return reject("no Ore there");
+  if (!inBounds(m, target.x, target.y) || !explored(m, player, target)) return reject("that Cell is unexplored");
+  if (oreAt(m, target) === 0) return reject("no Ore there");
   for (const u of harvesters) {
     u.order = { type: "harvest", step: { kind: "toOre", plan: planMove(m, u, target) }, field: target };
   }
