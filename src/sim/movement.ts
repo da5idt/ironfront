@@ -108,18 +108,34 @@ export function groupGoals(m: MatchState, units: readonly UnitState[], target: C
   return goals;
 }
 
+/** Where the Unit is walking to, or null when it is standing. */
+export function walkingTo(u: UnitState): CellPos | null {
+  if (u.order.type === "move") return u.order.plan.goal;
+  if (u.order.type === "attack") return u.order.chase?.goal ?? null;
+  return null;
+}
+
 /**
  * Cells the Player's Units have a claim on, as cellIndex values: where each is
- * walking to, or where it stands when it isn't walking. Units joining a spot
- * (a group move, a rally point, an attack) keep off these so they don't stack.
+ * walking to, or, for one standing, every Cell whose centre is less than a Cell
+ * from it (one standing between Cells, as an attacker that stopped in range
+ * may, overlaps its neighbours). Units joining a spot (a group move, a rally
+ * point, an attack) keep off these so they don't stack.
  */
 export function claimedCells(m: MatchState, player: PlayerId, except: readonly UnitState[] = []): Set<number> {
   const claimed = new Set<number>();
   for (const v of m.units.values()) {
     if (v.owner !== player || except.includes(v)) continue;
-    const goal = v.order.type === "move" ? v.order.plan.goal : v.order.type === "attack" ? v.order.chase?.goal : null;
-    const c = goal ?? unitCell(v);
-    claimed.add(cellIndex(m, c.x, c.y));
+    const goal = walkingTo(v);
+    if (goal) {
+      claimed.add(cellIndex(m, goal.x, goal.y));
+      continue;
+    }
+    for (let y = Math.floor(v.y - 0.5); y <= Math.floor(v.y + 0.5); y++) {
+      for (let x = Math.floor(v.x - 0.5); x <= Math.floor(v.x + 0.5); x++) {
+        if (inBounds(m, x, y) && Math.hypot(x + 0.5 - v.x, y + 0.5 - v.y) < 1) claimed.add(cellIndex(m, x, y));
+      }
+    }
   }
   return claimed;
 }

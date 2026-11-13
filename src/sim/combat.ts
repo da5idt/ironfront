@@ -2,7 +2,7 @@ import type { CommandResult } from "./commands";
 import { OK, reject } from "./commands";
 import { type BuildingSighting, isFootprintVisible, isVisible } from "./fog";
 import type { CommandHandler } from "./handlers";
-import { claimedCells, freeCellNear, planMove, stepAlong, unitCell } from "./movement";
+import { claimedCells, freeCellNear, planMove, stepAlong, unitCell, walkingTo } from "./movement";
 import type { BuildingState, MatchState, UnitState } from "./state";
 import { cellIndex, ownUnits, removeBuilding } from "./state";
 import { BUILDING_STATS, UNIT_STATS, type WeaponStats } from "./tuning";
@@ -98,14 +98,10 @@ function chaseGoal(m: MatchState, u: UnitState, t: KnownTarget): CellPos {
   return freeCellNear(m, anchor, claimedCells(m, u.owner, [u])) ?? anchor;
 }
 
-/** True when another own Unit has already stopped in this Unit's Cell. */
-function sharesCellWithStopped(m: MatchState, u: UnitState): boolean {
-  const here = unitCell(u);
+/** True when another own Unit is standing less than a Cell from this one, so they would overlap. */
+function crowdsStanding(m: MatchState, u: UnitState): boolean {
   for (const v of m.units.values()) {
-    if (v === u || v.owner !== u.owner) continue;
-    const walking = v.order.type === "move" || (v.order.type === "attack" && v.order.chase !== null);
-    const c = unitCell(v);
-    if (!walking && c.x === here.x && c.y === here.y) return true;
+    if (v !== u && v.owner === u.owner && !walkingTo(v) && Math.hypot(v.x - u.x, v.y - u.y) < 1) return true;
   }
   return false;
 }
@@ -194,7 +190,7 @@ function pursue(m: MatchState, u: UnitState, order: Extract<UnitState["order"], 
     // one walks on (still firing) to a Cell of its own. When no free Cell in
     // range is left it shares rather than walk out of range.
     const arrived = order.chase !== null && order.chase.path.length === 0;
-    if (!arrived && sharesCellWithStopped(m, u)) goal = chaseGoal(m, u, target);
+    if (!arrived && crowdsStanding(m, u)) goal = chaseGoal(m, u, target);
     if (!goal || !inRange({ ...u, x: goal.x + 0.5, y: goal.y + 0.5 }, target)) {
       order.chase = null;
       return;

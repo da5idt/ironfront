@@ -92,17 +92,24 @@ describe("the attack Command", () => {
     expect(find(match, harvester)!.hp).toBe(UNIT_STATS.harvester.maxHp);
   });
 
-  it("spreads several attackers on one target over distinct Cells in range", () => {
-    const match = createMatch(openMap(30, 20), 1);
-    // In single file on the target's row, so they would all reach range at the same spot.
-    const riflemen = [1, 2, 3, 4].map((x) => addTestUnit(match, 0, "rifleman", { x, y: 10 }));
-    const harvester = addTestUnit(match, 1, "harvester", { x: 14, y: 10 });
-    spotter(match, { x: 14, y: 8 });
+  // In single file towards the target, so they would all reach range at the same spot.
+  it.each([
+    { approach: "along a row", file: [1, 2, 3, 4].map((x) => ({ x, y: 10 })), target: { x: 14, y: 10 } },
+    { approach: "on a diagonal", file: [6, 7, 8, 9].map((x) => ({ x, y: x })), target: { x: 19, y: 19 } },
+  ])("spreads several attackers coming $approach over distinct Cells in range", ({ file, target }) => {
+    const match = createMatch(openMap(30, 30), 1);
+    const riflemen = file.map((cell) => addTestUnit(match, 0, "rifleman", cell));
+    const harvester = addTestUnit(match, 1, "harvester", target);
+    spotter(match, { x: target.x, y: target.y - 2 });
     expect(issueCommand(match, 0, { type: "attack", unitIds: riflemen, targetId: harvester })).toEqual({ ok: true });
-    run(match, 9 * TICKS_PER_SECOND);
+    run(match, 12 * TICKS_PER_SECOND);
     const at = riflemen.map((id) => find(match, id)!);
-    for (const r of at) expect(Math.hypot(14.5 - r.x, 10.5 - r.y)).toBeLessThanOrEqual(UNIT_STATS.rifleman.range);
+    const tx = target.x + 0.5;
+    const ty = target.y + 0.5;
+    for (const r of at) expect(Math.hypot(tx - r.x, ty - r.y)).toBeLessThanOrEqual(UNIT_STATS.rifleman.range);
     expect(new Set(at.map((r) => `${Math.floor(r.x)},${Math.floor(r.y)}`)).size).toBe(4);
+    // Not just in different Cells but apart, so none is drawn on top of another.
+    for (const a of at) for (const b of at) if (a !== b) expect(Math.hypot(a.x - b.x, a.y - b.y)).toBeGreaterThan(0.9);
     run(match, 20);
     expect(riflemen.map((id) => find(match, id)!)).toEqual(at.map((r) => ({ ...r, prevX: r.x, prevY: r.y })));
     expect(find(match, harvester)!.hp).toBeLessThan(UNIT_STATS.harvester.maxHp - 4 * UNIT_STATS.rifleman.damage);
