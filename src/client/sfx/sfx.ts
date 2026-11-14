@@ -28,7 +28,7 @@ export interface Sfx {
   settings(): MixerSettings;
   /** Changes the settings, applies them at once and saves them. */
   apply(action: MixerAction): void;
-  /** Where the player is looking; call when the camera moves. */
+  /** Where the person playing is looking; call when the camera moves. */
   setListener(listener: Listener): void;
   /**
    * Plays a sound effect. With a Map position it gets quieter with distance

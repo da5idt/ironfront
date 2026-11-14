@@ -1,9 +1,9 @@
+import { drawKeyBadgeAt, KEY_BADGE } from "../buttonPainter";
 import type { Rect } from "../layout";
 import {
   BUTTON_BG,
   BUTTON_DISABLED_TEXT,
   BUTTON_EDGE,
-  BUTTON_KEY_BG,
   HUD_TEXT,
   PANEL_EDGE,
   SOUND_MUTED,
@@ -72,14 +72,9 @@ export function drawSoundStrip(ctx: CanvasRenderingContext2D, settings: MixerSet
     ctx.lineWidth = 1;
     ctx.strokeRect(all.x + 0.5, all.y + 0.5, all.width - 1, all.height - 1);
   }
-  const badge = 16;
+  const badge = KEY_BADGE;
   const midY = all.y + all.height / 2;
-  ctx.fillStyle = BUTTON_KEY_BG;
-  ctx.fillRect(all.x + 6, midY - badge / 2, badge, badge);
-  ctx.fillStyle = HUD_TEXT;
-  ctx.font = "bold 11px system-ui, sans-serif";
-  ctx.textAlign = "center";
-  ctx.fillText("M", all.x + 6 + badge / 2, midY + 1);
+  drawKeyBadgeAt(ctx, "M", all.x + 6, midY - badge / 2);
   ctx.textAlign = "left";
   ctx.font = "11px system-ui, sans-serif";
   ctx.fillStyle = settings.muteAll ? SOUND_MUTED : HUD_TEXT;

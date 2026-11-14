@@ -1,6 +1,6 @@
 import { BUILDING_STATS, TRAINING, UNIT_STATS, type UnitKind } from "../sim";
 import { BUTTON_MARGIN, BUTTONS_HEADER } from "./buildPanel";
-import { drawKeyBadgeAt, KEY_BADGE, WELL, WELL_INSET } from "./buildPanelPainter";
+import { drawKeyBadgeAt, KEY_BADGE, WELL, WELL_INSET } from "./buttonPainter";
 import type { Rect } from "./layout";
 import { BUTTON_BG, BUTTON_COST, BUTTON_DISABLED_TEXT, BUTTON_EDGE, BUTTON_PROGRESS, BUTTON_WELL, HUD_TEXT } from "./palette";
 import { buttonKeyLabel } from "./sidePanel";

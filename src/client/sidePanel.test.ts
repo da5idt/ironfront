@@ -6,10 +6,16 @@ import { trainButtons } from "./trainPanel";
 
 const AREA = { x: 0, y: 230, width: 220, height: 500 };
 
+/**
+ * A Building as a Player's view lists its own (BuildingView in src/sim/view.ts): `training` is the queue of
+ * a Barracks or Vehicle Factory and null for every other Building; an own Building is never `remembered`.
+ * Place, size and health are not read by the side panel.
+ */
 function building(id: number, kind: BuildingView["kind"], training: TrainingView | null): BuildingView {
   return { id, kind, owner: 0, x: 3, y: 4, width: 2, height: 2, hp: 600, maxHp: 600, remembered: false, training };
 }
 
+/** A trainer with nothing queued, as trainingView (src/sim/training.ts) gives it. */
 const idle: TrainingView = { queue: [], progress: 0, rallyPoint: null };
 const BUILDINGS = [building(1, "hq", null), building(2, "barracks", idle), building(3, "vehicleFactory", idle)];
 
@@ -40,7 +46,7 @@ describe("number keys", () => {
 describe("pressing a side panel button by key", () => {
   it("in the HQ build menu starts Refinery, Barracks, Vehicle Factory and Turret for keys 1 to 4", () => {
     const kinds = [0, 1, 2, 3].map((i) => {
-      const action = sidePanelPress(panelView(10_000), null, AREA, { key: i }, "left");
+      const action = sidePanelPress(panelView(10_000), null, AREA, { index: i }, "left");
       return action?.type === "command" && action.command.type === "startBuilding" ? action.command.kind : null;
     });
     expect(kinds).toEqual(["refinery", "barracks", "vehicleFactory", "turret"]);
@@ -48,34 +54,34 @@ describe("pressing a side panel button by key", () => {
 
   it("puts a ready Building on the cursor, like a left-click on its button", () => {
     const ready = panelView(0, { kind: "turret", progress: 1, ready: true });
-    expect(sidePanelPress(ready, null, AREA, { key: 3 }, "left")).toEqual({ type: "place", kind: "turret" });
+    expect(sidePanelPress(ready, null, AREA, { index: 3 }, "left")).toEqual({ type: "place", kind: "turret" });
   });
 
   it("with a Barracks selected, trains a Rifleman on 1 and does nothing on 2 to 4", () => {
     const view = panelView(10_000);
-    expect(sidePanelPress(view, 2, AREA, { key: 0 }, "left")).toEqual({
+    expect(sidePanelPress(view, 2, AREA, { index: 0 }, "left")).toEqual({
       type: "command",
       command: { type: "train", buildingId: 2, kind: "rifleman" },
     });
-    for (const key of [1, 2, 3]) expect(sidePanelPress(view, 2, AREA, { key }, "left")).toBeNull();
+    for (const index of [1, 2, 3]) expect(sidePanelPress(view, 2, AREA, { index }, "left")).toBeNull();
   });
 
   it("with a Vehicle Factory selected, trains a Raider on 1 and a Harvester on 2, and nothing on 3", () => {
     const view = panelView(10_000);
-    expect(sidePanelPress(view, 3, AREA, { key: 0 }, "left")).toEqual({
+    expect(sidePanelPress(view, 3, AREA, { index: 0 }, "left")).toEqual({
       type: "command",
       command: { type: "train", buildingId: 3, kind: "raider" },
     });
-    expect(sidePanelPress(view, 3, AREA, { key: 1 }, "left")).toEqual({
+    expect(sidePanelPress(view, 3, AREA, { index: 1 }, "left")).toEqual({
       type: "command",
       command: { type: "train", buildingId: 3, kind: "harvester" },
     });
-    expect(sidePanelPress(view, 3, AREA, { key: 2 }, "left")).toBeNull();
+    expect(sidePanelPress(view, 3, AREA, { index: 2 }, "left")).toBeNull();
   });
 
   it("does nothing on a greyed-out button", () => {
-    expect(sidePanelPress(panelView(UNIT_STATS.rifleman.cost - 1), 2, AREA, { key: 0 }, "left")).toBeNull();
-    expect(sidePanelPress(panelView(0), null, AREA, { key: 1 }, "left")).toBeNull();
+    expect(sidePanelPress(panelView(UNIT_STATS.rifleman.cost - 1), 2, AREA, { index: 0 }, "left")).toBeNull();
+    expect(sidePanelPress(panelView(0), null, AREA, { index: 1 }, "left")).toBeNull();
   });
 });
 
@@ -86,17 +92,17 @@ describe("clicking a side panel button", () => {
       x: r.x + r.width / 2,
       y: r.y + r.height / 2,
     });
-    const first = sidePanelPress(view, null, AREA, { key: 0 }, "left");
+    const first = sidePanelPress(view, null, AREA, { index: 0 }, "left");
     const firstBuild = buildButtons(AREA)[0]!.rect;
     expect(sidePanelPress(view, null, AREA, { point: middle(firstBuild) }, "left")).toEqual(first);
-    const trained = sidePanelPress(view, 3, AREA, { key: 1 }, "left");
+    const trained = sidePanelPress(view, 3, AREA, { index: 1 }, "left");
     const secondTrain = trainButtons(AREA, "vehicleFactory")[1]!.rect;
     expect(sidePanelPress(view, 3, AREA, { point: middle(secondTrain) }, "left")).toEqual(trained);
   });
 
   it("a key on the Building in progress does nothing, while a click on it still cancels", () => {
     const view = { ...panelView(10_000), production: { kind: "barracks" as const, progress: 0.5, ready: false } };
-    expect(sidePanelPress(view, null, AREA, { key: 1 }, "left")).toBeNull();
+    expect(sidePanelPress(view, null, AREA, { index: 1 }, "left")).toBeNull();
     const rect = buildButtons(AREA)[1]!.rect;
     expect(sidePanelPress(view, null, AREA, { point: { x: rect.x + 1, y: rect.y + 1 } }, "right")).toEqual({
       type: "command",
@@ -110,7 +116,7 @@ describe("clicking a side panel button", () => {
 });
 
 describe("a press refused for want of Credits", () => {
-  const barracksKey = { key: 1 };
+  const barracksKey = { index: 1 };
   const short = BUILDING_STATS.barracks.cost - 1;
 
   it("is a left press, by key or click, on a Building the Player cannot pay for", () => {
@@ -120,12 +126,12 @@ describe("a press refused for want of Credits", () => {
   });
 
   it("is a left press on a Unit the Player cannot pay for", () => {
-    expect(creditsShortPress(panelView(UNIT_STATS.rifleman.cost - 1), 2, AREA, { key: 0 }, "left")).toBe(true);
+    expect(creditsShortPress(panelView(UNIT_STATS.rifleman.cost - 1), 2, AREA, { index: 0 }, "left")).toBe(true);
   });
 
   it("is not a press that goes through", () => {
     expect(creditsShortPress(panelView(BUILDING_STATS.barracks.cost), null, AREA, barracksKey, "left")).toBe(false);
-    expect(creditsShortPress(panelView(UNIT_STATS.rifleman.cost), 2, AREA, { key: 0 }, "left")).toBe(false);
+    expect(creditsShortPress(panelView(UNIT_STATS.rifleman.cost), 2, AREA, { index: 0 }, "left")).toBe(false);
   });
 
   it("is not a press refused for another reason", () => {
@@ -135,7 +141,7 @@ describe("a press refused for want of Credits", () => {
     // The queue is full.
     const full: TrainingView = { queue: Array(TRAINING.queueSize).fill("rifleman"), progress: 0, rallyPoint: null };
     const view = { ...panelView(0), buildings: [building(2, "barracks", full)] };
-    expect(creditsShortPress(view, 2, AREA, { key: 0 }, "left")).toBe(false);
+    expect(creditsShortPress(view, 2, AREA, { index: 0 }, "left")).toBe(false);
   });
 
   it("is not a right-click, which only ever cancels", () => {
@@ -144,6 +150,6 @@ describe("a press refused for want of Credits", () => {
 
   it("is not a press where there is no button", () => {
     expect(creditsShortPress(panelView(0), null, AREA, { point: { x: 20, y: AREA.y + 5 } }, "left")).toBe(false);
-    expect(creditsShortPress(panelView(0), 2, AREA, { key: 3 }, "left")).toBe(false);
+    expect(creditsShortPress(panelView(0), 2, AREA, { index: 3 }, "left")).toBe(false);
   });
 });

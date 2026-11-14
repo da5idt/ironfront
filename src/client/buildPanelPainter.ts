@@ -1,12 +1,12 @@
 import { BUILDING_STATS, type BuildingKind, type PlayerView } from "../sim";
 import { BUTTON_MARGIN, BUTTONS_HEADER, buildButtons, buttonLook, type ButtonState } from "./buildPanel";
+import { drawKeyBadgeAt, KEY_BADGE, WELL, WELL_INSET } from "./buttonPainter";
 import type { Rect } from "./layout";
 import {
   BUTTON_BG,
   BUTTON_COST,
   BUTTON_DISABLED_TEXT,
   BUTTON_EDGE,
-  BUTTON_KEY_BG,
   BUTTON_PLACING_EDGE,
   BUTTON_PROGRESS,
   BUTTON_READY,
@@ -29,10 +29,6 @@ const HINTS: Record<Look, readonly string[]> = {
   ready: ["ready: click,", "then pick a spot"],
   placing: ["placing: pick a spot", "Esc cancels"],
 };
-
-/** The picture's well: room for a 3 by 3 Cell Building at twice its art size. */
-export const WELL = 72;
-export const WELL_INSET = 4;
 
 /** Screen pixels per art pixel of a button picture: 2 like the Map, or 3 where a small sprite would look lost. */
 function iconScale(icon: { width: number; height: number }): number {
@@ -118,27 +114,4 @@ export function drawBuildPanel(
     ctx.fillRect(rect.x, rect.y, thick, rect.height);
     ctx.fillRect(rect.x + rect.width - thick, rect.y, thick, rect.height);
   }
-}
-
-export const KEY_BADGE = 16;
-
-/**
- * The number key that presses this button, in a small box at its top left, so
- * the shortcut needs no remembering. Returns where the text beside it starts.
- */
-export function drawKeyBadge(ctx: CanvasRenderingContext2D, label: string | null, rect: Rect): number {
-  if (label === null) return rect.x + 8;
-  const x = rect.x + 6;
-  drawKeyBadgeAt(ctx, label, x, rect.y + 15 - KEY_BADGE / 2);
-  return x + KEY_BADGE + 6;
-}
-
-/** The key badge alone, with its top-left corner at x, y. */
-export function drawKeyBadgeAt(ctx: CanvasRenderingContext2D, label: string, x: number, y: number): void {
-  ctx.fillStyle = BUTTON_KEY_BG;
-  ctx.fillRect(x, y, KEY_BADGE, KEY_BADGE);
-  ctx.fillStyle = HUD_TEXT;
-  ctx.font = "bold 11px system-ui, sans-serif";
-  ctx.textAlign = "center";
-  ctx.fillText(label, x + KEY_BADGE / 2, y + KEY_BADGE / 2 + 1);
 }

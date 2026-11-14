@@ -23,20 +23,23 @@ describe("picking the voice for alerts", () => {
     expect(pickLocalVoice([], "en-US")).toBeNull();
   });
 
-  it("prefers the browser's exact language, then the same language from elsewhere", () => {
+  it("prefers the browser's own English, then any other English voice", () => {
     const voices = [voice("US", "en-US", true), voice("UK", "en-GB", true), voice("DE", "de-DE", true)];
     expect(pickLocalVoice(voices, "en-GB")?.name).toBe("UK");
     expect(pickLocalVoice(voices, "en-AU")?.name).toBe("US");
-    expect(pickLocalVoice(voices, "de")?.name).toBe("DE");
   });
 
-  it("falls back to an English voice when none speaks the browser's language", () => {
+  it("picks an English voice in a browser set to another language, as the alerts are English words", () => {
     const voices = [voice("DE", "de-DE", true), voice("UK", "en-GB", true)];
+    expect(pickLocalVoice(voices, "de-DE")?.name).toBe("UK");
     expect(pickLocalVoice(voices, "fr-FR")?.name).toBe("UK");
   });
 
-  it("has no voice when the local ones speak neither the browser's language nor English", () => {
+  it("has no voice when no local one speaks English, even one in the browser's own language", () => {
     expect(pickLocalVoice([voice("DE", "de-DE", true)], "fr-FR")).toBeNull();
+    // A German voice would read "Base under attack" as German: better the chime and the words on screen.
+    expect(pickLocalVoice([voice("DE", "de-DE", true, true)], "de-DE")).toBeNull();
+    expect(pickLocalVoice([voice("DE", "de-DE", true), voice("Cloud UK", "en-GB", false)], "de-DE")).toBeNull();
   });
 
   it("takes the default voice among equally good ones", () => {

@@ -6,8 +6,6 @@ import type { CellPos } from "../sim";
 export const CELL_PX = 24;
 /** Camera speed when scrolling, in pixels per second. */
 export const SCROLL_PX_PER_SECOND = 900;
-/** How close to a screen edge the mouse must be, over the Map view, to scroll, in pixels. */
-export const EDGE_PX = 16;
 
 /** The world pixel shown at the top-left of the screen. */
 export interface Camera {

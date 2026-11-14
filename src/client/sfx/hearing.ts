@@ -1,6 +1,6 @@
 import { type Camera, CELL_PX, type Size } from "../camera";
 
-// How loud a sound on the Map is from where the player is looking: loudest at
+// How loud a sound on the Map is from where the person playing is looking: loudest at
 // the centre of the Map view, quieter with distance, and skipped altogether
 // far off screen. Pure, so it is unit tested.
 

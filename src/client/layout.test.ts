@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { BUTTON_MARGIN } from "./buildPanel";
-import { EDGE_PX } from "./camera";
-import { computeLayout, contains, edgeScroll, PANEL_EDGE_SCROLL_PX, PANEL_WIDTH, toMapView } from "./layout";
+import { computeLayout, contains, EDGE_PX, edgeScroll, PANEL_EDGE_SCROLL_PX, PANEL_WIDTH, toMapView } from "./layout";
 
 describe("screen layout", () => {
   it("puts the panel on the left with the minimap above the buttons, and the Map view fills the rest", () => {

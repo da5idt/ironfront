@@ -161,7 +161,7 @@ window.addEventListener("keydown", (e) => {
   // Ctrl/Cmd/Alt+number belongs to the browser (held-key repeats were already dropped above).
   const index = e.ctrlKey || e.metaKey || e.altKey ? null : keyButtonIndex(e.code);
   // Like a click, a key presses nothing under a Victory, defeat or Paused screen.
-  if (index !== null && !currentScreenOverlay()) pressSidePanel({ key: index }, "left");
+  if (index !== null && !currentScreenOverlay()) pressSidePanel({ index }, "left");
 });
 window.addEventListener("keyup", (e) => keys.delete(e.code));
 window.addEventListener("blur", () => keys.clear());

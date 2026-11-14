@@ -1,4 +1,4 @@
-import { EDGE_PX, type Size } from "./camera";
+import type { Size } from "./camera";
 
 // Screen layout shared by the renderer and input: a side panel on the left,
 // with the minimap at the top, the build/train buttons below it and the sound
@@ -6,6 +6,8 @@ import { EDGE_PX, type Size } from "./camera";
 // points go through toMapView before any camera maths.
 
 export const PANEL_WIDTH = 220;
+/** How close to a screen edge the mouse must be, over the Map view, to scroll, in pixels. */
+export const EDGE_PX = 16;
 export const MINIMAP_MARGIN = 10;
 /**
  * The panel's outer left strip that still scrolls left, so the far left of the
@@ -65,7 +67,7 @@ export function toMapView(layout: Layout, p: { x: number; y: number }): { x: num
  * Which way the mouse edge-scrolls the camera, each axis -1, 0 or 1 (mouse null
  * when outside the window). Only inside the Map view near a screen edge, plus
  * the thin strip at the panel's outer edge: the panel itself never scrolls, as
- * the player rests the mouse there to use the menu.
+ * the person playing rests the mouse there to use the menu.
  */
 export function edgeScroll(layout: Layout, mouse: { x: number; y: number } | null): { dx: number; dy: number } {
   if (!mouse) return { dx: 0, dy: 0 };

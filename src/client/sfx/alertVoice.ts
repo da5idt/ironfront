@@ -24,17 +24,15 @@ const language = (lang: string): string => tag(lang).split("-")[0] ?? "";
 
 /**
  * The local voice to speak alerts with, or null when there is none fit for
- * it: the browser's exact language first, then that language from another
- * region, then any English voice, as the alerts are English words.
+ * it. The alerts are English words, and a voice for another language reads
+ * them badly, so only English voices will do: the browser's own English
+ * (say en-GB) first, then any other. With none, the chime and the words on
+ * screen serve better.
  */
 export function pickLocalVoice<V extends VoiceInfo>(voices: readonly V[], browserLanguage: string): V | null {
   // Strictly true: a voice that does not say where it runs is not trusted to be local.
-  const local = voices.filter((v) => v.localService === true);
-  const wanted = [
-    (v: V) => tag(v.lang) === tag(browserLanguage),
-    (v: V) => language(v.lang) === language(browserLanguage),
-    (v: V) => language(v.lang) === "en",
-  ];
+  const local = voices.filter((v) => v.localService === true && language(v.lang) === "en");
+  const wanted = [(v: V) => tag(v.lang) === tag(browserLanguage), () => true];
   for (const fits of wanted) {
     const fitting = local.filter(fits);
     const pick = fitting.find((v) => v.default) ?? fitting[0];

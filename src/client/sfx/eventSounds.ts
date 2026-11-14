@@ -44,7 +44,7 @@ export function soundForEvent(event: SoundEvent): SoundCue {
       return { name: "largeExplosion", at: event.at };
     case "buildingPlaced":
       return { name: "buildingPlaced", at: event.at };
-    // The player needs to hear these while looking elsewhere, so they have no position.
+    // The person playing needs to hear these while looking elsewhere, so they have no position.
     case "buildingReady":
       return { name: "buildingReady" };
     case "unitTrained":
