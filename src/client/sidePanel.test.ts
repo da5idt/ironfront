@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { type BuildingView, type ProductionView, type TrainingView, UNIT_STATS } from "../sim";
 import { buttonKeyLabel, keyButtonIndex, type SidePanelView, sidePanelPress } from "./sidePanel";
+import { buildButtons } from "./buildPanel";
+import { trainButtons } from "./trainPanel";
 
 const AREA = { x: 0, y: 230, width: 220, height: 500 };
 
@@ -80,11 +82,26 @@ describe("pressing a side panel button by key", () => {
 describe("clicking a side panel button", () => {
   it("does the same as its key", () => {
     const view = panelView(10_000);
-    // The second build button sits one button height plus a gap below the first.
+    const middle = (r: { x: number; y: number; width: number; height: number }) => ({
+      x: r.x + r.width / 2,
+      y: r.y + r.height / 2,
+    });
     const first = sidePanelPress(view, null, AREA, { key: 0 }, "left");
-    expect(sidePanelPress(view, null, AREA, { point: { x: 20, y: AREA.y + 25 } }, "left")).toEqual(first);
+    const firstBuild = buildButtons(AREA)[0]!.rect;
+    expect(sidePanelPress(view, null, AREA, { point: middle(firstBuild) }, "left")).toEqual(first);
     const trained = sidePanelPress(view, 3, AREA, { key: 1 }, "left");
-    expect(sidePanelPress(view, 3, AREA, { point: { x: 20, y: AREA.y + 75 } }, "left")).toEqual(trained);
+    const secondTrain = trainButtons(AREA, "vehicleFactory")[1]!.rect;
+    expect(sidePanelPress(view, 3, AREA, { point: middle(secondTrain) }, "left")).toEqual(trained);
+  });
+
+  it("a key on the Building in progress does nothing, while a click on it still cancels", () => {
+    const view = { ...panelView(10_000), production: { kind: "barracks" as const, progress: 0.5, ready: false } };
+    expect(sidePanelPress(view, null, AREA, { key: 1 }, "left")).toBeNull();
+    const rect = buildButtons(AREA)[1]!.rect;
+    expect(sidePanelPress(view, null, AREA, { point: { x: rect.x + 1, y: rect.y + 1 } }, "right")).toEqual({
+      type: "command",
+      command: { type: "cancelBuilding" },
+    });
   });
 
   it("does nothing between buttons", () => {

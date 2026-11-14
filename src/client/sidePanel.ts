@@ -1,5 +1,5 @@
 import type { EntityId, PlayerView } from "../sim";
-import { buildButtons, buttonAt, type PanelAction, panelClick } from "./buildPanel";
+import { buildButtons, buttonAt, buttonState, type PanelAction, panelClick } from "./buildPanel";
 import type { Rect } from "./layout";
 import { trainButtonAt, trainButtons, trainClick, trainerOf } from "./trainPanel";
 
@@ -49,5 +49,8 @@ export function sidePanelPress(
   const buttons = buildButtons(area);
   const kind =
     "key" in target ? (buttons[target.key]?.kind ?? null) : buttonAt(buttons, target.point.x, target.point.y);
-  return kind ? panelClick(view, kind, button) : null;
+  if (!kind) return null;
+  // Cancelling stays a mouse action: a second tap of the key that started a Building must not throw it away.
+  if ("key" in target && buttonState(view, kind) === "building") return null;
+  return panelClick(view, kind, button);
 }
