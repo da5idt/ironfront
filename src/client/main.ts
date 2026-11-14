@@ -42,6 +42,8 @@ import {
   unitsInBox,
 } from "./selection";
 import { createSoundEngine } from "./sfx/engine";
+import { createMusic } from "./sfx/musicPlayer";
+import { moodFor } from "./sfx/musicTimeline";
 import { listenerFor } from "./sfx/hearing";
 import { createSfx } from "./sfx/sfx";
 import { soundStripAction } from "./sfx/soundStrip";
@@ -120,6 +122,7 @@ function settingsStorage(): Storage | null {
 }
 const soundEngine = createSoundEngine();
 const sfx = createSfx(soundEngine, settingsStorage());
+const music = createMusic(soundEngine, newSeed());
 // Browsers only let sound start from a click or key press. Captured on the window, so this runs
 // before the game's own handlers and the very first click already makes its sound.
 window.addEventListener("pointerdown", () => soundEngine.unlock(), { capture: true });
@@ -368,6 +371,7 @@ if (import.meta.env.DEV) {
       peek: (player: PlayerId | null) => (peekPlayer = player),
       sfx,
       soundEngine,
+      music,
     },
   });
 }
@@ -399,6 +403,7 @@ function frame(now: number): void {
   camera = scrollCamera(camera, scrollDirection(keys, edgeScroll(layout, mouse)), cameraSeconds, viewSize, mapSize);
   // A paused game is quiet; the audio clock stops with it, so sounds and music carry on from where they were.
   soundEngine.setPaused(paused);
+  music.setMood(moodFor(getMatchStatus(match), HUMAN));
   sfx.setListener(listenerFor(camera, viewSize));
   const markerAge = moveMarker ? (now - moveMarker.at) / MOVE_MARKER_MS : 1;
   if (markerAge >= 1) moveMarker = null;
