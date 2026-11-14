@@ -2,7 +2,6 @@ import { RIVERFORD } from "../game/maps/riverford";
 import {
   advanceTick,
   type BuildingKind,
-  canPlaceBuilding,
   type CellPos,
   type Command,
   createMatch,
@@ -14,7 +13,6 @@ import {
   type PlayerId,
 } from "../sim";
 import { createOpponent, type Opponent, THINK_EVERY_TICKS } from "../opponent/opponent";
-import { buildButtons, buttonAt, footprintAt, panelClick } from "./buildPanel";
 import {
   type Camera,
   CELL_PX,
@@ -28,6 +26,7 @@ import {
 import { computeLayout, contains, edgeScroll, type Layout, toMapView } from "./layout";
 import { type Clock, interpolationAlpha, stepClock } from "./loop";
 import { cameraOnMinimapPoint } from "./minimap";
+import { type PlacingOutcome, placingMapClick, placingPreview } from "./placing";
 import { type Overlay, Renderer } from "./renderer";
 import { keyAction, type ScreenOverlay, screenOverlay } from "./screenOverlay";
 import {
@@ -42,7 +41,7 @@ import {
   unitAt,
   unitsInBox,
 } from "./selection";
-import { trainButtonAt, trainButtons, trainClick, trainerOf } from "./trainPanel";
+import { type ButtonTarget, keyButtonIndex, sidePanelPress } from "./sidePanel";
 
 // Wires the browser to the Simulation: a fixed-Tick clock, the camera, input
 // (selection stays here; Commands go to the Simulation) and drawing.
@@ -115,6 +114,9 @@ window.addEventListener("keydown", (e) => {
   const action = keyAction(e.code, placing !== null);
   if (action === "cancelPlacement") placing = null;
   else if (action === "togglePause") paused = !paused;
+  const index = keyButtonIndex(e.code);
+  // Like a click, a key presses nothing under a Victory, defeat or Paused screen.
+  if (index !== null && !currentScreenOverlay()) pressSidePanel({ key: index }, "left");
 });
 window.addEventListener("keyup", (e) => keys.delete(e.code));
 window.addEventListener("blur", () => keys.clear());
@@ -155,32 +157,35 @@ function orderTo(cell: CellPos): void {
 /** The finished Building being placed, while the person picks a spot; null otherwise. */
 let placing: BuildingKind | null = null;
 
-/** With a Barracks or Vehicle Factory selected the side panel trains; otherwise it is the HQ's build panel. */
-function clickSidePanel(at: { x: number; y: number }, button: "left" | "right"): void {
-  const trainer = trainerOf(view.buildings, selectedBuilding);
-  if (!trainer) {
-    clickBuildPanel(at, button);
+/** A click on, or the number key of, a side panel button: the build menu's or the selected trainer's. */
+function pressSidePanel(target: ButtonTarget, button: "left" | "right"): void {
+  const action = sidePanelPress(view, selectedBuilding, layout.buttons, target, button);
+  if (!action) return;
+  if (action.type === "place") {
+    placing = action.kind;
     return;
   }
-  const kind = trainButtonAt(trainButtons(layout.buttons, trainer.kind), at.x, at.y);
-  const command = kind ? trainClick(trainer.id, trainer.training, view.credits, kind, button) : null;
-  if (!command) return;
-  issue(command);
-  // Show the new queue at once rather than on the next Tick.
+  issue(action.command);
+  // Show the new state at once rather than on the next Tick.
   view = getPlayerView(match, HUMAN);
 }
 
-function clickBuildPanel(at: { x: number; y: number }, button: "left" | "right"): void {
-  const kind = buttonAt(buildButtons(layout.buttons), at.x, at.y);
-  const action = kind ? panelClick(view, kind, button) : null;
-  if (!action) return;
-  placing = null;
-  if (action.type === "place") {
-    placing = action.kind;
-  } else {
-    issue(action.command);
-    // Show the new state at once rather than on the next Tick.
-    view = getPlayerView(match, HUMAN);
+/** Acts on a click on the Map while placing. */
+function onPlacingOutcome(outcome: PlacingOutcome): void {
+  switch (outcome.type) {
+    case "place":
+      // The Simulation can still refuse a spot where an unseen Building stands; then placing carries on.
+      if (issueCommand(match, HUMAN, outcome.command).ok) {
+        placing = null;
+        view = getPlayerView(match, HUMAN);
+      }
+      return;
+    case "cantBuildThere":
+      // Placing carries on. Ticket #23 plays the "can't build there" sound from here.
+      return;
+    case "cancel":
+      placing = null;
+      return;
   }
 }
 
@@ -188,8 +193,7 @@ function clickBuildPanel(at: { x: number; y: number }, button: "left" | "right")
 function placementPreview(): Overlay["placement"] {
   if (!placing || !mouse || !contains(layout.mapView, mouse.x, mouse.y)) return null;
   const m = toMapView(layout, mouse);
-  const at = footprintAt(placing, screenToCell(camera, m.x, m.y));
-  return { kind: placing, at, valid: canPlaceBuilding(view, placing, at) };
+  return placingPreview(view, placing, screenToCell(camera, m.x, m.y));
 }
 
 // Right-click is the move, attack and harvest button, so the browser menu must not open over the Map.
@@ -208,7 +212,7 @@ canvas.addEventListener("mousedown", (e) => {
     return;
   }
   if (contains(layout.buttons, at.x, at.y)) {
-    clickSidePanel(at, e.button === 0 ? "left" : "right");
+    pressSidePanel({ point: at }, e.button === 0 ? "left" : "right");
     return;
   }
   // The side panel is not the Map: no selection box or order starts there.
@@ -216,15 +220,10 @@ canvas.addEventListener("mousedown", (e) => {
   // From here on the point is on the Map, so it is measured from the Map view's corner, as the camera is.
   const inView = toMapView(layout, at);
   if (placing) {
-    // Left-click places; right-click leaves placement mode without ordering anyone about.
-    if (e.button === 0) {
-      const spot = footprintAt(placing, screenToCell(camera, inView.x, inView.y));
-      if (issueCommand(match, HUMAN, { type: "placeBuilding", at: spot }).ok) {
-        placing = null;
-        view = getPlayerView(match, HUMAN);
-      }
-    } else if (e.button === 2) {
-      placing = null;
+    // While placing, a Map click never selects or orders anyone about.
+    if (e.button === 0 || e.button === 2) {
+      const cell = screenToCell(camera, inView.x, inView.y);
+      onPlacingOutcome(placingMapClick(view, placing, cell, e.button === 0 ? "left" : "right"));
     }
     return;
   }
