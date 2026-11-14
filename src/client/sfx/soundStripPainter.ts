@@ -5,6 +5,7 @@ import {
   BUTTON_DISABLED_TEXT,
   BUTTON_EDGE,
   HUD_TEXT,
+  PANEL_BG,
   PANEL_EDGE,
   SOUND_MUTED,
   VOLUME_OFF,
@@ -16,6 +17,9 @@ import { muteAllButton, soundStripRows, STRIP_HEADER } from "./soundStrip";
 // Draws the sound strip from the same pure functions main.ts hit-tests with.
 
 export function drawSoundStrip(ctx: CanvasRenderingContext2D, settings: MixerSettings, area: Rect): void {
+  // Its own ground, so the strip reads as one block whatever was drawn before it; the panel's edge line on the right is left alone.
+  ctx.fillStyle = PANEL_BG;
+  ctx.fillRect(area.x, area.y, area.width - 1, area.height);
   ctx.fillStyle = PANEL_EDGE;
   ctx.fillRect(area.x, area.y, area.width - 1, 1);
   ctx.textBaseline = "middle";

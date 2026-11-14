@@ -9,7 +9,7 @@ import {
   UNIT_STATS,
   type UnitKind,
 } from "../sim";
-import { BUILD_BUTTON_HEIGHT, BUTTON_GAP, BUTTON_MARGIN, BUTTONS_HEADER } from "./buildPanel";
+import { menuButtonRects } from "./buildPanel";
 import { contains, type Rect } from "./layout";
 
 // The side panel's train buttons, shown in place of the HQ's build buttons
@@ -41,16 +41,10 @@ export function trainerOf(buildings: readonly BuildingView[], selected: EntityId
 }
 
 export function trainButtons(area: Rect, building: BuildingKind): TrainButton[] {
-  return (TRAINS[building] ?? []).map((kind, i) => ({
-    kind,
-    rect: {
-      x: area.x + BUTTON_MARGIN,
-      // The same size as a build button, so both menus show a picture the same way.
-      y: area.y + BUTTONS_HEADER + i * (BUILD_BUTTON_HEIGHT + BUTTON_GAP),
-      width: Math.max(0, area.width - BUTTON_MARGIN * 2),
-      height: BUILD_BUTTON_HEIGHT,
-    },
-  }));
+  const kinds = TRAINS[building] ?? [];
+  // The same size as a build button, so both menus show a picture the same way.
+  const rects = menuButtonRects(area, kinds.length);
+  return kinds.map((kind, i) => ({ kind, rect: rects[i]! }));
 }
 
 export function trainButtonAt(buttons: readonly TrainButton[], x: number, y: number): UnitKind | null {

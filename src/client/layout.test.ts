@@ -1,6 +1,58 @@
 import { describe, expect, it } from "vitest";
-import { BUTTON_MARGIN } from "./buildPanel";
+import { BUILD_BUTTON_HEIGHT, BUTTON_MARGIN, buildButtons } from "./buildPanel";
 import { computeLayout, contains, EDGE_PX, edgeScroll, PANEL_EDGE_SCROLL_PX, PANEL_WIDTH, toMapView } from "./layout";
+import { trainButtons } from "./trainPanel";
+
+describe("the side panel on a short window", () => {
+  // 657 is a 1366x768 laptop less the browser's own bars; 600 is the shortest window the game is laid out for.
+  const HEIGHTS = [1080, 800, 720, 706, 657, 600, 540, 480, 360, 260];
+
+  it("keeps all four build buttons between the minimap and the sound strip, one under the other", () => {
+    for (const height of HEIGHTS) {
+      const l = computeLayout({ width: 1366, height });
+      const rects = buildButtons(l.buttons).map((b) => b.rect);
+      expect(rects).toHaveLength(4);
+      expect(rects[0]!.y).toBeGreaterThanOrEqual(l.minimap.y + l.minimap.height);
+      for (let i = 1; i < rects.length; i++) {
+        expect(rects[i]!.y).toBeGreaterThanOrEqual(rects[i - 1]!.y + rects[i - 1]!.height);
+      }
+      expect(rects[3]!.y + rects[3]!.height, `window height ${height}`).toBeLessThanOrEqual(l.soundStrip.y);
+    }
+  });
+
+  it("gives every part of a button to the buttons and none of it to the sound strip", () => {
+    for (const height of [800, 657, 600]) {
+      const l = computeLayout({ width: 1366, height });
+      for (const { rect } of buildButtons(l.buttons)) {
+        const x = rect.x + rect.width / 2;
+        for (const y of [rect.y, rect.y + rect.height - 1]) {
+          expect(contains(l.buttons, x, y), `window height ${height}`).toBe(true);
+          expect(contains(l.soundStrip, x, y), `window height ${height}`).toBe(false);
+        }
+      }
+    }
+  });
+
+  it("keeps the buttons full size where there is room, and tall enough to read down to a 600 pixel window", () => {
+    const heightAt = (height: number) => buildButtons(computeLayout({ width: 1366, height }).buttons)[0]!.rect.height;
+    expect(heightAt(800)).toBe(BUILD_BUTTON_HEIGHT);
+    expect(heightAt(1080)).toBe(BUILD_BUTTON_HEIGHT);
+    // Name, key with cost and one line of hint take about 50 pixels.
+    expect(heightAt(657)).toBeGreaterThanOrEqual(60);
+    expect(heightAt(600)).toBeGreaterThanOrEqual(50);
+  });
+
+  it("sizes the train buttons like the build buttons", () => {
+    for (const height of [800, 657, 600]) {
+      const area = computeLayout({ width: 1366, height }).buttons;
+      expect(trainButtons(area, "vehicleFactory").map((b) => b.rect)).toEqual(
+        buildButtons(area)
+          .slice(0, 2)
+          .map((b) => b.rect),
+      );
+    }
+  });
+});
 
 describe("screen layout", () => {
   it("puts the panel on the left with the minimap above the buttons, and the Map view fills the rest", () => {

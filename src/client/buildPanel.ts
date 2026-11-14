@@ -5,7 +5,7 @@ import { contains, type Rect } from "./layout";
 // is in and what a click on one means. Pure, so the rules are unit tested;
 // the renderer draws from the same functions and main.ts acts on the result.
 
-/** A build or train button: tall enough for a 3 by 3 Cell Building's picture at twice its art size. */
+/** A build or train button at full size: tall enough for a 3 by 3 Cell Building's picture at twice its art size. */
 export const BUILD_BUTTON_HEIGHT = 80;
 export const BUTTON_GAP = 6;
 export const BUTTON_MARGIN = 10;
@@ -28,16 +28,36 @@ export type PanelAction =
   /** Enter placement mode for the finished Building. */
   | { readonly type: "place"; readonly kind: BuildingKind };
 
-export function buildButtons(area: Rect): BuildButton[] {
-  return HQ_BUILDS.map((kind, i) => ({
-    kind,
-    rect: {
-      x: area.x + BUTTON_MARGIN,
-      y: area.y + BUTTONS_HEADER + i * (BUILD_BUTTON_HEIGHT + BUTTON_GAP),
-      width: Math.max(0, area.width - BUTTON_MARGIN * 2),
-      height: BUILD_BUTTON_HEIGHT,
-    },
+/** The most buttons a menu has; every menu's buttons are sized as if it had this many, so they do not change size from menu to menu. */
+const MENU_SLOTS = 4;
+/** The gap between buttons squeezed for room: enough to tell them apart. */
+const TIGHT_BUTTON_GAP = 4;
+
+/**
+ * Where a menu's first `count` buttons go in `area`, top to bottom. Full size
+ * where the area has room for a whole menu; in a shorter one (a short window
+ * leaves little between the minimap and the sound strip) the gaps and then
+ * the buttons shrink, so the last button always ends inside the area.
+ */
+export function menuButtonRects(area: Rect, count: number): Rect[] {
+  const room = Math.max(0, area.height - BUTTONS_HEADER);
+  const heightWith = (gap: number): number => Math.floor((room - (MENU_SLOTS - 1) * gap) / MENU_SLOTS);
+  const roomy = heightWith(BUTTON_GAP) >= BUILD_BUTTON_HEIGHT;
+  const height = roomy ? BUILD_BUTTON_HEIGHT : Math.max(0, heightWith(TIGHT_BUTTON_GAP));
+  // With no room at all the buttons are nothing, stacked at the area's end: gaps alone would still run past it.
+  const gap = roomy ? BUTTON_GAP : height > 0 ? TIGHT_BUTTON_GAP : 0;
+  const top = area.y + Math.min(BUTTONS_HEADER, Math.max(0, area.height));
+  return Array.from({ length: count }, (_, i) => ({
+    x: area.x + BUTTON_MARGIN,
+    y: top + i * (height + gap),
+    width: Math.max(0, area.width - BUTTON_MARGIN * 2),
+    height,
   }));
+}
+
+export function buildButtons(area: Rect): BuildButton[] {
+  const rects = menuButtonRects(area, HQ_BUILDS.length);
+  return HQ_BUILDS.map((kind, i) => ({ kind, rect: rects[i]! }));
 }
 
 export function buttonAt(buttons: readonly BuildButton[], x: number, y: number): BuildingKind | null {
