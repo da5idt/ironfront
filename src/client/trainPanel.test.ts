@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { type BuildingView, TRAINING, type TrainingView, UNIT_STATS } from "../sim";
+import { buildButtons } from "./buildPanel";
 import { trainButtonAt, trainButtons, trainButtonState, trainClick, trainerOf } from "./trainPanel";
 
 const AREA = { x: 1000, y: 230, width: 220, height: 500 };
@@ -29,6 +30,8 @@ describe("train buttons", () => {
     const buttons = trainButtons(AREA, "vehicleFactory");
     expect(buttons.map((b) => b.kind)).toEqual(["raider", "harvester"]);
     expect(buttons[1]!.rect.y).toBeGreaterThanOrEqual(buttons[0]!.rect.y + buttons[0]!.rect.height);
+    // Room for the Unit's picture: the same button as in the build menu.
+    expect(buttons.map((b) => b.rect)).toEqual(buildButtons(AREA).slice(0, 2).map((b) => b.rect));
     for (const b of buttons) {
       expect(b.rect.x).toBeGreaterThanOrEqual(AREA.x);
       expect(b.rect.x + b.rect.width).toBeLessThanOrEqual(AREA.x + AREA.width);

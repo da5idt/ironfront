@@ -43,6 +43,8 @@ export const ART = {
   scorch: "#14100a",
   /** Khaki canvas and timber: the Barracks' roofs and crates. */
   khaki: { dark: "#6b5d40", mid: "#9b8a66", light: "#c2b088" },
+  /** A Rifleman's face: two pixels at most, but they say which way he looks. */
+  skin: { dark: "#b98658", light: "#e8bd8e" },
   sandbag: { dark: "#5e5a40", mid: "#a39a70", light: "#d2ca9c" },
   /** Painted copper-brown steel: the Refinery's tank. */
   tank: { dark: "#6a4426", mid: "#a8703a", light: "#e0aa62" },

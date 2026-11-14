@@ -31,8 +31,8 @@ const HINTS: Record<Look, readonly string[]> = {
 };
 
 /** The picture's well: room for a 3 by 3 Cell Building at twice its art size. */
-const WELL = 72;
-const WELL_INSET = 4;
+export const WELL = 72;
+export const WELL_INSET = 4;
 
 /** Screen pixels per art pixel of a button picture: 2 like the Map, or 3 where a small sprite would look lost. */
 function iconScale(icon: { width: number; height: number }): number {
@@ -120,7 +120,7 @@ export function drawBuildPanel(
   }
 }
 
-const KEY_BADGE = 16;
+export const KEY_BADGE = 16;
 
 /**
  * The number key that presses this button, in a small box at its top left, so
@@ -134,7 +134,7 @@ export function drawKeyBadge(ctx: CanvasRenderingContext2D, label: string | null
 }
 
 /** The key badge alone, with its top-left corner at x, y. */
-function drawKeyBadgeAt(ctx: CanvasRenderingContext2D, label: string, x: number, y: number): void {
+export function drawKeyBadgeAt(ctx: CanvasRenderingContext2D, label: string, x: number, y: number): void {
   ctx.fillStyle = BUTTON_KEY_BG;
   ctx.fillRect(x, y, KEY_BADGE, KEY_BADGE);
   ctx.fillStyle = HUD_TEXT;

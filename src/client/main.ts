@@ -27,6 +27,7 @@ import { computeLayout, contains, edgeScroll, type Layout, toMapView } from "./l
 import { type Clock, interpolationAlpha, stepClock } from "./loop";
 import { cameraOnMinimapPoint } from "./minimap";
 import { type PlacingOutcome, placingMapClick, placingPreview } from "./placing";
+import { present, type Presentation } from "./presentation";
 import { type Overlay, Renderer } from "./renderer";
 import { keyAction, type ScreenOverlay, screenOverlay } from "./screenOverlay";
 import {
@@ -87,6 +88,8 @@ let layout: Layout = computeLayout(screen);
 /** The camera's screen size: the Map view, not the whole window, so nothing sits under the side panel. */
 let viewSize: Size = layout.mapView;
 let view = getPlayerView(match, HUMAN);
+/** Facings, Turret aim and the like: client-only, moved on once for every Tick's view (ADR 0002). */
+let presentation: Presentation = present(null, view).state;
 const mapSize = { width: view.map.width, height: view.map.height };
 
 function cameraOnHq(): Camera {
@@ -347,6 +350,7 @@ function restart(): void {
   opponent = createOpponent(COMPUTER, newSeed());
   ticksRun = 0;
   view = getPlayerView(match, HUMAN);
+  presentation = present(null, view).state;
   camera = cameraOnHq();
   selection = new Set();
   // Ids start again from 1 in the new Match, so a kept id could name a different Building.
@@ -361,6 +365,15 @@ function restart(): void {
 /** Set only from the dev hook below: whose view is drawn, when not the person's. */
 let peekPlayer: PlayerId | null = null;
 
+/** Takes the view of the Tick just run, moves the presentation on by it and plays what happened in it. */
+function showTick(): void {
+  view = getPlayerView(match, HUMAN);
+  const next = present(presentation, peekPlayer === null ? view : getPlayerView(match, peekPlayer));
+  presentation = next.state;
+  // Only what the view shows is in the events, so nothing under Fog of War is heard.
+  for (const event of next.events) sfx.playEvent(event);
+}
+
 // A hook for screenshots and manual poking in dev builds only; production has no way in.
 if (import.meta.env.DEV) {
   Object.assign(window, {
@@ -372,8 +385,10 @@ if (import.meta.env.DEV) {
       issue,
       issueAs: (player: PlayerId, command: Command) => issueCommand(match, player, command),
       advance: (ticks = 1) => {
-        for (let i = 0; i < ticks; i++) step();
-        view = getPlayerView(match, HUMAN);
+        for (let i = 0; i < ticks; i++) {
+          step();
+          showTick();
+        }
       },
       view: () => view,
       camera: () => camera,
@@ -409,9 +424,12 @@ function frame(now: number): void {
   // Paused: no time builds up, so resuming doesn't burst through missed Ticks.
   const stepped = stepClock(clock, paused ? 0 : frameMs);
   clock = stepped.clock;
-  for (let i = 0; i < stepped.ticks; i++) step();
+  // Every Tick's view is shown to the presentation, not just the last: a shot is only in the view of its own Tick.
+  for (let i = 0; i < stepped.ticks; i++) {
+    step();
+    showTick();
+  }
   if (stepped.ticks > 0) {
-    view = getPlayerView(match, HUMAN);
     selection = pruneSelection(selection, view.units);
     if (!view.buildings.some((b) => b.id === selectedBuilding)) selectedBuilding = null;
   }
@@ -436,6 +454,7 @@ function frame(now: number): void {
     placement: placementPreview(),
     placing,
     selectedBuilding,
+    presentation,
     sound: sfx.settings(),
     alert: alerts.banner(playSeconds),
     screen: currentScreenOverlay(),

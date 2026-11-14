@@ -11,6 +11,7 @@ import {
   damageSprite,
   loopFrame,
   TURRET_GUN_PX,
+  TURRET_REST_FACING,
 } from "./spriteSheet";
 import { tintSprite } from "./spriteTemplate";
 import { ART_CELL_PX } from "./terrainArt";
@@ -21,8 +22,6 @@ import { ART_CELL_PX } from "./terrainArt";
 const KINDS = Object.keys(BUILDING_STATS) as BuildingKind[];
 const TEAMS: readonly PlayerId[] = [0, 1];
 
-/** Where a Turret's gun points until something aims it: south-east. */
-export const TURRET_REST_FACING = 2;
 /** How far down and right a Building's shadow falls, in art pixels. */
 const SHADOW_OFFSET = 2;
 /** How strongly the placement preview is washed green or red. */

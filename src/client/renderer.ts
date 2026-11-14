@@ -1,17 +1,10 @@
-import {
-  type BuildingKind,
-  type CellPos,
-  ECONOMY,
-  type EntityId,
-  type PlayerView,
-  type ShotView,
-  type UnitView,
-} from "../sim";
+import type { BuildingKind, CellPos, EntityId, PlayerView, ShotView } from "../sim";
 import { BuildingPainter } from "./art/buildingPainter";
 import { type BuildUps, noteBuildings } from "./art/buildUp";
 import { drawBrackets, drawHealthBar, HEALTH_BAR_PX } from "./art/markerPainter";
 import { PixelWorld } from "./art/pixelWorld";
 import { ART_CELL_PX } from "./art/terrainArt";
+import { UnitPainter } from "./art/unitPainter";
 import { drawBuildPanel } from "./buildPanelPainter";
 import { type Camera, CELL_PX, mapToScreen, type Size } from "./camera";
 import type { Layout, Rect } from "./layout";
@@ -26,10 +19,9 @@ import {
   MOVE_MARKER,
   PANEL_BG,
   PANEL_EDGE,
-  ORE_COLOUR,
   SHOT_TRACER,
-  TEAM_COLOURS,
 } from "./palette";
+import { type Presentation, turretFacing } from "./presentation";
 import { drawRallyPoint } from "./selectedBuildingPainter";
 import type { Selection } from "./selection";
 import type { MixerSettings } from "./sfx/mixer";
@@ -61,6 +53,8 @@ export interface Overlay {
   readonly sound: MixerSettings;
   /** An alert's text to show at the top of the Map view, when it was not spoken. Left out, none. */
   readonly alert?: string | null;
+  /** How Units face and where Turrets aim, from the presentation module; null shows everything at rest. */
+  readonly presentation: Presentation | null;
   /** The selected own Building, if any; a Barracks or Vehicle Factory turns the side panel into its train buttons. */
   readonly selectedBuilding: EntityId | null;
 }
@@ -70,6 +64,7 @@ export class Renderer {
   private readonly world = new PixelWorld();
   private readonly minimap = new MinimapPainter();
   private readonly buildings = new BuildingPainter();
+  private readonly units = new UnitPainter();
   /** Which own Buildings are newly placed and still rising; client-only (ADR 0002). */
   private buildUps: BuildUps | null = null;
   private buildUpsFor: PlayerView | null = null;
@@ -106,17 +101,20 @@ export class Renderer {
     // Game time, so idle animation and smoke stop while paused.
     const time = view.tick + alpha;
     // The pixel world (ADR 0003): ground, then Buildings on it, at half resolution.
-    this.world.drawGround(ctx, view, cam, viewRect, alpha, (art) => this.buildings.draw(art, view.buildings, time, ups));
+    const shown = overlay.presentation;
+    this.world.drawGround(ctx, view, cam, viewRect, alpha, (art) =>
+      this.buildings.draw(art, view.buildings, time, ups, (id) => turretFacing(shown, id)),
+    );
     // After the ground and Buildings, so remembered Buildings sit dimmed under it;
     // before Units, which are only ever listed where the Player can see.
     this.world.drawFog(ctx, view, cam, viewRect);
     const selectedBuilding = view.buildings.find((b) => b.id === overlay.selectedBuilding);
     if (selectedBuilding) drawRallyPoint(ctx, selectedBuilding, cam);
     if (overlay.moveMarker) this.drawMoveMarker(overlay.moveMarker.cell, overlay.moveMarker.age, cam);
-    for (const u of view.units) this.drawUnit(u, cam, alpha);
-    for (const s of view.shots) this.drawShot(s, cam, alpha);
-    // The pixel world's layer over the fog. Unit sprites and effects (tickets #21, #22) belong at the start of it.
+    // The pixel world's layer over the fog: Units are only ever listed where the Player can see. Effects (ticket #22) go after the Units.
     this.world.drawAboveFog(ctx, cam, viewRect, (art) => {
+      this.units.draw(art, view.units, alpha, time, (id) => shown?.units.get(id));
+      for (const s of view.shots) this.drawShot(art, s, alpha);
       this.drawMarkers(art, view, alpha, overlay);
       if (overlay.placement) this.buildings.drawPlacing(art, overlay.placement, view.playerId);
     });
@@ -127,7 +125,7 @@ export class Renderer {
     this.drawPanel(layout.panel);
     this.minimap.draw(ctx, view, layout.minimap, cam, mapView, alpha);
     const trainer = trainerOf(view.buildings, overlay.selectedBuilding);
-    if (trainer) drawTrainPanel(ctx, view.credits, trainer, layout.buttons);
+    if (trainer) drawTrainPanel(ctx, view.credits, trainer, layout.buttons, (kind) => this.units.icon(kind, view.playerId));
     else drawBuildPanel(ctx, view, layout.buttons, overlay.placing, (kind) => this.buildings.icon(kind, view.playerId));
     drawSoundStrip(ctx, overlay.sound, layout.soundStrip);
     if (overlay.alert) drawAlertBanner(ctx, overlay.alert, mapView);
@@ -168,64 +166,21 @@ export class Renderer {
     ctx.fillRect(panel.x + panel.width - 1, panel.y, 1, panel.height);
   }
 
-  private drawUnit(u: UnitView, cam: Camera, alpha: number): void {
-    const { ctx } = this;
-    const team = TEAM_COLOURS[u.owner];
-    const mx = u.prevX + (u.x - u.prevX) * alpha;
-    const my = u.prevY + (u.y - u.prevY) * alpha;
-    const p = mapToScreen(cam, mx, my);
-    ctx.lineWidth = 2;
-    ctx.strokeStyle = team.dark;
-    ctx.fillStyle = team.fill;
-    ctx.beginPath();
-    switch (u.kind) {
-      case "rifleman":
-        ctx.arc(p.x, p.y, CELL_PX * 0.22, 0, Math.PI * 2);
-        break;
-      case "raider": {
-        const s = CELL_PX * 0.38;
-        ctx.moveTo(p.x, p.y - s);
-        ctx.lineTo(p.x + s, p.y + s * 0.8);
-        ctx.lineTo(p.x - s, p.y + s * 0.8);
-        ctx.closePath();
-        break;
-      }
-      case "harvester": {
-        const s = CELL_PX * 0.4;
-        ctx.rect(p.x - s, p.y - s * 0.75, s * 2, s * 1.5);
-        break;
-      }
+  /** A short bright streak per shot in the pixel world, fading out before the next Tick. Ticket #22 replaces it with real effects. */
+  private drawShot(art: CanvasRenderingContext2D, s: ShotView, alpha: number): void {
+    const U = ART_CELL_PX;
+    const ax = s.fromX * U;
+    const ay = s.fromY * U;
+    const bx = s.toX * U;
+    const by = s.toY * U;
+    const steps = Math.max(1, Math.round(Math.max(Math.abs(bx - ax), Math.abs(by - ay))));
+    art.globalAlpha = 1 - 0.6 * alpha;
+    art.fillStyle = SHOT_TRACER;
+    for (let i = 0; i <= steps; i++) {
+      art.fillRect(Math.round(ax + ((bx - ax) * i) / steps), Math.round(ay + ((by - ay) * i) / steps), 1, 1);
     }
-    ctx.fill();
-    ctx.stroke();
-    if (u.kind === "harvester") {
-      // The hopper fills from the bottom with the load, so a full Harvester reads at a glance.
-      const size = 8;
-      const filled = Math.round(size * Math.min(1, u.cargo / ECONOMY.harvesterCapacity));
-      ctx.fillStyle = team.dark;
-      ctx.fillRect(p.x - size / 2, p.y - size / 2, size, size);
-      ctx.fillStyle = ORE_COLOUR;
-      ctx.fillRect(p.x - size / 2, p.y + size / 2 - filled, size, filled);
-    }
-  }
-
-  /** A short bright line per shot, fading out before the next Tick. */
-  private drawShot(s: ShotView, cam: Camera, alpha: number): void {
-    const { ctx } = this;
-    const a = mapToScreen(cam, s.fromX, s.fromY);
-    const b = mapToScreen(cam, s.toX, s.toY);
-    ctx.globalAlpha = 1 - 0.6 * alpha;
-    ctx.strokeStyle = SHOT_TRACER;
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.moveTo(a.x, a.y);
-    ctx.lineTo(b.x, b.y);
-    ctx.stroke();
-    ctx.fillStyle = SHOT_TRACER;
-    ctx.beginPath();
-    ctx.arc(b.x, b.y, 3, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.globalAlpha = 1;
+    art.fillRect(Math.round(bx) - 1, Math.round(by) - 1, 2, 2);
+    art.globalAlpha = 1;
   }
 
   private drawMoveMarker(cell: CellPos, age: number, cam: Camera): void {

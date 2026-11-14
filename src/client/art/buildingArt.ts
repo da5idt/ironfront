@@ -20,6 +20,8 @@ export const DAMAGED_BELOW = 0.5;
 export const BUILD_UP_SECONDS = 0.9;
 /** Side of the Turret gun's square sprite; its middle sits on the middle of the Turret's Cell. */
 export const TURRET_GUN_PX = 20;
+/** Where a Turret's gun points until something aims it: south-east. */
+export const TURRET_REST_FACING = 2;
 /** Art pixels of room above a Building for its smoke to rise into. */
 export const SMOKE_RISE = 20;
 /** Room to the right of a Building for its smoke to drift into. */
