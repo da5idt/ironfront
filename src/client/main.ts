@@ -2,7 +2,6 @@ import { RIVERFORD } from "../game/maps/riverford";
 import {
   advanceTick,
   type BuildingKind,
-  canPlaceBuilding,
   type CellPos,
   type Command,
   createMatch,
@@ -14,7 +13,6 @@ import {
   type PlayerId,
 } from "../sim";
 import { createOpponent, type Opponent, THINK_EVERY_TICKS } from "../opponent/opponent";
-import { buildButtons, buttonAt, footprintAt, panelClick } from "./buildPanel";
 import {
   type Camera,
   CELL_PX,
@@ -25,9 +23,10 @@ import {
   scrollDirection,
   type Size,
 } from "./camera";
-import { computeLayout, contains, type Layout } from "./layout";
+import { computeLayout, contains, edgeScroll, type Layout, toMapView } from "./layout";
 import { type Clock, interpolationAlpha, stepClock } from "./loop";
 import { cameraOnMinimapPoint } from "./minimap";
+import { type PlacingOutcome, placingMapClick, placingPreview } from "./placing";
 import { type Overlay, Renderer } from "./renderer";
 import { keyAction, type ScreenOverlay, screenOverlay } from "./screenOverlay";
 import {
@@ -42,7 +41,7 @@ import {
   unitAt,
   unitsInBox,
 } from "./selection";
-import { trainButtonAt, trainButtons, trainClick, trainerOf } from "./trainPanel";
+import { type ButtonTarget, keyButtonIndex, sidePanelPress } from "./sidePanel";
 
 // Wires the browser to the Simulation: a fixed-Tick clock, the camera, input
 // (selection stays here; Commands go to the Simulation) and drawing.
@@ -115,6 +114,10 @@ window.addEventListener("keydown", (e) => {
   const action = keyAction(e.code, placing !== null);
   if (action === "cancelPlacement") placing = null;
   else if (action === "togglePause") paused = !paused;
+  // Ctrl/Cmd/Alt+number belongs to the browser (held-key repeats were already dropped above).
+  const index = e.ctrlKey || e.metaKey || e.altKey ? null : keyButtonIndex(e.code);
+  // Like a click, a key presses nothing under a Victory, defeat or Paused screen.
+  if (index !== null && !currentScreenOverlay()) pressSidePanel({ key: index }, "left");
 });
 window.addEventListener("keyup", (e) => keys.delete(e.code));
 window.addEventListener("blur", () => keys.clear());
@@ -155,40 +158,43 @@ function orderTo(cell: CellPos): void {
 /** The finished Building being placed, while the person picks a spot; null otherwise. */
 let placing: BuildingKind | null = null;
 
-/** With a Barracks or Vehicle Factory selected the side panel trains; otherwise it is the HQ's build panel. */
-function clickSidePanel(at: { x: number; y: number }, button: "left" | "right"): void {
-  const trainer = trainerOf(view.buildings, selectedBuilding);
-  if (!trainer) {
-    clickBuildPanel(at, button);
+/** A click on, or the number key of, a side panel button: the build menu's or the selected trainer's. */
+function pressSidePanel(target: ButtonTarget, button: "left" | "right"): void {
+  const action = sidePanelPress(view, selectedBuilding, layout.buttons, target, button);
+  if (!action) return;
+  if (action.type === "place") {
+    placing = action.kind;
     return;
   }
-  const kind = trainButtonAt(trainButtons(layout.buttons, trainer.kind), at.x, at.y);
-  const command = kind ? trainClick(trainer.id, trainer.training, view.credits, kind, button) : null;
-  if (!command) return;
-  issue(command);
-  // Show the new queue at once rather than on the next Tick.
+  issue(action.command);
+  // Show the new state at once rather than on the next Tick.
   view = getPlayerView(match, HUMAN);
 }
 
-function clickBuildPanel(at: { x: number; y: number }, button: "left" | "right"): void {
-  const kind = buttonAt(buildButtons(layout.buttons), at.x, at.y);
-  const action = kind ? panelClick(view, kind, button) : null;
-  if (!action) return;
-  placing = null;
-  if (action.type === "place") {
-    placing = action.kind;
-  } else {
-    issue(action.command);
-    // Show the new state at once rather than on the next Tick.
-    view = getPlayerView(match, HUMAN);
+/** Acts on a click on the Map while placing. */
+function onPlacingOutcome(outcome: PlacingOutcome): void {
+  switch (outcome.type) {
+    case "place":
+      // The Simulation can still refuse a spot where an unseen Building stands; then placing carries on.
+      if (issueCommand(match, HUMAN, outcome.command).ok) {
+        placing = null;
+        view = getPlayerView(match, HUMAN);
+      }
+      return;
+    case "cantBuildThere":
+      // Placing carries on. Ticket #23 plays the "can't build there" sound from here.
+      return;
+    case "cancel":
+      placing = null;
+      return;
   }
 }
 
 /** The footprint preview under the mouse, or null when not placing or off the Map view. */
 function placementPreview(): Overlay["placement"] {
   if (!placing || !mouse || !contains(layout.mapView, mouse.x, mouse.y)) return null;
-  const at = footprintAt(placing, screenToCell(camera, mouse.x, mouse.y));
-  return { kind: placing, at, valid: canPlaceBuilding(view, placing, at) };
+  const m = toMapView(layout, mouse);
+  return placingPreview(view, placing, screenToCell(camera, m.x, m.y));
 }
 
 // Right-click is the move, attack and harvest button, so the browser menu must not open over the Map.
@@ -207,36 +213,33 @@ canvas.addEventListener("mousedown", (e) => {
     return;
   }
   if (contains(layout.buttons, at.x, at.y)) {
-    clickSidePanel(at, e.button === 0 ? "left" : "right");
+    pressSidePanel({ point: at }, e.button === 0 ? "left" : "right");
     return;
   }
   // The side panel is not the Map: no selection box or order starts there.
   if (!contains(layout.mapView, at.x, at.y)) return;
+  // From here on the point is on the Map, so it is measured from the Map view's corner, as the camera is.
+  const inView = toMapView(layout, at);
   if (placing) {
-    // Left-click places; right-click leaves placement mode without ordering anyone about.
-    if (e.button === 0) {
-      const spot = footprintAt(placing, screenToCell(camera, at.x, at.y));
-      if (issueCommand(match, HUMAN, { type: "placeBuilding", at: spot }).ok) {
-        placing = null;
-        view = getPlayerView(match, HUMAN);
-      }
-    } else if (e.button === 2) {
-      placing = null;
+    // While placing, a Map click never selects or orders anyone about.
+    if (e.button === 0 || e.button === 2) {
+      const cell = screenToCell(camera, inView.x, inView.y);
+      onPlacingOutcome(placingMapClick(view, placing, cell, e.button === 0 ? "left" : "right"));
     }
     return;
   }
   if (e.button === 0) {
     drag = { start: at, now: at };
   } else if (e.button === 2 && selection.size === 0 && selectedBuilding !== null) {
-    const cell = screenToCell(camera, at.x, at.y);
+    const cell = screenToCell(camera, inView.x, inView.y);
     if (issueCommand(match, HUMAN, { type: "setRallyPoint", buildingId: selectedBuilding, target: cell }).ok) {
       view = getPlayerView(match, HUMAN);
       moveMarker = { cell, at: performance.now() };
     }
   } else if (e.button === 2 && selection.size > 0) {
-    const cell = screenToCell(camera, at.x, at.y);
+    const cell = screenToCell(camera, inView.x, inView.y);
     if (cell.x < 0 || cell.y < 0 || cell.x >= mapSize.width || cell.y >= mapSize.height) return;
-    const point = screenToMap(camera, at.x, at.y);
+    const point = screenToMap(camera, inView.x, inView.y);
     // A Unit standing in front of a Building is the more urgent target.
     const enemy = enemyUnitAt(view.units, point, HUMAN) ?? enemyBuildingAt(view.buildings, point, HUMAN);
     if (enemy) {
@@ -256,12 +259,15 @@ window.addEventListener("mouseup", (e) => {
   if (e.button !== 0 || !drag) return;
   const end = { x: e.clientX, y: e.clientY };
   if (isDrag(drag.start, end)) {
-    const a = screenToMap(camera, drag.start.x, drag.start.y);
-    const b = screenToMap(camera, end.x, end.y);
+    const start = toMapView(layout, drag.start);
+    const stop = toMapView(layout, end);
+    const a = screenToMap(camera, start.x, start.y);
+    const b = screenToMap(camera, stop.x, stop.y);
     selection = boxSelect(selection, unitsInBox(view.units, a, b, HUMAN), e.shiftKey);
     selectedBuilding = null;
   } else {
-    const point = screenToMap(camera, end.x, end.y);
+    const stop = toMapView(layout, end);
+    const point = screenToMap(camera, stop.x, stop.y);
     const hit = unitAt(view.units, point, HUMAN);
     // A Unit wins over the Building behind it; a plain click on an own Building selects just that.
     const building = !hit && !e.shiftKey ? ownBuildingAt(view.buildings, point, HUMAN) : null;
@@ -350,15 +356,14 @@ function frame(now: number): void {
   if (placing && !view.production?.ready) placing = null;
 
   const cameraSeconds = Math.min(frameMs, MAX_CAMERA_FRAME_MS) / 1000;
-  // Only a mouse over the Map view edge-scrolls; resting on the side panel must not.
-  const edgeMouse = mouse && contains(layout.mapView, mouse.x, mouse.y) ? mouse : null;
-  camera = scrollCamera(camera, scrollDirection(keys, edgeMouse, viewSize), cameraSeconds, viewSize, mapSize);
+  camera = scrollCamera(camera, scrollDirection(keys, edgeScroll(layout, mouse)), cameraSeconds, viewSize, mapSize);
   const markerAge = moveMarker ? (now - moveMarker.at) / MOVE_MARKER_MS : 1;
   if (markerAge >= 1) moveMarker = null;
   const drawn = peekPlayer === null ? view : getPlayerView(match, peekPlayer);
   renderer.draw(drawn, camera, screen, layout, interpolationAlpha(clock), {
     selection,
-    dragBox: drag && isDrag(drag.start, drag.now) ? { a: drag.start, b: drag.now } : null,
+    dragBox:
+      drag && isDrag(drag.start, drag.now) ? { a: toMapView(layout, drag.start), b: toMapView(layout, drag.now) } : null,
     moveMarker: moveMarker ? { cell: moveMarker.cell, age: Math.max(0, markerAge) } : null,
     placement: placementPreview(),
     selectedBuilding,

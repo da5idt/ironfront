@@ -54,7 +54,7 @@ const BUILDING_LABELS: Record<BuildingKind, string> = {
 /** Client-only things to draw on top of the Match. */
 export interface Overlay {
   readonly selection: Selection;
-  /** Screen corners of the box being dragged, if any. */
+  /** Corners of the box being dragged, in Map-view pixels, if any. */
   readonly dragBox: { readonly a: { x: number; y: number }; readonly b: { x: number; y: number } } | null;
   /** The Cell of the last move Command, and how far its fade-out has got (0..1). */
   readonly moveMarker: { readonly cell: CellPos; readonly age: number } | null;
@@ -89,12 +89,14 @@ export class Renderer {
     ctx.fillStyle = "#000";
     ctx.fillRect(0, 0, screen.width, screen.height);
 
-    // The Map view sits at the top-left, so screen pixels and Map-view pixels are the same.
+    // The Map view sits right of the panel; moving the origin to its corner lets
+    // everything on the Map be drawn in Map-view pixels, as the camera maths gives them.
     const { mapView } = layout;
     ctx.save();
     ctx.beginPath();
     ctx.rect(mapView.x, mapView.y, mapView.width, mapView.height);
     ctx.clip();
+    ctx.translate(mapView.x, mapView.y);
     this.drawTerrain(view, cam);
     this.drawOre(view, cam, mapView);
     for (const b of view.buildings) this.drawBuilding(b, cam);
@@ -135,8 +137,9 @@ export class Renderer {
     const { ctx } = this;
     ctx.fillStyle = PANEL_BG;
     ctx.fillRect(panel.x, panel.y, panel.width, panel.height);
+    // The edge line faces the Map view, on the panel's right.
     ctx.fillStyle = PANEL_EDGE;
-    ctx.fillRect(panel.x, panel.y, 1, panel.height);
+    ctx.fillRect(panel.x + panel.width - 1, panel.y, 1, panel.height);
   }
 
   private drawTerrain(view: PlayerView, cam: Camera): void {

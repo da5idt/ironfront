@@ -43,6 +43,8 @@ export const BUTTON_EDGE = "#3a414c";
 export const BUTTON_PROGRESS = "rgba(80, 140, 220, 0.45)";
 export const BUTTON_READY = "rgba(95, 211, 95, 0.4)";
 export const BUTTON_DISABLED_TEXT = "#6b717b";
+/** The key number badge on a button. */
+export const BUTTON_KEY_BG = "#3a414c";
 export const PLACE_VALID = "rgba(95, 211, 95, 0.45)";
 export const PLACE_INVALID = "rgba(224, 74, 58, 0.5)";
 

@@ -6,7 +6,7 @@ import type { CellPos } from "../sim";
 export const CELL_PX = 24;
 /** Camera speed when scrolling, in pixels per second. */
 export const SCROLL_PX_PER_SECOND = 900;
-/** How close to the screen edge the mouse must be to scroll, in pixels. */
+/** How close to a screen edge the mouse must be, over the Map view, to scroll, in pixels. */
 export const EDGE_PX = 16;
 
 /** The world pixel shown at the top-left of the screen. */
@@ -46,27 +46,20 @@ const KEY_DIRECTIONS: Record<string, readonly [number, number]> = {
 
 /**
  * Which way to scroll, each axis -1, 0 or 1, from held keys (KeyboardEvent.code)
- * and the mouse position (null when the mouse is outside the window).
+ * and the mouse's edge-scroll (see edgeScroll in layout.ts, which knows where the panel is).
  */
 export function scrollDirection(
   keys: ReadonlySet<string>,
-  mouse: { x: number; y: number } | null,
-  screen: Size,
+  edge: { readonly dx: number; readonly dy: number },
 ): { dx: number; dy: number } {
-  let dx = 0;
-  let dy = 0;
+  let dx = edge.dx;
+  let dy = edge.dy;
   for (const key of keys) {
     const dir = KEY_DIRECTIONS[key];
     if (dir) {
       dx += dir[0];
       dy += dir[1];
     }
-  }
-  if (mouse) {
-    if (mouse.x < EDGE_PX) dx -= 1;
-    if (mouse.x >= screen.width - EDGE_PX) dx += 1;
-    if (mouse.y < EDGE_PX) dy -= 1;
-    if (mouse.y >= screen.height - EDGE_PX) dy += 1;
   }
   return { dx: Math.sign(dx), dy: Math.sign(dy) };
 }
