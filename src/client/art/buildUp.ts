@@ -4,7 +4,8 @@ import { BUILD_UP_SECONDS } from "./buildingArt";
 // Notes when one of the Player's own Buildings first appears in the view, so
 // the client can show it rising from the ground. Client-only and pure: it
 // reads Player views and never touches the Match (ADR 0002). The presentation
-// module of ticket #21 may take this over.
+// module keeps these notes in its state (Presentation.buildUps) and moves them
+// on with every Tick's view.
 
 /** The parts of a Player view this reads. */
 export interface BuildUpView {

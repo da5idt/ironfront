@@ -47,6 +47,7 @@ import { matchEndAlert } from "./sfx/alertQueue";
 import { createAlerts } from "./sfx/alerts";
 import { createAlertVoice } from "./sfx/alertVoice";
 import { createSoundEngine } from "./sfx/engine";
+import { alertForEvent, soundEventFor } from "./sfx/eventCues";
 import { createMusic } from "./sfx/musicPlayer";
 import { moodFor } from "./sfx/musicTimeline";
 import { listenerFor } from "./sfx/hearing";
@@ -90,7 +91,7 @@ let layout: Layout = computeLayout(screen);
 /** The camera's screen size: the Map view, not the whole window, so nothing sits under the side panel. */
 let viewSize: Size = layout.mapView;
 let view = getPlayerView(match, HUMAN);
-/** Facings, Turret aim and the like: client-only, moved on once for every Tick's view (ADR 0002). */
+/** Facings, Turret aim, effects, wrecks and the like: client-only, moved on once for every Tick's view (ADR 0002). */
 let presentation: Presentation = present(null, view).state;
 const mapSize = { width: view.map.width, height: view.map.height };
 
@@ -229,8 +230,10 @@ function onPlacingOutcome(outcome: PlacingOutcome): void {
       if (issueCommand(match, HUMAN, outcome.command).ok) {
         placing = null;
         view = getPlayerView(match, HUMAN);
-        // No position: the person placed it where they are looking.
-        sfx.play("buildingPlaced");
+        // Its sound comes with the presentation's "building placed" event on the next Tick, like every other Building's.
+      } else {
+        // The client thought the spot free; the person hears the same refusal as for a spot it knew was taken.
+        sfx.play("cantBuild");
       }
       return;
     case "cantBuildThere":
@@ -374,7 +377,13 @@ function showTick(): void {
   const next = present(presentation, peekPlayer === null ? view : getPlayerView(match, peekPlayer));
   presentation = next.state;
   // Only what the view shows is in the events, so nothing under Fog of War is heard.
-  for (const event of next.events) sfx.playEvent(event);
+  for (const event of next.events) {
+    const sound = soundEventFor(event);
+    if (sound) sfx.playEvent(sound);
+    // Alerts are for the person's own things: not for the other Player's while a dev peek shows its view.
+    const alert = presentation.playerId === HUMAN ? alertForEvent(event, HUMAN) : null;
+    if (alert) alerts.raise(alert, playSeconds);
+  }
 }
 
 // A hook for screenshots and manual poking in dev builds only; production has no way in.
@@ -394,6 +403,7 @@ if (import.meta.env.DEV) {
         }
       },
       view: () => view,
+      presentation: () => presentation,
       camera: () => camera,
       /** Centres the camera on a Cell. */
       lookAt: (x: number, y: number) => {

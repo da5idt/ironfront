@@ -120,7 +120,11 @@ describe("a Unit that shoots", () => {
     const seen = watch(match);
     // The Turret, put there directly, sees its surroundings from the end of the first Tick.
     seen.run(2);
-    expect(seen.events).toEqual([{ kind: "impact", at: { x: 10.5, y: 15.5 } }]);
+    expect(seen.events).toEqual([
+      { kind: "impact", at: { x: 10.5, y: 15.5 } },
+      // It hit the Player's own Harvester.
+      { kind: "underAttack", at: { x: 10.5, y: 15.5 } },
+    ]);
   });
 });
 

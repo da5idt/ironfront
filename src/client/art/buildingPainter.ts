@@ -1,6 +1,5 @@
 import { BUILDING_STATS, type BuildingKind, type BuildingView, type CellPos, type EntityId, type PlayerId, TICKS_PER_SECOND } from "../../sim";
 import { ART } from "./artPalette";
-import { type BuildUps, buildUpProgress } from "./buildUp";
 import { hash2 } from "./hash";
 import { toCanvas } from "./pixelWorld";
 import {
@@ -98,20 +97,21 @@ export class BuildingPainter {
   /**
    * All Buildings of a view, into the pixel world's ground layer. `time` is
    * game time in Ticks (it may be between two), so everything holds still
-   * while paused. `turretFacing` says which of the FACINGS each Turret's gun
-   * points; without it guns rest.
+   * while paused. `risen` says how far each Building has risen from the
+   * ground (0 just placed, 1 standing), and `turretFacing` which of the
+   * FACINGS each Turret's gun points; without it guns rest.
    */
   draw(
     art: CanvasRenderingContext2D,
     buildings: readonly BuildingView[],
     time: number,
-    ups: BuildUps,
+    risen: (b: BuildingView) => number,
     turretFacing?: (id: EntityId) => number,
   ): void {
     const U = ART_CELL_PX;
     const seconds = time / TICKS_PER_SECOND;
     // Remembered Buildings are as last seen, so they neither rise nor move.
-    const rise = (b: BuildingView) => (b.remembered ? 1 : buildUpProgress(ups, b.id, time));
+    const rise = (b: BuildingView) => (b.remembered ? 1 : risen(b));
     // Three passes, so no Building's shadow or smoke is hidden by a neighbour drawn after it.
     for (const b of buildings) {
       const progress = rise(b);

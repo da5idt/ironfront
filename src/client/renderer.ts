@@ -1,6 +1,6 @@
-import type { BuildingKind, CellPos, EntityId, PlayerView, ShotView } from "../sim";
+import type { BuildingKind, CellPos, EntityId, PlayerView } from "../sim";
 import { BuildingPainter } from "./art/buildingPainter";
-import { type BuildUps, noteBuildings } from "./art/buildUp";
+import { EffectPainter } from "./art/effectPainter";
 import { drawBrackets, drawHealthBar, HEALTH_BAR_PX } from "./art/markerPainter";
 import { PixelWorld } from "./art/pixelWorld";
 import { ART_CELL_PX } from "./art/terrainArt";
@@ -19,9 +19,8 @@ import {
   MOVE_MARKER,
   PANEL_BG,
   PANEL_EDGE,
-  SHOT_TRACER,
 } from "./palette";
-import { type Presentation, turretFacing } from "./presentation";
+import { buildingRise, type Presentation, turretFacing } from "./presentation";
 import { drawRallyPoint } from "./selectedBuildingPainter";
 import type { Selection } from "./selection";
 import type { MixerSettings } from "./sfx/mixer";
@@ -53,7 +52,7 @@ export interface Overlay {
   readonly sound: MixerSettings;
   /** An alert's text to show at the top of the Map view, when it was not spoken. Left out, none. */
   readonly alert?: string | null;
-  /** How Units face and where Turrets aim, from the presentation module; null shows everything at rest. */
+  /** How Units face, where Turrets aim, and the effects and marks of the fight, from the presentation module; null shows everything at rest. */
   readonly presentation: Presentation | null;
   /** The selected own Building, if any; a Barracks or Vehicle Factory turns the side panel into its train buttons. */
   readonly selectedBuilding: EntityId | null;
@@ -65,9 +64,7 @@ export class Renderer {
   private readonly minimap = new MinimapPainter();
   private readonly buildings = new BuildingPainter();
   private readonly units = new UnitPainter();
-  /** Which own Buildings are newly placed and still rising; client-only (ADR 0002). */
-  private buildUps: BuildUps | null = null;
-  private buildUpsFor: PlayerView | null = null;
+  private readonly effects = new EffectPainter();
 
   constructor(private readonly canvas: HTMLCanvasElement) {
     const ctx = canvas.getContext("2d");
@@ -93,28 +90,32 @@ export class Renderer {
     ctx.translate(mapView.x, mapView.y);
     // The origin is already at the Map view's corner, so the pixel world draws into a rect at 0,0.
     const viewRect = { x: 0, y: 0, width: mapView.width, height: mapView.height };
-    if (view !== this.buildUpsFor) {
-      this.buildUps = noteBuildings(this.buildUps, view);
-      this.buildUpsFor = view;
-    }
-    const ups = this.buildUps!;
     // Game time, so idle animation and smoke stop while paused.
     const time = view.tick + alpha;
     // The pixel world (ADR 0003): ground, then Buildings on it, at half resolution.
     const shown = overlay.presentation;
-    this.world.drawGround(ctx, view, cam, viewRect, alpha, (art) =>
-      this.buildings.draw(art, view.buildings, time, ups, (id) => turretFacing(shown, id)),
-    );
+    this.world.drawGround(ctx, view, cam, viewRect, alpha, (art) => {
+      // Wrecks and rubble lie on the ground: under the Buildings (a new one may go up on old rubble) and under the fog.
+      if (shown) this.effects.drawMarks(art, shown.marks, time);
+      this.buildings.draw(
+        art,
+        view.buildings,
+        time,
+        (b) => buildingRise(shown, b, time),
+        (id) => turretFacing(shown, id),
+      );
+    });
     // After the ground and Buildings, so remembered Buildings sit dimmed under it;
     // before Units, which are only ever listed where the Player can see.
     this.world.drawFog(ctx, view, cam, viewRect);
     const selectedBuilding = view.buildings.find((b) => b.id === overlay.selectedBuilding);
     if (selectedBuilding) drawRallyPoint(ctx, selectedBuilding, cam);
     if (overlay.moveMarker) this.drawMoveMarker(overlay.moveMarker.cell, overlay.moveMarker.age, cam);
-    // The pixel world's layer over the fog: Units are only ever listed where the Player can see. Effects (ticket #22) go after the Units.
+    // The pixel world's layer over the fog: Units are only ever listed where the Player can see, and
+    // the presentation only makes effects for what the view showed. Effects go over the Units they hit.
     this.world.drawAboveFog(ctx, cam, viewRect, (art) => {
       this.units.draw(art, view.units, alpha, time, (id) => shown?.units.get(id));
-      for (const s of view.shots) this.drawShot(art, s, alpha);
+      if (shown) this.effects.drawEffects(art, shown.effects, time);
       this.drawMarkers(art, view, alpha, overlay);
       if (overlay.placement) this.buildings.drawPlacing(art, overlay.placement, view.playerId);
     });
@@ -164,23 +165,6 @@ export class Renderer {
     // The edge line faces the Map view, on the panel's right.
     ctx.fillStyle = PANEL_EDGE;
     ctx.fillRect(panel.x + panel.width - 1, panel.y, 1, panel.height);
-  }
-
-  /** A short bright streak per shot in the pixel world, fading out before the next Tick. Ticket #22 replaces it with real effects. */
-  private drawShot(art: CanvasRenderingContext2D, s: ShotView, alpha: number): void {
-    const U = ART_CELL_PX;
-    const ax = s.fromX * U;
-    const ay = s.fromY * U;
-    const bx = s.toX * U;
-    const by = s.toY * U;
-    const steps = Math.max(1, Math.round(Math.max(Math.abs(bx - ax), Math.abs(by - ay))));
-    art.globalAlpha = 1 - 0.6 * alpha;
-    art.fillStyle = SHOT_TRACER;
-    for (let i = 0; i <= steps; i++) {
-      art.fillRect(Math.round(ax + ((bx - ax) * i) / steps), Math.round(ay + ((by - ay) * i) / steps), 1, 1);
-    }
-    art.fillRect(Math.round(bx) - 1, Math.round(by) - 1, 2, 2);
-    art.globalAlpha = 1;
   }
 
   private drawMoveMarker(cell: CellPos, age: number, cam: Camera): void {
