@@ -1,5 +1,5 @@
 import { type Channel, channelGain, CHANNELS, DEFAULT_SETTINGS, type MixerSettings } from "./mixer";
-import { type Layer, type Recipe, RECIPES, type SoundName } from "./recipes";
+import { type Layer, type Recipe, RECIPES } from "./recipes";
 import type { SoundOutput } from "./sfx";
 
 // The Web Audio side of sound: thin on purpose and checked by ear, since it

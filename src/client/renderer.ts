@@ -50,10 +50,10 @@ export interface Overlay {
   readonly screen: ScreenOverlay | null;
   /** The sound settings, shown in the strip at the bottom of the panel. */
   readonly sound: MixerSettings;
-  /** An alert's text to show at the top of the Map view, when it was not spoken. Left out, none. */
-  readonly alert?: string | null;
-  /** How Units face, where Turrets aim, and the effects and marks of the fight, from the presentation module; null shows everything at rest. */
-  readonly presentation: Presentation | null;
+  /** An alert's text to show at the top of the Map view, when it was not spoken; null for none. */
+  readonly alert: string | null;
+  /** How Units face, where Turrets aim, and the effects and marks of the fight, from the presentation module. */
+  readonly presentation: Presentation;
   /** The selected own Building, if any; a Barracks or Vehicle Factory turns the side panel into its train buttons. */
   readonly selectedBuilding: EntityId | null;
 }
@@ -96,7 +96,7 @@ export class Renderer {
     const shown = overlay.presentation;
     this.world.drawGround(ctx, view, cam, viewRect, alpha, (art) => {
       // Wrecks and rubble lie on the ground: under the Buildings (a new one may go up on old rubble) and under the fog.
-      if (shown) this.effects.drawMarks(art, shown.marks, time);
+      this.effects.drawMarks(art, shown.marks, time);
       this.buildings.draw(
         art,
         view.buildings,
@@ -115,8 +115,8 @@ export class Renderer {
     // effects are checked against the fog as it is now, since they outlive the Tick that made them.
     // Effects go over the Units they hit.
     this.world.drawAboveFog(ctx, cam, viewRect, (art) => {
-      this.units.draw(art, view.units, alpha, time, (id) => shown?.units.get(id));
-      if (shown) this.effects.drawEffects(art, shown.effects, time, (e) => effectInSight(e, view.map));
+      this.units.draw(art, view.units, alpha, time, shown.units);
+      this.effects.drawEffects(art, shown.effects, time, (e) => effectInSight(e, view.map));
       this.drawMarkers(art, view, alpha, overlay);
       if (overlay.placement) this.buildings.drawPlacing(art, overlay.placement, view.playerId);
     });

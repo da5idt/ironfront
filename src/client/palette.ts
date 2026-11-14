@@ -1,17 +1,8 @@
-import type { PlayerId, Terrain, Visibility } from "../sim";
+import type { Visibility } from "../sim";
 import { ART } from "./art/artPalette";
 
 // Interface colours. Art colours (terrain, Ore, teams, concrete and so on)
-// live in the one art table, ART in ./art/artPalette (ADR 0003); the names
-// below that point into it are kept for the code that still uses them.
-
-/** One flat colour per terrain, where a single pixel stands for a Cell (the minimap). */
-export const TERRAIN_COLOURS: Record<Terrain, string> = {
-  open: ART.terrain.open[1],
-  rough: ART.terrain.rough[2],
-  rock: ART.terrain.rock[2],
-  water: ART.terrain.water[2],
-};
+// live in the one art table, ART in ./art/artPalette (ADR 0003).
 
 /** Opacity (0..255) of the black laid over each Cell: Unexplored hides all, Fogged dims. */
 export const FOG_ALPHA: Record<Visibility, number> = {
@@ -20,18 +11,10 @@ export const FOG_ALPHA: Record<Visibility, number> = {
   visible: 0,
 };
 
-export const ORE_COLOUR = ART.ore.mid;
-
-export const TEAM_COLOURS: Record<PlayerId, { fill: string; dark: string; light: string }> = {
-  0: { fill: ART.team[0].mid, dark: ART.team[0].dark, light: ART.team[0].light },
-  1: { fill: ART.team[1].mid, dark: ART.team[1].dark, light: ART.team[1].light },
-};
-
 export const SELECTION_MARKER = ART.marker.selection;
 export const MOVE_MARKER = "#8ef08e";
 export const RALLY_LINE = "rgba(244, 244, 160, 0.7)";
 export const RALLY_FLAG = "#f0c040";
-export const SHOT_TRACER = "#fff2a8";
 export const DRAG_BOX_LINE = "#d8f0d8";
 export const DRAG_BOX_FILL = "rgba(200, 240, 200, 0.12)";
 

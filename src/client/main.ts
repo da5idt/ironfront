@@ -47,7 +47,7 @@ import { matchEndAlert } from "./sfx/alertQueue";
 import { createAlerts } from "./sfx/alerts";
 import { createAlertVoice } from "./sfx/alertVoice";
 import { createSoundEngine } from "./sfx/engine";
-import { alertForEvent, soundEventFor } from "./sfx/eventCues";
+import { alertForEvent } from "./sfx/eventCues";
 import { createMusic } from "./sfx/musicPlayer";
 import { moodFor } from "./sfx/musicTimeline";
 import { listenerFor } from "./sfx/hearing";
@@ -380,8 +380,7 @@ function showTick(): void {
   presentation = next.state;
   // Only what the view shows is in the events, so nothing under Fog of War is heard.
   for (const event of next.events) {
-    const sound = soundEventFor(event);
-    if (sound) sfx.playEvent(sound);
+    sfx.playEvent(event);
     // Alerts are for the person's own things: not for the other Player's while a dev peek shows its view.
     const alert = presentation.playerId === HUMAN ? alertForEvent(event, HUMAN) : null;
     if (alert) alerts.raise(alert, playSeconds);

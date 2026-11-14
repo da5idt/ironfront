@@ -1,8 +1,9 @@
-import { type EntityId, type PlayerId, TICKS_PER_SECOND, UNIT_STATS, type UnitKind, type UnitView } from "../../sim";
+import { type EntityId, PLAYER_IDS, type PlayerId, TICKS_PER_SECOND, UNIT_STATS, type UnitKind, type UnitView } from "../../sim";
 import { ART } from "./artPalette";
+import { FACINGS } from "./buildingArt";
 import { hash2 } from "./hash";
-import type { PixelBuffer } from "./pixelBuffer";
-import { DAMAGED_BELOW, FACINGS, UNIT_FRAMES, UNIT_SPRITE_PX, unitSprite } from "./spriteSheet";
+import { toCanvas } from "./pixelWorld";
+import { DAMAGED_BELOW, UNIT_FRAMES, UNIT_SPRITE_PX, unitSprite } from "./spriteSheet";
 import { ART_CELL_PX } from "./terrainArt";
 import { unitFrame } from "./unitArt";
 
@@ -11,11 +12,8 @@ import { unitFrame } from "./unitArt";
 // drawing a Unit copies one square of it.
 
 const KINDS = Object.keys(UNIT_STATS) as UnitKind[];
-const TEAMS: readonly PlayerId[] = [0, 1];
 const S = UNIT_SPRITE_PX;
 
-/** The facing a Unit shows before anything has said which way it faces: south-east, toward the viewer. */
-const REST_FACING = 2;
 /** On its button a vehicle is side-on, where its shape is plainest; a Rifleman looks out of the picture. */
 const ICON_FACING: Readonly<Record<UnitKind, number>> = { rifleman: 2, raider: 0, harvester: 0 };
 
@@ -33,12 +31,10 @@ function sheetOf(kind: UnitKind, team: PlayerId): HTMLCanvasElement {
   sheet.width = FACINGS * S;
   sheet.height = frames * 2 * S;
   const c = sheet.getContext("2d")!;
-  const put = (buf: PixelBuffer, column: number, row: number) =>
-    c.putImageData(new ImageData(new Uint8ClampedArray(buf.data), buf.width, buf.height), column * S, row * S);
   for (let facing = 0; facing < FACINGS; facing++) {
     for (let frame = 0; frame < frames; frame++) {
-      put(sprite.frames[facing]![frame]!, facing, frame);
-      put(sprite.damaged[facing]![frame]!, facing, frames + frame);
+      c.drawImage(toCanvas(sprite.frames[facing]![frame]!), facing * S, frame * S);
+      c.drawImage(toCanvas(sprite.damaged[facing]![frame]!), facing * S, (frames + frame) * S);
     }
   }
   return sheet;
@@ -63,7 +59,7 @@ function iconOf(kind: UnitKind, team: PlayerId): HTMLCanvasElement {
   const icon = document.createElement("canvas");
   icon.width = x1 - x0 + 1;
   icon.height = y1 - y0 + 1;
-  icon.getContext("2d")!.putImageData(new ImageData(new Uint8ClampedArray(buf.data), S, S), -x0, -y0);
+  icon.getContext("2d")!.drawImage(toCanvas(buf), -x0, -y0);
   return icon;
 }
 
@@ -73,7 +69,7 @@ export class UnitPainter {
 
   constructor() {
     for (const kind of KINDS) {
-      for (const team of TEAMS) {
+      for (const team of PLAYER_IDS) {
         this.sheets.set(`${kind}/${team}`, sheetOf(kind, team));
         this.icons.set(`${kind}/${team}`, iconOf(kind, team));
       }
@@ -88,30 +84,33 @@ export class UnitPainter {
   /**
    * All Units of a view, into a layer of the pixel world above the fog.
    * `alpha` (0..1) is how far the frame is between the last Tick and the
-   * next, `time` is game time in Ticks, and `pose` says how each Unit is
-   * shown; a Unit without one rests.
+   * next, `time` is game time in Ticks, and `poses` says how each Unit is
+   * shown. A Unit with no pose yet has turned up since the last Tick was
+   * shown (the Harvester that comes with a Refinery just placed) and is
+   * drawn from the next Tick on, a twentieth of a second later.
    */
   draw(
     art: CanvasRenderingContext2D,
     units: readonly UnitView[],
     alpha: number,
     time: number,
-    pose: (id: EntityId) => UnitPose | undefined,
+    poses: ReadonlyMap<EntityId, UnitPose>,
   ): void {
     const U = ART_CELL_PX;
     const seconds = time / TICKS_PER_SECOND;
     // Top of the Map first, so a Unit standing lower overlaps the one behind it.
     const ordered = units.length > 1 ? [...units].sort((a, b) => a.y - b.y) : units;
     for (const u of ordered) {
-      const shown = pose(u.id);
+      const shown = poses.get(u.id);
+      if (!shown) continue;
       const damaged = u.hp < u.maxHp * DAMAGED_BELOW;
       const frames = UNIT_FRAMES[u.kind];
-      const row = (shown?.frame ?? unitFrame(u.kind, null, 0)) + (damaged ? frames : 0);
+      const row = shown.frame + (damaged ? frames : 0);
       const cx = Math.round((u.prevX + (u.x - u.prevX) * alpha) * U);
       const cy = Math.round((u.prevY + (u.y - u.prevY) * alpha) * U);
       art.drawImage(
         this.sheets.get(`${u.kind}/${u.owner}`)!,
-        (shown?.facing ?? REST_FACING) * S,
+        shown.facing * S,
         row * S,
         S,
         S,

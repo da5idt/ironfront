@@ -11,9 +11,10 @@ import {
   UNIT_STATS,
   type UnitKind,
   type UnitView,
+  type Vec,
   type Visibility,
 } from "../sim";
-import { type BuildUps, buildUpProgress, noteBuildings } from "./art/buildUp";
+import { buildUpProgress, type PlacedAt, risingBuildings } from "./art/buildUp";
 import { FACINGS, TURRET_REST_FACING } from "./art/buildingArt";
 import {
   AFTER_BLAST_GAP_SECONDS,
@@ -57,12 +58,6 @@ export const TURRET_TURN_PER_TICK = 1;
  */
 export const BASE_REACH_CELLS = 5;
 
-/** A place on the Map in Cell units, like a Unit's position. */
-export interface MapPoint {
-  readonly x: number;
-  readonly y: number;
-}
-
 /** How one Unit in the view is shown. Kind, owner, place and health are kept so a later view can tell what vanished or was hit, and where. */
 export interface UnitLook {
   readonly kind: UnitKind;
@@ -98,9 +93,9 @@ export interface TurretLook {
 export interface Effect {
   readonly kind: EffectKind;
   /** Where it is: the shooter for a muzzle flash and a tracer's start, else the middle of the effect. */
-  readonly at: MapPoint;
+  readonly at: Vec;
   /** Where a tracer ends; the same as `at` for everything else. */
-  readonly to: MapPoint;
+  readonly to: Vec;
   /** The gun, for a muzzle flash, tracer or impact; null otherwise, and for an impact from out of sight. */
   readonly weapon: Weapon | null;
   /** Which of the FACINGS a shot left along, or the Unit faced as it fell. */
@@ -115,7 +110,7 @@ export interface Effect {
 export interface Mark {
   readonly kind: MarkKind;
   /** Its middle. */
-  readonly at: MapPoint;
+  readonly at: Vec;
   /** Which Unit it was; null for rubble. */
   readonly unit: UnitKind | null;
   readonly team: PlayerId;
@@ -145,28 +140,24 @@ export interface Presentation {
   readonly effects: readonly Effect[];
   /** Oldest first, never more than MAX_MARKS. */
   readonly marks: readonly Mark[];
-  /** Which of the Player's own Buildings are newly placed and still rising. */
-  readonly buildUps: BuildUps;
+  /** Which of the Player's own Buildings are newly placed and still rising, and since which Tick. */
+  readonly placedAt: PlacedAt;
 }
 
-/**
- * What happened in the Tick just shown, for sounds, alerts and effects. The
- * shapes match the sound effects' events (sfx/eventSounds.ts), so they can be
- * played as they are; extra fields are for the effects.
- */
+/** What happened in the Tick just shown, for sounds and alerts (sfx/eventCues.ts maps them) and effects. */
 export type PresentationEvent =
   | {
       readonly kind: "shotFired";
       readonly weapon: Weapon;
       /** The Unit or Turret that fired, or null when it is no longer in the view (it died in the same Tick). */
       readonly shooter: EntityId | null;
-      readonly from: MapPoint;
-      readonly to: MapPoint;
+      readonly from: Vec;
+      readonly to: Vec;
       /** Whether the Cell it lands in is Visible, so its impact is shown and heard; false for a shot into Fog of War. */
       readonly landsInSight: boolean;
     }
   /** A shot from out of sight landing where the Player can see. */
-  | { readonly kind: "impact"; readonly at: MapPoint }
+  | { readonly kind: "impact"; readonly at: Vec }
   /**
    * A Unit that was in the view is gone from a Cell the Player still sees, or
    * was the Player's own: it died. `vehicle` is false for a Rifleman.
@@ -176,17 +167,17 @@ export type PresentationEvent =
       readonly unit: UnitKind;
       readonly vehicle: boolean;
       readonly owner: PlayerId;
-      readonly at: MapPoint;
+      readonly at: Vec;
     }
   /** A Building that stood in sight is gone; `at` is its centre. */
   | {
       readonly kind: "buildingDestroyed";
       readonly building: BuildingKind;
       readonly owner: PlayerId;
-      readonly at: MapPoint;
+      readonly at: Vec;
     }
   /** A Building went down: the Player's own, or the other Player's where this one was looking. */
-  | { readonly kind: "buildingPlaced"; readonly building: BuildingKind; readonly owner: PlayerId; readonly at: MapPoint }
+  | { readonly kind: "buildingPlaced"; readonly building: BuildingKind; readonly owner: PlayerId; readonly at: Vec }
   /** The Player's HQ has finished its Building, which now waits to be placed. */
   | { readonly kind: "buildingReady" }
   /** One of the Player's own Barracks or Vehicle Factories has trained a Unit. */
@@ -199,7 +190,7 @@ export type PresentationEvent =
   | {
       readonly kind: "underAttack";
       readonly hit: "building" | "unit";
-      readonly at: MapPoint;
+      readonly at: Vec;
       /** True for a Building, and for a Unit within BASE_REACH_CELLS of one of the Player's Buildings. */
       readonly inBase: boolean;
     };
@@ -220,8 +211,8 @@ export function facingToward(dx: number, dy: number): number {
 }
 
 /** Which of the FACINGS a Turret's gun shows. */
-export function turretFacing(state: Presentation | null, id: EntityId): number {
-  return state?.turrets.get(id)?.facing ?? TURRET_REST_FACING;
+export function turretFacing(state: Presentation, id: EntityId): number {
+  return state.turrets.get(id)?.facing ?? TURRET_REST_FACING;
 }
 
 /** `facing` turned toward `wanted` the short way round, by at most `steps`. */
@@ -246,7 +237,7 @@ function loadOf(u: UnitView): number {
 }
 
 /** `aim` is where its shot of this Tick went, if it fired. */
-function unitLook(prev: UnitLook | undefined, u: UnitView, aim: MapPoint | undefined): UnitLook {
+function unitLook(prev: UnitLook | undefined, u: UnitView, aim: Vec | undefined): UnitLook {
   const dx = u.x - u.prevX;
   const dy = u.y - u.prevY;
   const step = Math.hypot(dx, dy);
@@ -294,16 +285,16 @@ export function present(prev: Presentation | null, view: PlayerView): Presented 
     visibleAt(x + reach, y - reach) &&
     visibleAt(x - reach, y + reach) &&
     visibleAt(x + reach, y + reach);
-  const effect = (kind: EffectKind, at: MapPoint, more: Partial<Effect> = {}): void => {
+  const effect = (kind: EffectKind, at: Vec, more: Partial<Effect> = {}): void => {
     const start = more.start ?? tick;
     effects.push({ kind, at, to: at, weapon: null, facing: 0, team: me, ...more, start, end: start + ticksOf(EFFECT_SECONDS[kind]) });
   };
-  const mark = (kind: MarkKind, at: MapPoint, more: Partial<Mark>): void => {
+  const mark = (kind: MarkKind, at: Vec, more: Partial<Mark>): void => {
     marks.push({ kind, at, unit: null, team: me, facing: 0, width: 0, height: 0, ...more, start: tick, end: tick + ticksOf(MARK_SECONDS[kind]) });
   };
 
-  const unitAims = new Map<EntityId, MapPoint>();
-  const turretAims = new Map<EntityId, MapPoint>();
+  const unitAims = new Map<EntityId, Vec>();
+  const turretAims = new Map<EntityId, Vec>();
   for (const s of view.shots) {
     const from = { x: s.fromX, y: s.fromY };
     const to = { x: s.toX, y: s.toY };
@@ -347,10 +338,10 @@ export function present(prev: Presentation | null, view: PlayerView): Presented 
     let attack = null as Attack | null;
     /** 2 for a Building, 1 for a Unit in the base, 0 for a Unit elsewhere. */
     const concern = (a: Attack) => (a.hit === "building" ? 2 : a.inBase ? 1 : 0);
-    const hitBuilding = (at: MapPoint): void => {
+    const hitBuilding = (at: Vec): void => {
       if (attack?.hit !== "building") attack = { kind: "underAttack", hit: "building", at, inBase: true };
     };
-    const hitUnit = (at: MapPoint): void => {
+    const hitUnit = (at: Vec): void => {
       // Nothing a Unit's hit could add once the base is known to be under attack.
       if (attack && concern(attack) >= 1) return;
       const inBase = nearOwnBuilding(last.buildings, me, at);
@@ -447,7 +438,7 @@ export function present(prev: Presentation | null, view: PlayerView): Presented 
       // The oldest make room: in a fight too big to show whole, the newest flashes are the ones to see.
       effects: effects.length > MAX_EFFECTS ? effects.slice(-MAX_EFFECTS) : effects,
       marks: marks.length > MAX_MARKS ? marks.slice(-MAX_MARKS) : marks,
-      buildUps: noteBuildings(last?.buildUps ?? null, view),
+      placedAt: risingBuildings(last, view),
     },
     events,
   };
@@ -484,10 +475,10 @@ export function effectInSight(e: Effect, map: Pick<PlayerView["map"], "width" | 
 
 const ticksOf = (seconds: number) => Math.round(seconds * TICKS_PER_SECOND);
 
-const centreOf = (b: BuildingView): MapPoint => ({ x: b.x + b.width / 2, y: b.y + b.height / 2 });
+const centreOf = (b: BuildingView): Vec => ({ x: b.x + b.width / 2, y: b.y + b.height / 2 });
 
 /** True when the place is within BASE_REACH_CELLS of the footprint of one of `me`'s Buildings. */
-function nearOwnBuilding(buildings: ReadonlyMap<EntityId, BuildingView>, me: PlayerId, at: MapPoint): boolean {
+function nearOwnBuilding(buildings: ReadonlyMap<EntityId, BuildingView>, me: PlayerId, at: Vec): boolean {
   for (const b of buildings.values()) {
     if (b.owner !== me) continue;
     const dx = Math.max(b.x - at.x, 0, at.x - (b.x + b.width));
@@ -511,11 +502,11 @@ function wasVisible(last: Presentation, view: PlayerView, b: BuildingView): bool
  * How far a Building has risen from the ground at `tick` (which may be
  * between Ticks): 0 just placed, 1 standing.
  */
-export function buildingRise(state: Presentation | null, b: BuildingView, tick: number): number {
-  if (!state || b.remembered) return 1;
+export function buildingRise(state: Presentation, b: BuildingView, tick: number): number {
+  if (b.remembered) return 1;
   // Placed since the last Tick was shown (the view is refreshed at once after the Command): it has yet to start rising.
   if (b.owner === state.playerId && !state.buildings.has(b.id)) return 0;
-  return buildUpProgress(state.buildUps, b.id, tick);
+  return buildUpProgress(state.placedAt, b.id, tick);
 }
 
 /**

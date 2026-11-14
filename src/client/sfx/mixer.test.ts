@@ -9,19 +9,7 @@ import {
   SETTINGS_KEY,
   type SettingsStorage,
 } from "./mixer";
-
-/**
- * Stands in for the browser's localStorage (the Web Storage API): string keys
- * to string values, getItem gives null for a key never set.
- */
-function memoryStorage(initial: Record<string, string> = {}): SettingsStorage & { items: Map<string, string> } {
-  const items = new Map(Object.entries(initial));
-  return {
-    items,
-    getItem: (key) => items.get(key) ?? null,
-    setItem: (key, value) => void items.set(key, value),
-  };
-}
+import { memoryStorage } from "./testing/memoryStorage";
 
 /** A browser with storage blocked throws from every call (SecurityError). */
 const blockedStorage: SettingsStorage = {

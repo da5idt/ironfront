@@ -1,14 +1,9 @@
+import type { Vec } from "../../sim";
 import { type Camera, CELL_PX, type Size } from "../camera";
 
 // How loud a sound on the Map is from where the person playing is looking: loudest at
 // the centre of the Map view, quieter with distance, and skipped altogether
 // far off screen. Pure, so it is unit tested.
-
-/** A Map position in Cell units, as Units' positions are. */
-export interface MapPos {
-  readonly x: number;
-  readonly y: number;
-}
 
 export interface Listener {
   /** The centre of the Map view, in Cells. */
@@ -43,7 +38,7 @@ export interface Heard {
 }
 
 /** How a sound at `at` reaches the listener, or null when it is too far away to play. */
-export function hear(listener: Listener, at: MapPos): Heard | null {
+export function hear(listener: Listener, at: Vec): Heard | null {
   const dx = at.x - listener.x;
   const distance = Math.hypot(dx, at.y - listener.y);
   if (distance === 0) return { gain: 1, pan: 0 };

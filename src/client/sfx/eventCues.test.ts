@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { PresentationEvent } from "../presentation";
-import { alertForEvent, soundEventFor } from "./eventCues";
+import { alertForEvent } from "./eventCues";
 
 const at = { x: 3.5, y: 4.5 };
 
@@ -39,24 +39,5 @@ describe("the alert a presentation event raises", () => {
       { kind: "buildingPlaced", building: "barracks", owner: 0, at },
     ];
     for (const event of quiet) expect(alertForEvent(event, 0)).toBeNull();
-  });
-});
-
-describe("the sound effect a presentation event makes", () => {
-  it("is the event itself for everything that has a sound", () => {
-    const loud: PresentationEvent[] = [
-      { kind: "shotFired", weapon: "turretCannon", shooter: null, from: at, to: at, landsInSight: false },
-      { kind: "impact", at },
-      { kind: "unitDied", unit: "harvester", vehicle: true, owner: 1, at },
-      { kind: "buildingDestroyed", building: "hq", owner: 0, at },
-      { kind: "buildingPlaced", building: "barracks", owner: 1, at },
-      { kind: "buildingReady" },
-      { kind: "unitTrained", unit: "rifleman" },
-    ];
-    for (const event of loud) expect(soundEventFor(event)).toBe(event);
-  });
-
-  it("is none for under attack, which is an alert and not an effect", () => {
-    expect(soundEventFor({ kind: "underAttack", hit: "building", at, inBase: true })).toBeNull();
   });
 });

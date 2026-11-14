@@ -394,7 +394,7 @@ describe("building and training", () => {
     ]);
     const barracks = buildingId(match, 0, "barracks");
     // It rises from the ground: the build-up notes live in the presentation.
-    expect(seen.state.buildUps.placedAt.get(barracks)).toBe(seen.state.tick);
+    expect(seen.state.placedAt.get(barracks)).toBe(seen.state.tick);
     seen.run(3);
     expect(seen.of("buildingPlaced")).toHaveLength(1);
   });

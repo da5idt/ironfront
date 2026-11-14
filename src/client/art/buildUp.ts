@@ -1,11 +1,10 @@
 import { type EntityId, type PlayerId, TICKS_PER_SECOND } from "../../sim";
 import { BUILD_UP_SECONDS } from "./buildingArt";
 
-// Notes when one of the Player's own Buildings first appears in the view, so
-// the client can show it rising from the ground. Client-only and pure: it
-// reads Player views and never touches the Match (ADR 0002). The presentation
-// module keeps these notes in its state (Presentation.buildUps) and moves them
-// on with every Tick's view.
+// Which of the Player's own Buildings are newly placed and still rising from
+// the ground. Pure helpers for the presentation module, which holds the
+// result in its state (Presentation.placedAt) along with everything else it
+// remembers of the last view; nothing is kept here.
 
 /** The parts of a Player view this reads. */
 export interface BuildUpView {
@@ -14,37 +13,34 @@ export interface BuildUpView {
   readonly buildings: readonly { readonly id: EntityId; readonly owner: PlayerId; readonly remembered: boolean }[];
 }
 
-export interface BuildUps {
-  readonly playerId: PlayerId;
-  readonly tick: number;
-  /** The Player's own Buildings in the last view. */
-  readonly known: ReadonlySet<EntityId>;
-  /** The Tick each Building still rising first appeared. */
-  readonly placedAt: ReadonlyMap<EntityId, number>;
-}
+/** The Tick each Building still rising first appeared. */
+export type PlacedAt = ReadonlyMap<EntityId, number>;
 
 const RISE_TICKS = BUILD_UP_SECONDS * TICKS_PER_SECOND;
 
-/** The next notes, given the last ones (null at the start) and the new view. */
-export function noteBuildings(prev: BuildUps | null, view: BuildUpView): BuildUps {
-  // A new Match (Ticks start again) or another Player's view: what is there is already built.
-  const carriesOn = prev !== null && prev.playerId === view.playerId && view.tick >= prev.tick;
-  const known = new Set<EntityId>();
+/**
+ * The Buildings still rising in the new view. `before` is what the last view
+ * left: its notes and the Buildings that were in it. Null (the start of a
+ * Match, or another Player's view) means what is there is already built.
+ */
+export function risingBuildings(
+  before: { readonly placedAt: PlacedAt; readonly buildings: { has(id: EntityId): boolean } } | null,
+  view: BuildUpView,
+): PlacedAt {
   const placedAt = new Map<EntityId, number>();
+  if (!before) return placedAt;
   for (const b of view.buildings) {
     // Only the Player's own: the other Player's Buildings come into sight already built.
     if (b.owner !== view.playerId || b.remembered) continue;
-    known.add(b.id);
-    if (!carriesOn) continue;
-    const since = prev.known.has(b.id) ? prev.placedAt.get(b.id) : view.tick;
+    const since = before.buildings.has(b.id) ? before.placedAt.get(b.id) : view.tick;
     if (since !== undefined && view.tick - since < RISE_TICKS) placedAt.set(b.id, since);
   }
-  return { playerId: view.playerId, tick: view.tick, known, placedAt };
+  return placedAt;
 }
 
 /** How far a Building has risen at `tick` (which may be between Ticks): 0 just placed, 1 standing. */
-export function buildUpProgress(ups: BuildUps, id: EntityId, tick: number): number {
-  const since = ups.placedAt.get(id);
+export function buildUpProgress(placedAt: PlacedAt, id: EntityId, tick: number): number {
+  const since = placedAt.get(id);
   if (since === undefined) return 1;
   return Math.max(0, Math.min(1, (tick - since) / RISE_TICKS));
 }

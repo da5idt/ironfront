@@ -1,5 +1,7 @@
-import { type SoundEvent, soundsForEvent } from "./eventSounds";
-import { hear, type Listener, type MapPos } from "./hearing";
+import type { Vec } from "../../sim";
+import type { PresentationEvent } from "../presentation";
+import { soundsForEvent } from "./eventCues";
+import { hear, type Listener } from "./hearing";
 import {
   applyMixerAction,
   loadSettings,
@@ -35,9 +37,9 @@ export interface Sfx {
    * from the view's centre and is skipped when too far; without one it is an
    * interface sound, heard in full.
    */
-  play(name: SoundName, at?: MapPos): void;
-  /** Plays the sounds of a presentation event. */
-  playEvent(event: SoundEvent): void;
+  play(name: SoundName, at?: Vec): void;
+  /** Plays the sound effects of a presentation event, if it has any. */
+  playEvent(event: PresentationEvent): void;
 }
 
 export function createSfx(output: SoundOutput, storage: SettingsStorage | null): Sfx {

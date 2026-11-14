@@ -107,7 +107,7 @@ export class PixelWorld {
     cam: Camera,
     dest: Rect,
     alpha: number,
-    onGround?: ArtLayer,
+    onGround: ArtLayer,
   ): void {
     const U = ART_CELL_PX;
     const { width, height, ore, visibility } = view.map;
@@ -145,14 +145,13 @@ export class PixelWorld {
       }
     }
 
-    if (onGround) this.paintLayer(lc, origin, onGround);
+    this.paintLayer(lc, origin, onGround);
     this.present(ctx, this.lowRes, cam, dest, origin);
   }
 
   /**
    * A layer of the pixel world over the fog, for what the fog never dims:
-   * selection brackets, health bars and the placement preview now, and Units
-   * and effects when they become sprites.
+   * Units, effects, selection brackets, health bars and the placement preview.
    */
   drawAboveFog(ctx: CanvasRenderingContext2D, cam: Camera, dest: Rect, layer: ArtLayer): void {
     const origin = this.fit(this.over, cam, dest);

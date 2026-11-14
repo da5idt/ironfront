@@ -17,15 +17,7 @@ import { paintUnit, UNIT_FRAMES } from "./unitArt";
 // the first time it is asked for and kept, so nothing is painted per frame.
 // DOM-free; the client turns the buffers into canvases once (BuildingPainter).
 
-export {
-  BUILD_UP_SECONDS,
-  BUILDING_FPS,
-  DAMAGED_BELOW,
-  FACINGS,
-  SMOKE_RISE,
-  TURRET_GUN_PX,
-  TURRET_REST_FACING,
-} from "./buildingArt";
+export { BUILDING_FPS, DAMAGED_BELOW, TURRET_GUN_PX, TURRET_REST_FACING } from "./buildingArt";
 export { UNIT_FRAMES, UNIT_SPRITE_PX } from "./unitArt";
 
 /** How dark a Building's cast shadow is (0..255). */

@@ -2,7 +2,8 @@ import { describe, expect, it } from "vitest";
 import type { PlayerId, UnitKind } from "../../sim";
 import { ART } from "./artPalette";
 import { type PixelBuffer, pixelAt } from "./pixelBuffer";
-import { FACINGS, unitSprite } from "./spriteSheet";
+import { FACINGS } from "./buildingArt";
+import { unitSprite } from "./spriteSheet";
 import { HARVESTER_LOADS, paintUnit, UNIT_FRAMES, UNIT_SPRITE_PX, unitFrame } from "./unitArt";
 
 const KINDS: readonly UnitKind[] = ["rifleman", "raider", "harvester"];

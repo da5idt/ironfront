@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
 import type { BuildingKind, PlayerId } from "../../sim";
 import { ART } from "./artPalette";
-import { paintBuilding, paintDamage, paintTurretGun } from "./buildingArt";
+import { FACINGS, paintBuilding, paintDamage, paintTurretGun } from "./buildingArt";
 import type { PixelBuffer } from "./pixelBuffer";
 import { pixelAt } from "./pixelBuffer";
-import { buildingSprite, damageSprite, FACINGS, loopFrame, TURRET_GUN_PX } from "./spriteSheet";
+import { buildingSprite, damageSprite, loopFrame, TURRET_GUN_PX } from "./spriteSheet";
 
 const KINDS: readonly BuildingKind[] = ["hq", "refinery", "barracks", "vehicleFactory", "turret"];
 const TEAMS: readonly PlayerId[] = [0, 1];

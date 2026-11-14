@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { applyMixerAction, DEFAULT_SETTINGS, type MixerSettings, type SettingsStorage } from "./mixer";
+import { applyMixerAction, DEFAULT_SETTINGS, type MixerSettings } from "./mixer";
 import { RECIPES, recipeDuration, type SoundName } from "./recipes";
 import { createSfx, type SoundOutput } from "./sfx";
+import { memoryStorage } from "./testing/memoryStorage";
 
 /**
  * Stands in for the Web Audio engine (engine.ts): a clock that is null until
@@ -17,12 +18,6 @@ function fakeOutput(now: number | null = 0) {
     applySettings: (settings) => void applied.push(settings),
   };
   return { output, started, applied };
-}
-
-/** Stands in for localStorage: getItem gives null for a key never set. */
-function memoryStorage(): SettingsStorage {
-  const items = new Map<string, string>();
-  return { getItem: (key) => items.get(key) ?? null, setItem: (key, value) => void items.set(key, value) };
 }
 
 const listener = { x: 50, y: 40, reach: 20 };
@@ -94,9 +89,11 @@ describe("playing a sound", () => {
     const { output, started } = fakeOutput();
     const sfx = createSfx(output, null);
     sfx.setListener(listener);
-    sfx.playEvent({ kind: "unitDied", vehicle: true, at: { x: 50, y: 40 } });
-    sfx.playEvent({ kind: "buildingDestroyed", at: { x: 50, y: 140 } });
-    sfx.playEvent({ kind: "unitTrained" });
+    sfx.playEvent({ kind: "unitDied", unit: "raider", vehicle: true, owner: 1, at: { x: 50, y: 40 } });
+    sfx.playEvent({ kind: "buildingDestroyed", building: "turret", owner: 1, at: { x: 50, y: 140 } });
+    sfx.playEvent({ kind: "unitTrained", unit: "rifleman" });
+    // An alert only: no effect.
+    sfx.playEvent({ kind: "underAttack", hit: "building", at: { x: 50, y: 40 }, inBase: true });
     expect(started.map((s) => s.name)).toEqual(["smallExplosion", "unitTrained"]);
   });
 });

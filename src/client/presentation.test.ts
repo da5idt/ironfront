@@ -11,7 +11,14 @@ import {
 } from "../sim";
 import { openMap, testMap } from "../sim/testing/maps";
 import { addTestBuilding, addTestUnit } from "../sim/testing/setup";
-import { type Presentation, type PresentationEvent, present, turretFacing, UNIT_TURN_PER_TICK } from "./presentation";
+import {
+  buildingRise,
+  type Presentation,
+  type PresentationEvent,
+  present,
+  turretFacing,
+  UNIT_TURN_PER_TICK,
+} from "./presentation";
 
 /** Runs a real Match and shows Player 0's view to the presentation module after every Tick, as the client does. */
 function watch(match: Match, player: PlayerId = 0) {
@@ -174,6 +181,16 @@ describe("a new start", () => {
     expect(next.state.tick).toBe(0);
     expect(next.state.turrets.size).toBe(0);
     expect(next.events).toEqual([]);
+  });
+
+  it("shows a new Match's Buildings standing, not rising, though the last Match never had them", () => {
+    const seen = watch(createMatch(openMap(30, 30), 1));
+    seen.run(10);
+    const second = createMatch(openMap(30, 30), 2);
+    addTestBuilding(second, 0, "barracks", { x: 10, y: 14 });
+    const view = getPlayerView(second, 0);
+    const next = present(seen.state, view);
+    expect(view.buildings.map((b) => buildingRise(next.state, b, view.tick))).toEqual(view.buildings.map(() => 1));
   });
 
   it("shows the same Tick again unchanged, as when the view is refreshed after a Command", () => {

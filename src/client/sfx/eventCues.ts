@@ -1,18 +1,48 @@
-import type { PlayerId } from "../../sim";
+import type { PlayerId, Vec } from "../../sim";
 import type { PresentationEvent } from "../presentation";
 import type { AlertEvent } from "./alertQueue";
-import type { SoundEvent } from "./eventSounds";
+import type { SoundName } from "./recipes";
 
-// What the person hears for each presentation event: a sound effect, a spoken
-// alert, both or neither. Pure, so the mapping is unit tested; main.ts only
-// passes the results on. The events come from the Player view alone, so
-// nothing under Fog of War is heard.
+// What the person hears for each presentation event: sound effects, a spoken
+// alert, both or neither. The one place that maps events to sound, and pure,
+// so the mapping is unit tested; main.ts only passes the results on. The
+// events come from the Player view alone, so nothing under Fog of War is
+// heard.
 
-/** The event as the sound effects take it, or null for one that makes no effect. */
-export function soundEventFor(event: PresentationEvent): SoundEvent | null {
-  // The alerts channel says it; an effect on top would only be noise.
-  if (event.kind === "underAttack") return null;
-  return event;
+export interface SoundCue {
+  readonly name: SoundName;
+  /** Where on the Map it sounds from. Left out for interface sounds, heard in full wherever the view is. */
+  readonly at?: Vec;
+}
+
+const NO_SOUND: readonly SoundCue[] = [];
+
+/** The sound effects an event makes, in the order they are heard; none for an event that is only an alert. */
+export function soundsForEvent(event: PresentationEvent): readonly SoundCue[] {
+  switch (event.kind) {
+    case "shotFired": {
+      // Each gun's sound is named after it.
+      const shot: SoundCue = { name: event.weapon, at: event.from };
+      // A round crosses the screen in a blink, so the impact is cued with the shot; the impact's own cap keeps a volley from piling up.
+      return event.landsInSight ? [shot, { name: "impact", at: event.to }] : [shot];
+    }
+    case "impact":
+      return [{ name: "impact", at: event.at }];
+    case "unitDied":
+      return [{ name: event.vehicle ? "smallExplosion" : "unitDeath", at: event.at }];
+    case "buildingDestroyed":
+      return [{ name: "largeExplosion", at: event.at }];
+    case "buildingPlaced":
+      return [{ name: "buildingPlaced", at: event.at }];
+    // The person playing needs to hear these while looking elsewhere, so they have no position.
+    case "buildingReady":
+      return [{ name: "buildingReady" }];
+    case "unitTrained":
+      return [{ name: "unitTrained" }];
+    // The alerts channel says it; an effect on top would only be noise.
+    case "underAttack":
+      return NO_SOUND;
+  }
 }
 
 /**

@@ -5,8 +5,6 @@ import { contains, type Rect } from "./layout";
 // is in and what a click on one means. Pure, so the rules are unit tested;
 // the renderer draws from the same functions and main.ts acts on the result.
 
-/** A button with text only. No menu uses one now that the train buttons show pictures too. */
-export const BUTTON_HEIGHT = 44;
 /** A build or train button: tall enough for a 3 by 3 Cell Building's picture at twice its art size. */
 export const BUILD_BUTTON_HEIGHT = 80;
 export const BUTTON_GAP = 6;

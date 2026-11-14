@@ -1,4 +1,4 @@
-import { type PlayerId, TICKS_PER_SECOND, type UnitKind } from "../../sim";
+import { PLAYER_IDS, type PlayerId, TICKS_PER_SECOND, type UnitKind } from "../../sim";
 import type { Effect, Mark } from "../presentation";
 import { ART } from "./artPalette";
 import { FACINGS } from "./buildingArt";
@@ -32,7 +32,6 @@ import { ART_CELL_PX } from "./terrainArt";
 
 const WEAPONS: readonly Weapon[] = ["rifle", "raiderGun", "turretCannon"];
 const VEHICLES: readonly UnitKind[] = ["raider", "harvester"];
-const TEAMS: readonly PlayerId[] = [0, 1];
 const U = ART_CELL_PX;
 
 /** How many steps a mark's fade-out takes: whole steps suit the pixel look better than a smooth fade. */
@@ -49,13 +48,7 @@ function strip(cells: readonly PixelBuffer[], columns: number): HTMLCanvasElemen
   canvas.width = columns * size;
   canvas.height = Math.ceil(cells.length / columns) * size;
   const c = canvas.getContext("2d")!;
-  for (const [i, buf] of cells.entries()) {
-    c.putImageData(
-      new ImageData(new Uint8ClampedArray(buf.data), buf.width, buf.height),
-      (i % columns) * size,
-      Math.floor(i / columns) * size,
-    );
-  }
+  for (const [i, buf] of cells.entries()) c.drawImage(toCanvas(buf), (i % columns) * size, Math.floor(i / columns) * size);
   return canvas;
 }
 
@@ -84,7 +77,7 @@ export class EffectPainter {
       const cells = range(MUZZLE_FRAMES).flatMap((frame) => range(FACINGS).map((facing) => paintMuzzle(weapon, facing, frame)));
       this.muzzles.set(weapon, strip(cells, FACINGS));
     }
-    for (const team of TEAMS) {
+    for (const team of PLAYER_IDS) {
       const cells = [false, true].flatMap((flip) => range(FALL_FRAMES).map((f) => paintFall(team, f, flip)));
       this.falls.set(team, strip(cells, FALL_FRAMES));
       this.bodies.set(team, strip([paintBody(team, false), paintBody(team, true)], 2));

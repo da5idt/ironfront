@@ -1,13 +1,20 @@
 import { describe, expect, it } from "vitest";
-import { soundsForEvent } from "./eventSounds";
+import type { PresentationEvent, Weapon } from "../presentation";
+import { soundsForEvent } from "./eventCues";
 
 const from = { x: 3, y: 4 };
 const to = { x: 9, y: 4 };
 const at = { x: 12, y: 7 };
 
 describe("sounds for presentation events", () => {
-  const shot = (weapon: "rifle" | "raiderGun" | "turretCannon", landsInSight: boolean) =>
-    ({ kind: "shotFired", weapon, from, to, landsInSight }) as const;
+  const shot = (weapon: Weapon, landsInSight: boolean): PresentationEvent => ({
+    kind: "shotFired",
+    weapon,
+    shooter: 7,
+    from,
+    to,
+    landsInSight,
+  });
 
   it("plays each weapon's own sound where the shot was fired from", () => {
     expect(soundsForEvent(shot("rifle", false))).toEqual([{ name: "rifle", at: from }]);
@@ -23,22 +30,34 @@ describe("sounds for presentation events", () => {
     ]);
   });
 
-  it("plays an impact where the shot lands", () => {
+  it("plays an impact where a shot from out of sight lands", () => {
     expect(soundsForEvent({ kind: "impact", at })).toEqual([{ name: "impact", at }]);
   });
 
-  it("plays a small explosion for a vehicle and a softer sound for a soldier", () => {
-    expect(soundsForEvent({ kind: "unitDied", vehicle: true, at })).toEqual([{ name: "smallExplosion", at }]);
-    expect(soundsForEvent({ kind: "unitDied", vehicle: false, at })).toEqual([{ name: "unitDeath", at }]);
+  it("plays a small explosion for a vehicle and a softer sound for a Rifleman", () => {
+    expect(soundsForEvent({ kind: "unitDied", unit: "raider", vehicle: true, owner: 1, at })).toEqual([
+      { name: "smallExplosion", at },
+    ]);
+    expect(soundsForEvent({ kind: "unitDied", unit: "rifleman", vehicle: false, owner: 1, at })).toEqual([
+      { name: "unitDeath", at },
+    ]);
   });
 
   it("plays a large explosion where a Building is destroyed", () => {
-    expect(soundsForEvent({ kind: "buildingDestroyed", at })).toEqual([{ name: "largeExplosion", at }]);
+    expect(soundsForEvent({ kind: "buildingDestroyed", building: "hq", owner: 0, at })).toEqual([
+      { name: "largeExplosion", at },
+    ]);
   });
 
   it("plays Building placed on the Map, and the ready sounds as interface sounds heard wherever the view is", () => {
-    expect(soundsForEvent({ kind: "buildingPlaced", at })).toEqual([{ name: "buildingPlaced", at }]);
+    expect(soundsForEvent({ kind: "buildingPlaced", building: "barracks", owner: 1, at })).toEqual([
+      { name: "buildingPlaced", at },
+    ]);
     expect(soundsForEvent({ kind: "buildingReady" })).toEqual([{ name: "buildingReady" }]);
-    expect(soundsForEvent({ kind: "unitTrained" })).toEqual([{ name: "unitTrained" }]);
+    expect(soundsForEvent({ kind: "unitTrained", unit: "rifleman" })).toEqual([{ name: "unitTrained" }]);
+  });
+
+  it("plays nothing for under attack, which is an alert and not an effect", () => {
+    expect(soundsForEvent({ kind: "underAttack", hit: "building", at, inBase: true })).toEqual([]);
   });
 });

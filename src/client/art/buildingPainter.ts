@@ -1,4 +1,4 @@
-import { BUILDING_STATS, type BuildingKind, type BuildingView, type CellPos, type EntityId, type PlayerId, TICKS_PER_SECOND } from "../../sim";
+import { BUILDING_STATS, type BuildingKind, type BuildingView, type CellPos, type EntityId, PLAYER_IDS, type PlayerId, TICKS_PER_SECOND } from "../../sim";
 import { ART } from "./artPalette";
 import { hash2 } from "./hash";
 import { toCanvas } from "./pixelWorld";
@@ -19,7 +19,6 @@ import { ART_CELL_PX } from "./terrainArt";
 // turned into a canvas once, here at startup; drawing a frame only copies them.
 
 const KINDS = Object.keys(BUILDING_STATS) as BuildingKind[];
-const TEAMS: readonly PlayerId[] = [0, 1];
 
 /** How far down and right a Building's shadow falls, in art pixels. */
 const SHADOW_OFFSET = 2;
@@ -71,7 +70,7 @@ export class BuildingPainter {
   constructor() {
     for (const kind of KINDS) {
       this.damage.set(kind, damageSprite(kind).frames.map(toCanvas));
-      for (const team of TEAMS) {
+      for (const team of PLAYER_IDS) {
         const sprite = buildingSprite(kind, team);
         const icon = iconOf(sprite);
         this.sprites.set(`${kind}/${team}`, {
@@ -99,14 +98,14 @@ export class BuildingPainter {
    * game time in Ticks (it may be between two), so everything holds still
    * while paused. `risen` says how far each Building has risen from the
    * ground (0 just placed, 1 standing), and `turretFacing` which of the
-   * FACINGS each Turret's gun points; without it guns rest.
+   * FACINGS each Turret's gun points.
    */
   draw(
     art: CanvasRenderingContext2D,
     buildings: readonly BuildingView[],
     time: number,
     risen: (b: BuildingView) => number,
-    turretFacing?: (id: EntityId) => number,
+    turretFacing: (id: EntityId) => number,
   ): void {
     const U = ART_CELL_PX;
     const seconds = time / TICKS_PER_SECOND;
@@ -131,7 +130,7 @@ export class BuildingPainter {
         continue;
       }
       art.drawImage(frame, x, y);
-      if (sprite.gun) art.drawImage(sprite.gun[turretFacing?.(b.id) ?? TURRET_REST_FACING]!, x - gunOffset, y - gunOffset);
+      if (sprite.gun) art.drawImage(sprite.gun[turretFacing(b.id)]!, x - gunOffset, y - gunOffset);
     }
     for (const b of buildings) {
       if (b.hp >= b.maxHp * DAMAGED_BELOW || rise(b) < 1) continue;
