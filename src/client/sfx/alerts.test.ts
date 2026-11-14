@@ -2,33 +2,58 @@ import { describe, expect, it } from "vitest";
 import { type AlertVoice, BANNER_SECONDS, createAlerts } from "./alerts";
 
 /**
- * Stands in for the browser voice (alertVoice.ts): it says one thing at a
- * time and reports the end through the callback it was given, exactly once.
- * As there, cancel() ends what is being said, and say() answers false when
- * there is no local voice to say it with.
+ * Stands in for the browser voice (alertVoice.ts, createAlertVoice) and
+ * copies how it behaves:
+ * - say() answers false when there is no local voice to say it with;
+ * - it holds one current utterance, and a report about any other is dropped
+ *   (its `finish` checks `current !== utterance`);
+ * - the end of the words is reported once, through the callback given;
+ * - cancel() reports nothing itself. The browser tells of the cut-off words
+ *   later, as an "interrupted" or "canceled" error on the utterance, which
+ *   alertVoice.ts passes on as said. Here that report waits until the test
+ *   calls deliver(), so a test can let other things happen first.
  */
 function fakeVoice(hasVoice = true) {
+  interface Utterance {
+    readonly ended: (said: boolean) => void;
+  }
   const said: { text: string; volume: number }[] = [];
-  let ended: ((said: boolean) => void) | null = null;
+  let current: Utterance | null = null;
+  /** Reports the browser has yet to make. */
+  const late: (() => void)[] = [];
   let cancels = 0;
-  const finish = (ok: boolean): void => {
-    const done = ended;
-    ended = null;
-    done?.(ok);
+  const report = (utterance: Utterance, ok: boolean): void => {
+    if (current !== utterance) return;
+    current = null;
+    utterance.ended(ok);
   };
   const voice: AlertVoice = {
-    say(text, volume, onEnded) {
+    say(text, volume, ended) {
       if (!hasVoice) return false;
       said.push({ text, volume });
-      ended = onEnded;
+      current = { ended };
       return true;
     },
     cancel() {
       cancels++;
-      finish(true);
+      const cut = current;
+      if (cut) late.push(() => report(cut, true));
     },
   };
-  return { voice, said, finish, cancels: () => cancels, speaking: () => ended !== null };
+  return {
+    voice,
+    said,
+    /** The browser reports the end of what is being said: true for said, false for refused. */
+    finish(ok: boolean): void {
+      if (current) report(current, ok);
+    },
+    /** The browser gets round to reporting the words cut off by cancel(). */
+    deliver(): void {
+      for (const make of late.splice(0)) make();
+    },
+    cancels: () => cancels,
+    speaking: () => current !== null,
+  };
 }
 
 function setup(hasVoice = true) {
@@ -77,13 +102,28 @@ describe("speaking alerts", () => {
   });
 
   it("cuts the alert off when the channel is muted halfway through", () => {
-    const { alerts, mixer, cancels, speaking } = setup();
+    const { alerts, mixer, cancels, speaking, deliver } = setup();
     alerts.raise({ kind: "baseUnderAttack" }, 1);
     alerts.update(1, false);
     mixer.volume = 0;
     alerts.update(1.2, false);
     expect(cancels()).toBe(1);
+    deliver();
     expect(speaking()).toBe(false);
+  });
+
+  it("takes the late report of a cut-off alert for what it is, and not for a refusal or the end of anything else", () => {
+    const { alerts, mixer, deliver, chimes } = setup();
+    alerts.raise({ kind: "baseUnderAttack" }, 1);
+    alerts.update(1, false);
+    mixer.volume = 0;
+    alerts.update(1.2, false);
+    alerts.update(1.3, false);
+    deliver();
+    alerts.update(1.4, false);
+    // Cut off on purpose: no chime and no text for it.
+    expect(chimes()).toBe(0);
+    expect(alerts.banner(1.4)).toBeNull();
   });
 
   it("moves on when the browser never reports the end of an alert", () => {
@@ -104,6 +144,71 @@ describe("speaking alerts", () => {
     alerts.update(1.1, false);
     expect(chimes()).toBe(1);
     expect(alerts.banner(1.1)).toBe("Victory");
+  });
+});
+
+describe("an alert cut off while another is waiting", () => {
+  it("does not let the late report about the old alert end the new one", () => {
+    const { alerts, said, deliver, finish } = setup();
+    alerts.raise({ kind: "buildingReady" }, 1);
+    alerts.raise({ kind: "unitReady" }, 1);
+    alerts.raise({ kind: "creditsShort" }, 1);
+    alerts.update(1, false);
+    // Paused and at once carried on: "Building ready" is cut off and "Unit ready" starts...
+    alerts.update(1.1, true);
+    alerts.update(1.2, false);
+    expect(said.map((s) => s.text)).toEqual(["Building ready", "Unit ready"]);
+    // ...and only now does the browser report the first one's end.
+    deliver();
+    alerts.update(1.3, false);
+    expect(said.map((s) => s.text)).toEqual(["Building ready", "Unit ready"]);
+    finish(true);
+    alerts.update(1.4, false);
+    expect(said.map((s) => s.text)).toEqual(["Building ready", "Unit ready", "Not enough Credits"]);
+  });
+});
+
+describe("starting a new Match", () => {
+  it("stops the alert being said and forgets the ones waiting", () => {
+    const { alerts, said, cancels, deliver } = setup();
+    alerts.raise({ kind: "buildingReady" }, 1);
+    alerts.raise({ kind: "unitReady" }, 1);
+    alerts.update(1, false);
+    alerts.reset();
+    expect(cancels()).toBe(1);
+    deliver();
+    alerts.update(1.5, false);
+    expect(said.map((s) => s.text)).toEqual(["Building ready"]);
+  });
+
+  it("takes the old Match's text off the screen", () => {
+    const { alerts } = setup(false);
+    alerts.raise({ kind: "defeat" }, 10);
+    alerts.update(10, false);
+    expect(alerts.banner(10.5)).toBe("Defeat");
+    alerts.reset();
+    expect(alerts.banner(10.5)).toBeNull();
+  });
+
+  it("clears the cooldowns, so the new Match's first alerts are said", () => {
+    const { alerts, said, finish } = setup();
+    alerts.raise({ kind: "baseUnderAttack" }, 1);
+    alerts.update(1, false);
+    finish(true);
+    alerts.reset();
+    alerts.raise({ kind: "baseUnderAttack" }, 3);
+    alerts.update(3, false);
+    expect(said.map((s) => s.text)).toEqual(["Base under attack", "Base under attack"]);
+  });
+
+  it("does not hold the first alert back for an unspoken one from the old Match", () => {
+    const { alerts } = setup(false);
+    alerts.raise({ kind: "defeat" }, 10);
+    alerts.update(10, false);
+    alerts.reset();
+    alerts.raise({ kind: "buildingReady" }, 10.2);
+    alerts.update(10.2, false);
+    expect(alerts.banner(10.2)).toBe("Building ready");
   });
 });
 

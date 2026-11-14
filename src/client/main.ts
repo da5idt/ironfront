@@ -366,6 +366,8 @@ function restart(): void {
   placing = null;
   paused = false;
   clock = { accumulatedMs: 0 };
+  // "Defeat" may still be being said, and the old Match's cooldowns would swallow the new one's first alerts.
+  alerts.reset();
 }
 
 /** Set only from the dev hook below: whose view is drawn, when not the person's. */

@@ -15,6 +15,27 @@ function raised(...events: [AlertKind, number][]): AlertQueue {
   return events.reduce((queue, [kind, at]) => raiseAlert(queue, { kind }, at), EMPTY_ALERTS);
 }
 
+/**
+ * Plays out a list of steps in order, as the game does: ["raise", kind, at]
+ * reports an event, ["take", at] is the speaker falling silent and asking
+ * for the next alert. Gives what was said and the queue left over.
+ */
+type Step = readonly ["raise", AlertKind, number] | readonly ["take", number];
+function play(...steps: Step[]): { said: AlertKind[]; queue: AlertQueue } {
+  let queue = EMPTY_ALERTS;
+  const said: AlertKind[] = [];
+  for (const step of steps) {
+    if (step[0] === "raise") {
+      queue = raiseAlert(queue, { kind: step[1] }, step[2]);
+      continue;
+    }
+    const next = takeAlert(queue, step[1]);
+    queue = next.queue;
+    if (next.alert !== null) said.push(next.alert);
+  }
+  return { said, queue };
+}
+
 /** Takes alerts at `now` until none is left, as a speaker with nothing to say would. */
 function takeAll(queue: AlertQueue, now: number): AlertKind[] {
   const taken: AlertKind[] = [];
@@ -58,21 +79,30 @@ describe("raising an alert", () => {
   it("queues it to be said once", () => {
     expect(takeAll(raised(["buildingReady", 5]), 5)).toEqual(["buildingReady"]);
   });
+
+  it("does not queue the same alert twice while it waits", () => {
+    // A fight reports "under attack" every Tick; it is still one thing to say.
+    expect(takeAll(raised(["baseUnderAttack", 0], ["baseUnderAttack", 0.05], ["baseUnderAttack", 0.1]), 0.1)).toEqual([
+      "baseUnderAttack",
+    ]);
+  });
 });
 
 describe("alert cooldowns", () => {
   it("says Base under attack at most once every 20 seconds", () => {
     // Spec #16: "Base under attack at most once every 20 seconds".
-    expect(takeAll(raised(["baseUnderAttack", 0], ["baseUnderAttack", 1]), 1)).toEqual(["baseUnderAttack"]);
-    expect(takeAll(raised(["baseUnderAttack", 0], ["baseUnderAttack", 19.9]), 19.9)).toEqual([]);
-    expect(takeAll(raised(["baseUnderAttack", 0], ["baseUnderAttack", 20]), 20)).toEqual(["baseUnderAttack"]);
+    const said = (again: number) =>
+      play(["raise", "baseUnderAttack", 0], ["take", 0], ["raise", "baseUnderAttack", again], ["take", again]).said;
+    expect(said(1)).toEqual(["baseUnderAttack"]);
+    expect(said(19.9)).toEqual(["baseUnderAttack"]);
+    expect(said(20)).toEqual(["baseUnderAttack", "baseUnderAttack"]);
   });
 
   it.each(ALERT_KINDS.filter((kind) => kind !== "victory" && kind !== "defeat"))(
-    "does not repeat %s half a second later, but does a minute later",
+    "does not repeat %s half a second after it was said, but does a minute after",
     (kind) => {
-      expect(takeAll(raised([kind, 10], [kind, 10.5]), 10.5)).toEqual([kind]);
-      expect(takeAll(raised([kind, 10], [kind, 70]), 70)).toEqual([kind]);
+      expect(play(["raise", kind, 10], ["take", 10], ["raise", kind, 10.5], ["take", 10.5]).said).toEqual([kind]);
+      expect(play(["raise", kind, 10], ["take", 10], ["raise", kind, 70], ["take", 70]).said).toEqual([kind, kind]);
     },
   );
 
@@ -80,9 +110,35 @@ describe("alert cooldowns", () => {
     expect(takeAll(raised(["unitLost", 0], ["buildingLost", 0.1]), 0.1)).toEqual(["unitLost", "buildingLost"]);
   });
 
-  it("does not let a refused alert push the cooldown on", () => {
-    const queue = raised(["baseUnderAttack", 0], ["baseUnderAttack", 15], ["baseUnderAttack", 21]);
-    expect(takeAll(queue, 21)).toEqual(["baseUnderAttack"]);
+  it("does not let an alert refused inside its cooldown push the cooldown on", () => {
+    const { said } = play(
+      ["raise", "baseUnderAttack", 0],
+      ["take", 0],
+      ["raise", "baseUnderAttack", 15],
+      ["take", 15],
+      ["raise", "baseUnderAttack", 21],
+      ["take", 21],
+    );
+    expect(said).toEqual(["baseUnderAttack", "baseUnderAttack"]);
+  });
+
+  it("starts counting when the alert is said, not when it was raised", () => {
+    // Raised at 0 but said only at 3, behind something else: the next may come 20 s after it was heard.
+    const said = (again: number) =>
+      play(["raise", "baseUnderAttack", 0], ["take", 3], ["raise", "baseUnderAttack", again], ["take", again]).said;
+    expect(said(21)).toEqual(["baseUnderAttack"]);
+    expect(said(23)).toEqual(["baseUnderAttack", "baseUnderAttack"]);
+  });
+
+  it("is not started by an alert that was dropped unsaid", () => {
+    // "Unit lost" went stale waiting and nobody heard it, so the next loss is said: its cooldown never began.
+    const { said } = play(["raise", "unitLost", 0], ["take", 6], ["raise", "unitLost", 7], ["take", 7]);
+    expect(said).toEqual(["unitLost"]);
+  });
+
+  it("lets a stale alert be raised afresh while the old one still sits in the queue", () => {
+    const { said } = play(["raise", "unitLost", 0], ["raise", "unitLost", 6], ["take", 6]);
+    expect(said).toEqual(["unitLost"]);
   });
 });
 
@@ -96,15 +152,29 @@ describe("the alert queue", () => {
     expect(takeAlert(second.queue, 3).alert).toBe("creditsShort");
   });
 
-  it("drops an alert that has waited too long instead of saying it late", () => {
-    const queue = raised(["unitLost", 0], ["buildingReady", 4]);
-    // By 6 s "Unit lost" is old news; "Building ready" is not.
-    expect(takeAll(queue, 6)).toEqual(["buildingReady"]);
+  it("drops a battle alert that has waited too long instead of saying it late", () => {
+    const queue = raised(["unitLost", 0], ["buildingLost", 4]);
+    // By 6 s "Unit lost" is old news; "Building lost" is not.
+    expect(takeAll(queue, 6)).toEqual(["buildingLost"]);
   });
 
-  it("holds only a few alerts, letting the oldest go", () => {
+  it("drops Not enough Credits when it has waited too long: the button press it answers is forgotten", () => {
+    expect(takeAll(raised(["creditsShort", 0]), 6)).toEqual([]);
+  });
+
+  it.each(["buildingReady", "unitReady"] as const)("says %s however long it waited: it happened once and is still true", (kind) => {
+    expect(takeAll(raised([kind, 0]), 30)).toEqual([kind]);
+  });
+
+  it("says battle alerts before ready alerts that were raised earlier", () => {
+    // The ready ones keep; an attack does not.
+    const queue = raised(["buildingReady", 0], ["unitReady", 0], ["creditsShort", 0], ["baseUnderAttack", 0.5], ["unitLost", 0.6]);
+    expect(takeAll(queue, 1)).toEqual(["baseUnderAttack", "unitLost", "buildingReady", "unitReady", "creditsShort"]);
+  });
+
+  it("loses no alert to a full queue: each kind waits at most once, so there is room for all", () => {
     const queue = raised(["buildingReady", 0], ["unitReady", 0], ["creditsShort", 0], ["unitLost", 0], ["buildingLost", 0]);
-    expect(takeAll(queue, 0)).toEqual(["creditsShort", "unitLost", "buildingLost"]);
+    expect(takeAll(queue, 0).sort()).toEqual(["buildingLost", "buildingReady", "creditsShort", "unitLost", "unitReady"]);
   });
 
   it("puts Victory and defeat ahead of everything, however long they wait", () => {

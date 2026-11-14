@@ -25,6 +25,12 @@ export interface Alerts {
   update(nowSeconds: number, paused: boolean): void;
   /** The alert text to show on screen now, or null. Only alerts that were not spoken are shown. */
   banner(nowSeconds: number): string | null;
+  /**
+   * For a new Match: stops the alert being said and forgets everything about
+   * the old one (alerts waiting, the text on screen, cooldowns), so nothing
+   * of it is said or held against the new Match's alerts.
+   */
+  reset(): void;
 }
 
 /** How long an unspoken alert's text stays on screen. */
@@ -98,5 +104,12 @@ export function createAlerts(parts: {
       }
     },
     banner: (now) => (banner && now < banner.until ? banner.text : null),
+    reset() {
+      if (speaking) stopSpeaking();
+      queue = EMPTY_ALERTS;
+      refused = null;
+      banner = null;
+      quietUntil = 0;
+    },
   };
 }
