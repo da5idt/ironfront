@@ -1,4 +1,4 @@
-import { renderRecipe, type SoundEngine, type StartedAudio } from "./engine";
+import { renderRecipe, type SoundEngine, type StartedAudio, whenAllEnded } from "./engine";
 import type { Drum, Mood, PitchedNote } from "./musicComposer";
 import { advanceTimeline, startTimeline, type TimedNote, type Timeline } from "./musicTimeline";
 import type { Layer } from "./recipes";
@@ -25,6 +25,8 @@ const LOOK_AHEAD_SECONDS = 1.6;
 const MUSIC_LEVEL = 0.42;
 /** A change of mood fades the old music out and the new in over about this long, rather than cutting. */
 const MOOD_FADE_SECONDS = 0.5;
+/** How long after a change of mood the old music's nodes are taken away: many times the fade, so it is long silent. */
+const OLD_BUS_LIVES_SECONDS = MOOD_FADE_SECONDS * 4;
 /** The new mood's first note waits this long, so it lands after the old music has mostly gone. */
 const MOOD_GAP_SECONDS = 0.6;
 
@@ -48,6 +50,25 @@ export function createMusic(engine: Pick<SoundEngine, "whenStarted">, seed: numb
     bus.gain.setTargetAtTime(MUSIC_LEVEL, at, MOOD_FADE_SECONDS / 3);
     bus.connect(audio.channels.music);
     return bus;
+  }
+
+  /**
+   * Fades a mood's bus out and takes it out of the graph once it is silent,
+   * or every change of mood would leave one more connected for good. The
+   * wait is on the audio clock (a silent source that ends when it is over),
+   * so a pause in the middle of the fade holds it up too and cuts nothing off.
+   */
+  function retire(audio: StartedAudio, bus: GainNode, now: number): void {
+    bus.gain.cancelScheduledValues(now);
+    bus.gain.setTargetAtTime(0, now, MOOD_FADE_SECONDS / 3);
+    const wait = new ConstantSourceNode(audio.context, { offset: 0 });
+    wait.connect(bus);
+    wait.onended = () => {
+      wait.disconnect();
+      bus.disconnect();
+    };
+    wait.start(now);
+    wait.stop(now + OLD_BUS_LIVES_SECONDS);
   }
 
   function pump(): void {
@@ -75,9 +96,8 @@ export function createMusic(engine: Pick<SoundEngine, "whenStarted">, seed: numb
       if (!playing) return;
       const { audio, bus } = playing;
       const now = audio.context.currentTime;
-      // Notes already scheduled on the old bus fade away with it. It is left connected: with no notes it is silent and costs nothing.
-      bus.gain.cancelScheduledValues(now);
-      bus.gain.setTargetAtTime(0, now, MOOD_FADE_SECONDS / 3);
+      // Notes already scheduled on the old bus fade away with it.
+      retire(audio, bus, now);
       playing.bus = newBus(audio, now + MOOD_GAP_SECONDS / 2);
       playing.timeline = startTimeline((seed + pieces * 7919) >>> 0, mood, now + MOOD_GAP_SECONDS);
       pump();
@@ -89,7 +109,8 @@ export function createMusic(engine: Pick<SoundEngine, "whenStarted">, seed: numb
 }
 
 /**
- * Builds one note's nodes and schedules them on the context's clock. Takes
+ * Builds one note's nodes and schedules them on the context's clock, and
+ * takes them out of the graph again when the note has rung out. Takes
  * any context, so the same instruments play in the game and render into an
  * OfflineAudioContext for checking.
  */
@@ -114,6 +135,8 @@ export function playNote(context: BaseAudioContext, destination: AudioNode, time
   const filter = new BiquadFilterNode(context, { type: "lowpass", frequency: instrument.cutoff, Q: 0.7 });
   filter.connect(envelope).connect(destination);
 
+  const built: AudioNode[] = [envelope, filter];
+  const oscillators: OscillatorNode[] = [];
   for (const part of instrument.oscillators) {
     const oscillator = new OscillatorNode(context, { type: part.wave, frequency, detune: part.detune });
     const level = new GainNode(context, { gain: part.gain });
@@ -121,7 +144,12 @@ export function playNote(context: BaseAudioContext, destination: AudioNode, time
     oscillator.start(at);
     // Three release times on, the note has faded to a twentieth: far enough down to cut without a click.
     oscillator.stop(Math.max(end, at + instrument.attack) + instrument.release);
+    oscillators.push(oscillator);
+    built.push(oscillator, level);
   }
+  whenAllEnded(oscillators, () => {
+    for (const node of built) node.disconnect();
+  });
 }
 
 interface Instrument {

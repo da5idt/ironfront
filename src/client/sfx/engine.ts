@@ -115,9 +115,26 @@ const SILENCE = 0.004;
 const SNAP_ATTACK_S = 0.002;
 
 /**
+ * Calls `done` once the last of `sources` has ended. A node that stays
+ * connected is kept by the graph for as long as the context lives, finished
+ * or not, so everything built for one sound is taken out again when it ends;
+ * a long Match plays many thousands of them.
+ */
+export function whenAllEnded(sources: readonly AudioScheduledSourceNode[], done: () => void): void {
+  let left = sources.length;
+  if (left === 0) done();
+  for (const source of sources) {
+    source.onended = () => {
+      if (--left === 0) done();
+    };
+  }
+}
+
+/**
  * Builds a recipe's nodes and schedules them at `when` on the context's
- * clock. Takes any context, so the same code plays in the game and renders
- * into an OfflineAudioContext for checking.
+ * clock, and takes them out of the graph again when the sound has played.
+ * Takes any context, so the same code plays in the game and renders into an
+ * OfflineAudioContext for checking.
  */
 export function renderRecipe(
   context: BaseAudioContext,
@@ -127,7 +144,10 @@ export function renderRecipe(
   voice: { readonly gain: number; readonly pan: number; readonly pitch: number } = { gain: 1, pan: 0, pitch: 1 },
 ): void {
   const out = new GainNode(context, { gain: voice.gain });
-  out.connect(new StereoPannerNode(context, { pan: voice.pan })).connect(destination);
+  const panner = new StereoPannerNode(context, { pan: voice.pan });
+  out.connect(panner).connect(destination);
+  const built: AudioNode[] = [out, panner];
+  const sources: AudioScheduledSourceNode[] = [];
   for (const layer of recipe.layers) {
     const t0 = when + layer.start;
     const end = t0 + layer.duration;
@@ -136,10 +156,15 @@ export function renderRecipe(
     envelope.gain.linearRampToValueAtTime(layer.gain, t0 + Math.min(layer.attack ?? SNAP_ATTACK_S, layer.duration / 2));
     envelope.gain.exponentialRampToValueAtTime(SILENCE, end);
     envelope.connect(out);
-    const source = layerSource(context, layer, t0, end, voice.pitch, envelope);
+    const { source, nodes } = layerSource(context, layer, t0, end, voice.pitch, envelope);
     source.start(t0);
     source.stop(end);
+    sources.push(source);
+    built.push(envelope, ...nodes);
   }
+  whenAllEnded(sources, () => {
+    for (const node of built) node.disconnect();
+  });
 }
 
 function layerSource(
@@ -149,7 +174,7 @@ function layerSource(
   end: number,
   pitch: number,
   envelope: AudioNode,
-): AudioScheduledSourceNode {
+): { readonly source: AudioScheduledSourceNode; /** Everything made for the layer, the source too. */ readonly nodes: readonly AudioNode[] } {
   const slide = (param: AudioParam): void => {
     param.setValueAtTime(layer.from * pitch, t0);
     param.exponentialRampToValueAtTime(layer.to * pitch, end);
@@ -158,13 +183,13 @@ function layerSource(
     const oscillator = new OscillatorNode(context, { type: layer.wave });
     slide(oscillator.frequency);
     oscillator.connect(envelope);
-    return oscillator;
+    return { source: oscillator, nodes: [oscillator] };
   }
   const noise = new AudioBufferSourceNode(context, { buffer: noiseBuffer(context), loop: true });
   const filter = new BiquadFilterNode(context, { type: layer.filter, Q: layer.q ?? 1 });
   slide(filter.frequency);
   noise.connect(filter).connect(envelope);
-  return noise;
+  return { source: noise, nodes: [noise, filter] };
 }
 
 const NOISE_SECONDS = 2;
