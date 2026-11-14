@@ -41,11 +41,16 @@ import {
   unitAt,
   unitsInBox,
 } from "./selection";
+import { createAlertChime } from "./sfx/alertChime";
+import { matchEndAlert } from "./sfx/alertQueue";
+import { createAlerts } from "./sfx/alerts";
+import { createAlertVoice } from "./sfx/alertVoice";
 import { createSoundEngine } from "./sfx/engine";
 import { listenerFor } from "./sfx/hearing";
+import { channelGain } from "./sfx/mixer";
 import { createSfx } from "./sfx/sfx";
 import { soundStripAction } from "./sfx/soundStrip";
-import { type ButtonTarget, keyButtonIndex, sidePanelPress } from "./sidePanel";
+import { type ButtonTarget, creditsShortPress, keyButtonIndex, sidePanelPress } from "./sidePanel";
 
 // Wires the browser to the Simulation: a fixed-Tick clock, the camera, input
 // (selection stays here; Commands go to the Simulation) and drawing.
@@ -70,8 +75,11 @@ function step(): void {
   if (ticksRun % THINK_EVERY_TICKS === 0 && getMatchStatus(match).state === "running") {
     for (const command of opponent.think(getPlayerView(match, COMPUTER))) issueCommand(match, COMPUTER, command);
   }
+  const before = getMatchStatus(match);
   advanceTick(match);
   ticksRun++;
+  const ended = matchEndAlert(before, getMatchStatus(match), HUMAN);
+  if (ended) alerts.raise(ended, playSeconds);
 }
 
 let screen: Size = { width: window.innerWidth, height: window.innerHeight };
@@ -120,6 +128,14 @@ function settingsStorage(): Storage | null {
 }
 const soundEngine = createSoundEngine();
 const sfx = createSfx(soundEngine, settingsStorage());
+/** Spoken alerts: `alerts.raise(event, playSeconds)` from anywhere; said one at a time, on the alerts channel. */
+const alerts = createAlerts({
+  voice: createAlertVoice(),
+  chime: createAlertChime(soundEngine),
+  volume: () => channelGain(sfx.settings(), "alerts"),
+});
+/** Seconds of play: stops while paused, so alert cooldowns and waits do not run under the Paused screen. */
+let playSeconds = 0;
 // Browsers only let sound start from a click or key press. Captured on the window, so this runs
 // before the game's own handlers and the very first click already makes its sound.
 window.addEventListener("pointerdown", () => soundEngine.unlock(), { capture: true });
@@ -183,7 +199,12 @@ let placing: BuildingKind | null = null;
 /** A click on, or the number key of, a side panel button: the build menu's or the selected trainer's. */
 function pressSidePanel(target: ButtonTarget, button: "left" | "right"): void {
   const action = sidePanelPress(view, selectedBuilding, layout.buttons, target, button);
-  if (!action) return;
+  if (!action) {
+    if (creditsShortPress(view, selectedBuilding, layout.buttons, target, button)) {
+      alerts.raise({ kind: "creditsShort" }, playSeconds);
+    }
+    return;
+  }
   sfx.play("menuClick");
   if (action.type === "place") {
     placing = action.kind;
@@ -368,6 +389,8 @@ if (import.meta.env.DEV) {
       peek: (player: PlayerId | null) => (peekPlayer = player),
       sfx,
       soundEngine,
+      alerts,
+      playSeconds: () => playSeconds,
     },
   });
 }
@@ -400,6 +423,8 @@ function frame(now: number): void {
   // A paused game is quiet; the audio clock stops with it, so sounds and music carry on from where they were.
   soundEngine.setPaused(paused);
   sfx.setListener(listenerFor(camera, viewSize));
+  if (!paused) playSeconds += frameMs / 1000;
+  alerts.update(playSeconds, paused);
   const markerAge = moveMarker ? (now - moveMarker.at) / MOVE_MARKER_MS : 1;
   if (markerAge >= 1) moveMarker = null;
   const drawn = peekPlayer === null ? view : getPlayerView(match, peekPlayer);
@@ -411,6 +436,7 @@ function frame(now: number): void {
     placement: placementPreview(),
     selectedBuilding,
     sound: sfx.settings(),
+    alert: alerts.banner(playSeconds),
     screen: currentScreenOverlay(),
   });
   requestAnimationFrame(frame);

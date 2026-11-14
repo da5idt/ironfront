@@ -52,6 +52,10 @@ export const BUTTON_KEY_BG = "#3a414c";
 export const VOLUME_ON = "#6fb0e0";
 export const VOLUME_OFF = "#2c323c";
 export const SOUND_MUTED = "#f06a55";
+/** The banner that shows an alert's text when it is not spoken. */
+export const ALERT_BG = "#15181e";
+export const ALERT_EDGE = "#f0c040";
+export const ALERT_TEXT = "#f2f2f2";
 export const PLACE_VALID = "rgba(95, 211, 95, 0.45)";
 export const PLACE_INVALID = "rgba(224, 74, 58, 0.5)";
 

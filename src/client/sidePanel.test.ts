@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { type BuildingView, type ProductionView, type TrainingView, UNIT_STATS } from "../sim";
-import { buttonKeyLabel, keyButtonIndex, type SidePanelView, sidePanelPress } from "./sidePanel";
+import { BUILDING_STATS, type BuildingView, type ProductionView, TRAINING, type TrainingView, UNIT_STATS } from "../sim";
+import { buttonKeyLabel, creditsShortPress, keyButtonIndex, type SidePanelView, sidePanelPress } from "./sidePanel";
 import { buildButtons } from "./buildPanel";
 import { trainButtons } from "./trainPanel";
 
@@ -106,5 +106,44 @@ describe("clicking a side panel button", () => {
 
   it("does nothing between buttons", () => {
     expect(sidePanelPress(panelView(10_000), null, AREA, { point: { x: 20, y: AREA.y + 5 } }, "left")).toBeNull();
+  });
+});
+
+describe("a press refused for want of Credits", () => {
+  const barracksKey = { key: 1 };
+  const short = BUILDING_STATS.barracks.cost - 1;
+
+  it("is a left press, by key or click, on a Building the Player cannot pay for", () => {
+    expect(creditsShortPress(panelView(short), null, AREA, barracksKey, "left")).toBe(true);
+    const rect = buildButtons(AREA)[1]!.rect;
+    expect(creditsShortPress(panelView(short), null, AREA, { point: { x: rect.x + 1, y: rect.y + 1 } }, "left")).toBe(true);
+  });
+
+  it("is a left press on a Unit the Player cannot pay for", () => {
+    expect(creditsShortPress(panelView(UNIT_STATS.rifleman.cost - 1), 2, AREA, { key: 0 }, "left")).toBe(true);
+  });
+
+  it("is not a press that goes through", () => {
+    expect(creditsShortPress(panelView(BUILDING_STATS.barracks.cost), null, AREA, barracksKey, "left")).toBe(false);
+    expect(creditsShortPress(panelView(UNIT_STATS.rifleman.cost), 2, AREA, { key: 0 }, "left")).toBe(false);
+  });
+
+  it("is not a press refused for another reason", () => {
+    // The HQ is busy with something else: more Credits would not help.
+    const busy = panelView(0, { kind: "turret", progress: 0.2, ready: false });
+    expect(creditsShortPress(busy, null, AREA, barracksKey, "left")).toBe(false);
+    // The queue is full.
+    const full: TrainingView = { queue: Array(TRAINING.queueSize).fill("rifleman"), progress: 0, rallyPoint: null };
+    const view = { ...panelView(0), buildings: [building(2, "barracks", full)] };
+    expect(creditsShortPress(view, 2, AREA, { key: 0 }, "left")).toBe(false);
+  });
+
+  it("is not a right-click, which only ever cancels", () => {
+    expect(creditsShortPress(panelView(short), null, AREA, barracksKey, "right")).toBe(false);
+  });
+
+  it("is not a press where there is no button", () => {
+    expect(creditsShortPress(panelView(0), null, AREA, { point: { x: 20, y: AREA.y + 5 } }, "left")).toBe(false);
+    expect(creditsShortPress(panelView(0), 2, AREA, { key: 3 }, "left")).toBe(false);
   });
 });

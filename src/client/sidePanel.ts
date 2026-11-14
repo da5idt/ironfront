@@ -1,7 +1,7 @@
 import type { EntityId, PlayerView } from "../sim";
 import { buildButtons, buttonAt, buttonState, type PanelAction, panelClick } from "./buildPanel";
 import type { Rect } from "./layout";
-import { trainButtonAt, trainButtons, trainClick, trainerOf } from "./trainPanel";
+import { trainButtonAt, trainButtons, trainButtonState, trainClick, trainerOf } from "./trainPanel";
 
 // The side panel as one set of buttons, whichever menu it shows: the HQ's
 // build buttons, or the selected Barracks' or Vehicle Factory's train buttons.
@@ -53,4 +53,30 @@ export function sidePanelPress(
   // Cancelling stays a mouse action: a second tap of the key that started a Building must not throw it away.
   if ("key" in target && buttonState(view, kind) === "building") return null;
   return panelClick(view, kind, button);
+}
+
+/**
+ * True when a left press lands on a button that is greyed out only because
+ * the Player cannot pay for it: the moment for the "Not enough Credits"
+ * alert. A busy HQ or a full queue refuses for another reason and is not one.
+ */
+export function creditsShortPress(
+  view: SidePanelView,
+  selectedBuilding: EntityId | null,
+  area: Rect,
+  target: ButtonTarget,
+  button: "left" | "right",
+): boolean {
+  if (button !== "left") return false;
+  const trainer = trainerOf(view.buildings, selectedBuilding);
+  if (trainer) {
+    const buttons = trainButtons(area, trainer.kind);
+    const kind =
+      "key" in target ? (buttons[target.key]?.kind ?? null) : trainButtonAt(buttons, target.point.x, target.point.y);
+    return kind !== null && trainButtonState(view.credits, trainer.training, kind).status === "unaffordable";
+  }
+  const buttons = buildButtons(area);
+  const kind =
+    "key" in target ? (buttons[target.key]?.kind ?? null) : buttonAt(buttons, target.point.x, target.point.y);
+  return kind !== null && buttonState(view, kind) === "unaffordable";
 }
