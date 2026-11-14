@@ -60,8 +60,15 @@ function setup(hasVoice = true) {
   const fake = fakeVoice(hasVoice);
   const mixer = { volume: 0.64 };
   let chimes = 0;
-  const alerts = createAlerts({ voice: fake.voice, chime: () => void chimes++, volume: () => mixer.volume });
-  return { ...fake, alerts, mixer, chimes: () => chimes };
+  /** Whether the person has clicked or pressed a key yet; most tests start after that. */
+  const person = { hasActed: true };
+  const alerts = createAlerts({
+    voice: fake.voice,
+    chime: () => void chimes++,
+    volume: () => mixer.volume,
+    soundUnlocked: () => person.hasActed,
+  });
+  return { ...fake, alerts, mixer, person, chimes: () => chimes };
 }
 
 describe("speaking alerts", () => {
@@ -144,6 +151,29 @@ describe("speaking alerts", () => {
     alerts.update(1.1, false);
     expect(chimes()).toBe(1);
     expect(alerts.banner(1.1)).toBe("Victory");
+  });
+});
+
+describe("alerts before the first click or key press", () => {
+  // Spec #16, story 45: sound starts only after the person's first click or key press.
+  it("says nothing aloud and shows the text instead", () => {
+    const { alerts, said, person } = setup();
+    person.hasActed = false;
+    alerts.raise({ kind: "buildingReady" }, 1);
+    alerts.update(1, false);
+    expect(said).toEqual([]);
+    expect(alerts.banner(1)).toBe("Building ready");
+  });
+
+  it("speaks the alerts raised once the person has clicked or pressed a key", () => {
+    const { alerts, said, person } = setup();
+    person.hasActed = false;
+    alerts.raise({ kind: "buildingReady" }, 1);
+    alerts.update(1, false);
+    person.hasActed = true;
+    alerts.raise({ kind: "unitReady" }, 4);
+    alerts.update(4, false);
+    expect(said.map((s) => s.text)).toEqual(["Unit ready"]);
   });
 });
 

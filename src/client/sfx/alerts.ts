@@ -46,8 +46,14 @@ export function createAlerts(parts: {
   readonly chime: () => void;
   /** The alerts channel's volume, 0..1; 0 when it is muted. */
   readonly volume: () => number;
+  /**
+   * True once the person has clicked or pressed a key. Until then nothing is
+   * spoken, as no other sound is made either (spec #16); a browser might let
+   * speech through without one, so it is held back here.
+   */
+  readonly soundUnlocked: () => boolean;
 }): Alerts {
-  const { voice, chime, volume } = parts;
+  const { voice, chime, volume, soundUnlocked } = parts;
   let queue: AlertQueue = EMPTY_ALERTS;
   /** The alert being said. A new object per alert, so a late report about an old one is told apart. */
   let speaking: { readonly since: number } | null = null;
@@ -93,6 +99,7 @@ export function createAlerts(parts: {
       speaking = mine;
       const started =
         level > 0 &&
+        soundUnlocked() &&
         voice.say(text, level, (said) => {
           if (speaking !== mine) return;
           speaking = null;

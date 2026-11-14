@@ -139,6 +139,7 @@ const alerts = createAlerts({
   voice: createAlertVoice(),
   chime: createAlertChime(soundEngine),
   volume: () => channelGain(sfx.settings(), "alerts"),
+  soundUnlocked: () => soundEngine.unlocked(),
 });
 /** Seconds of play: stops while paused, so alert cooldowns and waits do not run under the Paused screen. */
 let playSeconds = 0;

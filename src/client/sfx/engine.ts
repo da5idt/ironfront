@@ -26,6 +26,8 @@ export interface SoundEngine extends SoundOutput {
    * the browser put it to sleep.
    */
   unlock(): void;
+  /** True once unlock has been called: the person has clicked or pressed a key, so sound of any kind may start. */
+  unlocked(): boolean;
   /** Freezes all sound, music and the audio clock while the game is paused, and carries on from there after. */
   setPaused(paused: boolean): void;
   /**
@@ -40,6 +42,8 @@ export function createSoundEngine(): SoundEngine {
   let audio: StartedAudio | null = null;
   let settings: MixerSettings = DEFAULT_SETTINGS;
   let paused = false;
+  /** Kept apart from `audio`: a browser without Web Audio never has that, and may still speak the alerts. */
+  let unlocked = false;
   const waiting: ((audio: StartedAudio) => void)[] = [];
 
   function setGains(): void {
@@ -74,6 +78,7 @@ export function createSoundEngine(): SoundEngine {
 
   return {
     unlock() {
+      unlocked = true;
       if (audio) {
         follow(audio.context);
         return;
@@ -84,6 +89,7 @@ export function createSoundEngine(): SoundEngine {
       follow(audio.context);
       for (const use of waiting.splice(0)) use(audio);
     },
+    unlocked: () => unlocked,
     setPaused(next) {
       paused = next;
       if (audio) follow(audio.context);
