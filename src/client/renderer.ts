@@ -9,6 +9,7 @@ import {
   type ShotView,
   type UnitView,
 } from "../sim";
+import { PixelWorld } from "./art/pixelWorld";
 import { drawBuildPanel } from "./buildPanelPainter";
 import { type Camera, CELL_PX, mapToScreen, type Size } from "./camera";
 import type { Layout, Rect } from "./layout";
@@ -18,7 +19,6 @@ import { drawScreenOverlay } from "./screenOverlayPainter";
 import {
   DRAG_BOX_FILL,
   DRAG_BOX_LINE,
-  FOG_ALPHA,
   HEALTH_BACK,
   HEALTH_GOOD,
   HEALTH_LOW,
@@ -30,11 +30,9 @@ import {
   PLACE_INVALID,
   PLACE_VALID,
   ORE_COLOUR,
-  ORE_SHADOW,
   SELECTION_MARKER,
   SHOT_TRACER,
   TEAM_COLOURS,
-  TERRAIN_COLOURS,
 } from "./palette";
 import { drawSelectedBuilding } from "./selectedBuildingPainter";
 import type { Selection } from "./selection";
@@ -68,11 +66,7 @@ export interface Overlay {
 
 export class Renderer {
   private readonly ctx: CanvasRenderingContext2D;
-  /** Terrain never changes, so it is drawn once and copied each frame. */
-  private terrainLayer: HTMLCanvasElement | null = null;
-  private fogLayer: HTMLCanvasElement | null = null;
-  /** The view the fog layer was painted from; views are rebuilt each Tick, so identity means "unchanged". */
-  private fogFor: PlayerView | null = null;
+  private readonly world = new PixelWorld();
   private readonly minimap = new MinimapPainter();
 
   constructor(private readonly canvas: HTMLCanvasElement) {
@@ -97,12 +91,14 @@ export class Renderer {
     ctx.rect(mapView.x, mapView.y, mapView.width, mapView.height);
     ctx.clip();
     ctx.translate(mapView.x, mapView.y);
-    this.drawTerrain(view, cam);
-    this.drawOre(view, cam, mapView);
+    // The origin is already at the Map view's corner, so the pixel world draws into a rect at 0,0.
+    const viewRect = { x: 0, y: 0, width: mapView.width, height: mapView.height };
+    // Ground and fog are pixel art at half resolution (ADR 0003); Buildings and Units are still drawn at full resolution between them.
+    this.world.drawGround(ctx, view, cam, viewRect, alpha);
     for (const b of view.buildings) this.drawBuilding(b, cam);
     // After the ground and Buildings, so remembered Buildings sit dimmed under it;
     // before Units, which are only ever listed where the Player can see.
-    this.drawFog(view, cam);
+    this.world.drawFog(ctx, view, cam, viewRect);
     const selectedBuilding = view.buildings.find((b) => b.id === overlay.selectedBuilding);
     if (selectedBuilding) drawSelectedBuilding(ctx, selectedBuilding, cam);
     if (overlay.moveMarker) this.drawMoveMarker(overlay.moveMarker.cell, overlay.moveMarker.age, cam);
@@ -140,63 +136,6 @@ export class Renderer {
     // The edge line faces the Map view, on the panel's right.
     ctx.fillStyle = PANEL_EDGE;
     ctx.fillRect(panel.x + panel.width - 1, panel.y, 1, panel.height);
-  }
-
-  private drawTerrain(view: PlayerView, cam: Camera): void {
-    if (!this.terrainLayer) this.terrainLayer = buildTerrainLayer(view);
-    this.ctx.drawImage(this.terrainLayer, -cam.x, -cam.y);
-  }
-
-  /**
-   * Fog of War as one pixel per Cell, scaled up without smoothing. Rebuilding
-   * a 64x64 image only when a new view arrives keeps this to one drawImage a frame.
-   */
-  private drawFog(view: PlayerView, cam: Camera): void {
-    if (this.fogFor !== view) {
-      this.fogLayer = paintFogLayer(view, this.fogLayer);
-      this.fogFor = view;
-    }
-    const { ctx } = this;
-    ctx.imageSmoothingEnabled = false;
-    ctx.drawImage(this.fogLayer!, -cam.x, -cam.y, view.map.width * CELL_PX, view.map.height * CELL_PX);
-    ctx.imageSmoothingEnabled = true;
-  }
-
-  private drawOre(view: PlayerView, cam: Camera, screen: Size): void {
-    const { ctx } = this;
-    const { width, height, ore } = view.map;
-    const x0 = Math.max(0, Math.floor(cam.x / CELL_PX));
-    const y0 = Math.max(0, Math.floor(cam.y / CELL_PX));
-    const x1 = Math.min(width - 1, Math.floor((cam.x + screen.width) / CELL_PX));
-    const y1 = Math.min(height - 1, Math.floor((cam.y + screen.height) / CELL_PX));
-    for (let y = y0; y <= y1; y++) {
-      for (let x = x0; x <= x1; x++) {
-        const amount = ore[y * width + x] ?? 0;
-        if (amount <= 0) continue;
-        const p = mapToScreen(cam, x, y);
-        // Fewer, smaller nuggets as the Cell empties, so depletion reads at a glance.
-        const fullness = Math.min(1, amount / ECONOMY.orePerCell);
-        const r = 2 + 3 * fullness;
-        const spots = [
-          [0.3, 0.3],
-          [0.7, 0.35],
-          [0.35, 0.72],
-          [0.72, 0.7],
-        ] as const;
-        const count = Math.max(1, Math.ceil(fullness * spots.length));
-        for (let i = 0; i < count; i++) {
-          const [sx, sy] = spots[i]!;
-          ctx.fillStyle = ORE_SHADOW;
-          ctx.beginPath();
-          ctx.arc(p.x + sx * CELL_PX + 1, p.y + sy * CELL_PX + 1, r, 0, Math.PI * 2);
-          ctx.fill();
-          ctx.fillStyle = ORE_COLOUR;
-          ctx.beginPath();
-          ctx.arc(p.x + sx * CELL_PX, p.y + sy * CELL_PX, r, 0, Math.PI * 2);
-          ctx.fill();
-        }
-      }
-    }
   }
 
   private drawBuilding(b: BuildingView, cam: Camera): void {
@@ -358,44 +297,4 @@ export class Renderer {
     ctx.textBaseline = "middle";
     ctx.fillText(text, screen.width - 18, 22);
   }
-}
-
-function paintFogLayer(view: PlayerView, reuse: HTMLCanvasElement | null): HTMLCanvasElement {
-  const { width, height, visibility } = view.map;
-  const layer = reuse ?? document.createElement("canvas");
-  layer.width = width;
-  layer.height = height;
-  const ctx = layer.getContext("2d")!;
-  const image = ctx.createImageData(width, height);
-  for (let i = 0; i < visibility.length; i++) {
-    // RGB stays 0 (black); only the alpha channel carries the fog.
-    image.data[i * 4 + 3] = FOG_ALPHA[visibility[i]!];
-  }
-  ctx.putImageData(image, 0, 0);
-  return layer;
-}
-
-function buildTerrainLayer(view: PlayerView): HTMLCanvasElement {
-  const { width, height, terrain } = view.map;
-  const layer = document.createElement("canvas");
-  layer.width = width * CELL_PX;
-  layer.height = height * CELL_PX;
-  const ctx = layer.getContext("2d")!;
-  for (let y = 0; y < height; y++) {
-    for (let x = 0; x < width; x++) {
-      const t = terrain[y * width + x]!;
-      ctx.fillStyle = TERRAIN_COLOURS[t];
-      ctx.fillRect(x * CELL_PX, y * CELL_PX, CELL_PX, CELL_PX);
-      // A faint checker so Cells read as a grid without drawing lines.
-      if ((x + y) % 2 === 0) {
-        ctx.fillStyle = "rgba(255, 255, 255, 0.025)";
-        ctx.fillRect(x * CELL_PX, y * CELL_PX, CELL_PX, CELL_PX);
-      }
-      if (t === "rock") {
-        ctx.fillStyle = "rgba(0, 0, 0, 0.25)";
-        ctx.fillRect(x * CELL_PX + 4, y * CELL_PX + 4, CELL_PX - 8, CELL_PX - 8);
-      }
-    }
-  }
-  return layer;
 }
