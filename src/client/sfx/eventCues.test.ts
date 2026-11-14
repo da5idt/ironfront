@@ -65,7 +65,7 @@ describe("sounds for presentation events", () => {
 describe("the alert a presentation event raises", () => {
   it("tells the person their Building is ready and their Unit is ready", () => {
     expect(alertForEvent({ kind: "buildingReady" }, 0)).toEqual({ kind: "buildingReady" });
-    expect(alertForEvent({ kind: "unitTrained", unit: "raider" }, 0)).toEqual({ kind: "unitReady" });
+    expect(alertForEvent({ kind: "unitTrained", unit: "raider" }, 0)).toEqual({ kind: "unitTrained" });
   });
 
   it("tells the person when their Buildings are under attack: a Building hit, or a Unit among their Buildings", () => {
@@ -81,12 +81,12 @@ describe("the alert a presentation event raises", () => {
   it("tells the person of their own losses, and not of the other Player's", () => {
     const unit = (owner: 0 | 1): PresentationEvent => ({ kind: "unitDied", unit: "rifleman", vehicle: false, owner, at });
     const building = (owner: 0 | 1): PresentationEvent => ({ kind: "buildingDestroyed", building: "turret", owner, at });
-    expect(alertForEvent(unit(0), 0)).toEqual({ kind: "unitLost" });
+    expect(alertForEvent(unit(0), 0)).toEqual({ kind: "unitFallen" });
     expect(alertForEvent(unit(1), 0)).toBeNull();
     expect(alertForEvent(building(0), 0)).toEqual({ kind: "buildingLost" });
     expect(alertForEvent(building(1), 0)).toBeNull();
     // The same events seen from the other chair.
-    expect(alertForEvent(unit(1), 1)).toEqual({ kind: "unitLost" });
+    expect(alertForEvent(unit(1), 1)).toEqual({ kind: "unitFallen" });
     expect(alertForEvent(building(0), 1)).toBeNull();
   });
 

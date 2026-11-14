@@ -1,7 +1,6 @@
 import {
   type BuildingKind,
   type BuildingView,
-  cellIndexIn,
   ECONOMY,
   type EntityId,
   type PlayerId,
@@ -497,9 +496,10 @@ function nearOwnBuilding(buildings: ReadonlyMap<EntityId, BuildingView>, me: Pla
 
 /** True when any Cell of the Building's footprint was Visible in the last view. */
 function wasVisible(last: Presentation, view: PlayerView, b: BuildingView): boolean {
+  const fog = { width: view.map.width, height: view.map.height, visibility: last.visibility };
   for (let dy = 0; dy < b.height; dy++) {
     for (let dx = 0; dx < b.width; dx++) {
-      if (last.visibility[cellIndexIn(view.map, b.x + dx, b.y + dy)] === "visible") return true;
+      if (visibleIn(fog, b.x + dx, b.y + dy)) return true;
     }
   }
   return false;

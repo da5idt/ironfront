@@ -57,12 +57,12 @@ export function alertForEvent(event: PresentationEvent, me: PlayerId): AlertEven
     case "buildingReady":
       return { kind: "buildingReady" };
     case "unitTrained":
-      return { kind: "unitReady" };
+      return { kind: "unitTrained" };
     case "underAttack":
       // The words are "Your buildings are taking fire", so a Unit hit out on the Map does not raise them; its loss, if it comes to that, is told as "A unit has fallen".
       return event.nearOwnBuildings ? { kind: "buildingsUnderAttack" } : null;
     case "unitDied":
-      return event.owner === me ? { kind: "unitLost" } : null;
+      return event.owner === me ? { kind: "unitFallen" } : null;
     case "buildingDestroyed":
       return event.owner === me ? { kind: "buildingLost" } : null;
     case "shotFired":

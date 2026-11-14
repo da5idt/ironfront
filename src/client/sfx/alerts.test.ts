@@ -90,7 +90,7 @@ describe("speaking alerts", () => {
   it("waits for one alert to end before saying the next", () => {
     const { alerts, said, finish } = setup();
     alerts.raise({ kind: "buildingReady" }, 1);
-    alerts.raise({ kind: "unitReady" }, 1);
+    alerts.raise({ kind: "unitTrained" }, 1);
     alerts.update(1, false);
     alerts.update(1.5, false);
     expect(said.map((s) => s.text)).toEqual(["Building finished"]);
@@ -102,7 +102,7 @@ describe("speaking alerts", () => {
   it("says nothing while the channel is muted, and shows the text instead", () => {
     const { alerts, said, mixer } = setup();
     mixer.volume = 0;
-    alerts.raise({ kind: "unitLost" }, 1);
+    alerts.raise({ kind: "unitFallen" }, 1);
     alerts.update(1, false);
     expect(said).toEqual([]);
     expect(alerts.banner(1)).toBe("A unit has fallen");
@@ -137,7 +137,7 @@ describe("speaking alerts", () => {
     const { alerts, said } = setup();
     alerts.raise({ kind: "buildingReady" }, 0);
     alerts.update(0, false);
-    alerts.raise({ kind: "unitReady" }, 9);
+    alerts.raise({ kind: "unitTrained" }, 9);
     alerts.update(9, false);
     alerts.update(9.1, false);
     expect(said.map((s) => s.text)).toEqual(["Building finished", "Unit trained"]);
@@ -171,7 +171,7 @@ describe("alerts before the first click or key press", () => {
     alerts.raise({ kind: "buildingReady" }, 1);
     alerts.update(1, false);
     person.hasActed = true;
-    alerts.raise({ kind: "unitReady" }, 4);
+    alerts.raise({ kind: "unitTrained" }, 4);
     alerts.update(4, false);
     expect(said.map((s) => s.text)).toEqual(["Unit trained"]);
   });
@@ -181,7 +181,7 @@ describe("an alert cut off while another is waiting", () => {
   it("does not let the late report about the old alert end the new one", () => {
     const { alerts, said, deliver, finish } = setup();
     alerts.raise({ kind: "buildingReady" }, 1);
-    alerts.raise({ kind: "unitReady" }, 1);
+    alerts.raise({ kind: "unitTrained" }, 1);
     alerts.raise({ kind: "creditsShort" }, 1);
     alerts.update(1, false);
     // Paused and at once carried on: "Building finished" is cut off and "Unit trained" starts...
@@ -202,7 +202,7 @@ describe("starting a new Match", () => {
   it("stops the alert being said and forgets the ones waiting", () => {
     const { alerts, said, cancels, deliver } = setup();
     alerts.raise({ kind: "buildingReady" }, 1);
-    alerts.raise({ kind: "unitReady" }, 1);
+    alerts.raise({ kind: "unitTrained" }, 1);
     alerts.update(1, false);
     alerts.reset();
     expect(cancels()).toBe(1);
@@ -250,7 +250,7 @@ describe("alerts after the Match has ended", () => {
     alerts.raise({ kind: "buildingsUnderAttack" }, 10);
     alerts.update(10, false);
     finish(true);
-    alerts.raise({ kind: "unitLost" }, 11);
+    alerts.raise({ kind: "unitFallen" }, 11);
     alerts.update(11, false);
     alerts.update(20, false);
     expect(said.map((s) => s.text)).toEqual(["Defeat"]);
@@ -295,7 +295,7 @@ describe("alerts without a local voice", () => {
   it("gives each alert a moment on screen before the next replaces it", () => {
     const { alerts, chimes } = setup(false);
     alerts.raise({ kind: "buildingReady" }, 0);
-    alerts.raise({ kind: "unitReady" }, 0);
+    alerts.raise({ kind: "unitTrained" }, 0);
     alerts.update(0, false);
     alerts.update(0.5, false);
     expect(alerts.banner(0.5)).toBe("Building finished");
@@ -310,7 +310,7 @@ describe("alerts while the game is paused", () => {
   it("stops the alert being said and starts no other until play carries on", () => {
     const { alerts, said, cancels } = setup();
     alerts.raise({ kind: "buildingReady" }, 1);
-    alerts.raise({ kind: "unitReady" }, 1);
+    alerts.raise({ kind: "unitTrained" }, 1);
     alerts.update(1, false);
     alerts.update(1.2, true);
     expect(cancels()).toBe(1);

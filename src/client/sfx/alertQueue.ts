@@ -7,10 +7,10 @@ import type { MatchStatus, PlayerId } from "../../sim";
 
 export const ALERT_KINDS = [
   "buildingReady",
-  "unitReady",
+  "unitTrained",
   "creditsShort",
   "buildingsUnderAttack",
-  "unitLost",
+  "unitFallen",
   "buildingLost",
   "victory",
   "defeat",
@@ -23,10 +23,10 @@ export type AlertEvent = { readonly [K in AlertKind]: { readonly kind: K } }[Ale
 /** Worded by us on purpose, so that no line is one a person knows from another game (ADR 0003). */
 const ALERT_WORDS: Record<AlertKind, string> = {
   buildingReady: "Building finished",
-  unitReady: "Unit trained",
+  unitTrained: "Unit trained",
   creditsShort: "Not enough Credits",
   buildingsUnderAttack: "Your buildings are taking fire",
-  unitLost: "A unit has fallen",
+  unitFallen: "A unit has fallen",
   buildingLost: "A building was destroyed",
   victory: "Victory",
   defeat: "Defeat",
@@ -51,10 +51,10 @@ export function matchEndAlert(before: MatchStatus, after: MatchStatus, me: Playe
  */
 export const ALERT_COOLDOWN_S: Record<AlertKind, number> = {
   buildingReady: 2,
-  unitReady: 3,
+  unitTrained: 3,
   creditsShort: 5,
   buildingsUnderAttack: 20,
-  unitLost: 8,
+  unitFallen: 8,
   buildingLost: 5,
   victory: 0,
   defeat: 0,
@@ -70,7 +70,7 @@ const endsMatch = (kind: AlertKind): boolean => kind === "victory" || kind === "
  * not wait, and dropped when stale, as the fight has moved on (and if it has
  * not, the alert is raised again).
  */
-const isBattle = (kind: AlertKind): boolean => kind === "buildingsUnderAttack" || kind === "unitLost" || kind === "buildingLost";
+const isBattle = (kind: AlertKind): boolean => kind === "buildingsUnderAttack" || kind === "unitFallen" || kind === "buildingLost";
 
 /**
  * Whether an alert is still worth saying however late. A Building or Unit
@@ -78,7 +78,7 @@ const isBattle = (kind: AlertKind): boolean => kind === "buildingsUnderAttack" |
  * them a second time. The battle alerts and "Not enough Credits" are about
  * the moment.
  */
-const keeps = (kind: AlertKind): boolean => endsMatch(kind) || kind === "buildingReady" || kind === "unitReady";
+const keeps = (kind: AlertKind): boolean => endsMatch(kind) || kind === "buildingReady" || kind === "unitTrained";
 
 interface Waiting {
   readonly kind: AlertKind;
