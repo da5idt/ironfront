@@ -93,7 +93,7 @@ describe("playing a sound", () => {
     sfx.playEvent({ kind: "buildingDestroyed", building: "turret", owner: 1, at: { x: 50, y: 140 } });
     sfx.playEvent({ kind: "unitTrained", unit: "rifleman" });
     // An alert only: no effect.
-    sfx.playEvent({ kind: "underAttack", hit: "building", at: { x: 50, y: 40 }, inBase: true });
+    sfx.playEvent({ kind: "underAttack", hit: "building", at: { x: 50, y: 40 }, nearOwnBuildings: true });
     expect(started.map((s) => s.name)).toEqual(["smallExplosion", "unitTrained"]);
   });
 });

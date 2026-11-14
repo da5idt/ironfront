@@ -110,7 +110,7 @@ describe("speaking alerts", () => {
 
   it("cuts the alert off when the channel is muted halfway through", () => {
     const { alerts, mixer, cancels, speaking, deliver } = setup();
-    alerts.raise({ kind: "baseUnderAttack" }, 1);
+    alerts.raise({ kind: "buildingsUnderAttack" }, 1);
     alerts.update(1, false);
     mixer.volume = 0;
     alerts.update(1.2, false);
@@ -121,7 +121,7 @@ describe("speaking alerts", () => {
 
   it("takes the late report of a cut-off alert for what it is, and not for a refusal or the end of anything else", () => {
     const { alerts, mixer, deliver, chimes } = setup();
-    alerts.raise({ kind: "baseUnderAttack" }, 1);
+    alerts.raise({ kind: "buildingsUnderAttack" }, 1);
     alerts.update(1, false);
     mixer.volume = 0;
     alerts.update(1.2, false);
@@ -222,11 +222,11 @@ describe("starting a new Match", () => {
 
   it("clears the cooldowns, so the new Match's first alerts are said", () => {
     const { alerts, said, finish } = setup();
-    alerts.raise({ kind: "baseUnderAttack" }, 1);
+    alerts.raise({ kind: "buildingsUnderAttack" }, 1);
     alerts.update(1, false);
     finish(true);
     alerts.reset();
-    alerts.raise({ kind: "baseUnderAttack" }, 3);
+    alerts.raise({ kind: "buildingsUnderAttack" }, 3);
     alerts.update(3, false);
     expect(said.map((s) => s.text)).toEqual(["Base under attack", "Base under attack"]);
   });

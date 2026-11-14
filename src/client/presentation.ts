@@ -51,12 +51,12 @@ export const TURRET_TURN_PER_TICK = 1;
 
 /**
  * How near one of its Player's Buildings a Unit must be, in Cells from the
- * footprint, to count as in the base. About a Turret's range: Units this
+ * footprint, to count as among them. About a Turret's range: Units this
  * close are defending or working among the Buildings, and whoever shoots
  * them can shoot the Buildings next. Farther out it is a fight on the Map,
  * and calling that "Base under attack" would be a false alarm.
  */
-export const BASE_REACH_CELLS = 5;
+export const NEAR_BUILDINGS_CELLS = 5;
 
 /** How one Unit in the view is shown. Kind, owner, place and health are kept so a later view can tell what vanished or was hit, and where. */
 export interface UnitLook {
@@ -184,15 +184,15 @@ export type PresentationEvent =
   | { readonly kind: "unitTrained"; readonly unit: UnitKind }
   /**
    * One of the Player's own Units or Buildings was hit or lost this Tick; at
-   * most one a Tick, and of several hits the one that most concerns the base:
-   * a Building before a Unit, a Unit in the base before one out on the Map.
+   * most one a Tick, and of several hits the one that most concerns the Player's
+   * Buildings: a Building before a Unit, a Unit near the Buildings before one out on the Map.
    */
   | {
       readonly kind: "underAttack";
       readonly hit: "building" | "unit";
       readonly at: Vec;
-      /** True for a Building, and for a Unit within BASE_REACH_CELLS of one of the Player's Buildings. */
-      readonly inBase: boolean;
+      /** True for a Building, and for a Unit within NEAR_BUILDINGS_CELLS of one of the Player's Buildings. */
+      readonly nearOwnBuildings: boolean;
     };
 
 export type { Weapon } from "./art/effectArt";
@@ -336,16 +336,16 @@ export function present(prev: Presentation | null, view: PlayerView): Presented 
   if (last) {
     type Attack = Extract<PresentationEvent, { kind: "underAttack" }>;
     let attack = null as Attack | null;
-    /** 2 for a Building, 1 for a Unit in the base, 0 for a Unit elsewhere. */
-    const concern = (a: Attack) => (a.hit === "building" ? 2 : a.inBase ? 1 : 0);
+    /** 2 for a Building, 1 for a Unit near the Player's Buildings, 0 for a Unit elsewhere. */
+    const concern = (a: Attack) => (a.hit === "building" ? 2 : a.nearOwnBuildings ? 1 : 0);
     const hitBuilding = (at: Vec): void => {
-      if (attack?.hit !== "building") attack = { kind: "underAttack", hit: "building", at, inBase: true };
+      if (attack?.hit !== "building") attack = { kind: "underAttack", hit: "building", at, nearOwnBuildings: true };
     };
     const hitUnit = (at: Vec): void => {
-      // Nothing a Unit's hit could add once the base is known to be under attack.
+      // Nothing a Unit's hit could add once the Buildings are known to be under attack.
       if (attack && concern(attack) >= 1) return;
-      const inBase = nearOwnBuilding(last.buildings, me, at);
-      if (!attack || inBase) attack = { kind: "underAttack", hit: "unit", at, inBase };
+      const nearOwnBuildings = nearOwnBuilding(last.buildings, me, at);
+      if (!attack || nearOwnBuildings) attack = { kind: "underAttack", hit: "unit", at, nearOwnBuildings };
     };
 
     // The Simulation takes a Unit out of the Match only when it dies, so one missing from the view either
@@ -481,13 +481,13 @@ const ticksOf = (seconds: number) => Math.round(seconds * TICKS_PER_SECOND);
 
 const centreOf = (b: BuildingView): Vec => ({ x: b.x + b.width / 2, y: b.y + b.height / 2 });
 
-/** True when the place is within BASE_REACH_CELLS of the footprint of one of `me`'s Buildings. */
+/** True when the place is within NEAR_BUILDINGS_CELLS of the footprint of one of `me`'s Buildings. */
 function nearOwnBuilding(buildings: ReadonlyMap<EntityId, BuildingView>, me: PlayerId, at: Vec): boolean {
   for (const b of buildings.values()) {
     if (b.owner !== me) continue;
     const dx = Math.max(b.x - at.x, 0, at.x - (b.x + b.width));
     const dy = Math.max(b.y - at.y, 0, at.y - (b.y + b.height));
-    if (Math.hypot(dx, dy) <= BASE_REACH_CELLS) return true;
+    if (Math.hypot(dx, dy) <= NEAR_BUILDINGS_CELLS) return true;
   }
   return false;
 }

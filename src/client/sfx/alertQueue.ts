@@ -9,7 +9,7 @@ export const ALERT_KINDS = [
   "buildingReady",
   "unitReady",
   "creditsShort",
-  "baseUnderAttack",
+  "buildingsUnderAttack",
   "unitLost",
   "buildingLost",
   "victory",
@@ -24,7 +24,7 @@ const ALERT_WORDS: Record<AlertKind, string> = {
   buildingReady: "Building ready",
   unitReady: "Unit ready",
   creditsShort: "Not enough Credits",
-  baseUnderAttack: "Base under attack",
+  buildingsUnderAttack: "Base under attack",
   unitLost: "Unit lost",
   buildingLost: "Building lost",
   victory: "Victory",
@@ -52,7 +52,7 @@ export const ALERT_COOLDOWN_S: Record<AlertKind, number> = {
   buildingReady: 2,
   unitReady: 3,
   creditsShort: 5,
-  baseUnderAttack: 20,
+  buildingsUnderAttack: 20,
   unitLost: 8,
   buildingLost: 5,
   victory: 0,
@@ -69,7 +69,7 @@ const endsMatch = (kind: AlertKind): boolean => kind === "victory" || kind === "
  * not wait, and dropped when stale, as the fight has moved on (and if it has
  * not, the alert is raised again).
  */
-const isBattle = (kind: AlertKind): boolean => kind === "baseUnderAttack" || kind === "unitLost" || kind === "buildingLost";
+const isBattle = (kind: AlertKind): boolean => kind === "buildingsUnderAttack" || kind === "unitLost" || kind === "buildingLost";
 
 /**
  * Whether an alert is still worth saying however late. A Building or Unit

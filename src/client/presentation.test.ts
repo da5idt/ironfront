@@ -130,7 +130,7 @@ describe("a Unit that shoots", () => {
     expect(seen.events).toEqual([
       { kind: "impact", at: { x: 10.5, y: 15.5 } },
       // It hit the Player's own Harvester.
-      { kind: "underAttack", hit: "unit", at: { x: 10.5, y: 15.5 }, inBase: false },
+      { kind: "underAttack", hit: "unit", at: { x: 10.5, y: 15.5 }, nearOwnBuildings: false },
     ]);
   });
 });

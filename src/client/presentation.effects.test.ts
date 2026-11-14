@@ -76,8 +76,8 @@ describe("a Unit that dies in sight", () => {
     addTestUnit(match, 1, "harvester", { x: 10, y: 11 });
     const seen = watch(match, 1);
     seen.run(1);
-    // Out on its own, with none of its Player's Buildings near: hit, but no attack on the base.
-    expect(seen.of("underAttack")).toEqual([{ kind: "underAttack", hit: "unit", at: { x: 10.5, y: 11.5 }, inBase: false }]);
+    // Out on its own, with none of its Player's Buildings near: hit, but no attack on the Buildings.
+    expect(seen.of("underAttack")).toEqual([{ kind: "underAttack", hit: "unit", at: { x: 10.5, y: 11.5 }, nearOwnBuildings: false }]);
     seen.runUntil("unitDied", 600);
     // Its own sight went with it, so the Cell is Fogged now; its Player still knows it is gone.
     expect(getPlayerView(match, 1).map.visibility[11 * 30 + 10]).toBe("fogged");
@@ -155,7 +155,7 @@ describe("a Building that is destroyed", () => {
     seen.runUntil("buildingDestroyed", 100);
     expect(seen.of("buildingDestroyed")).toMatchObject([{ owner: 1, building: "barracks" }]);
     expect(seen.of("underAttack").length).toBeGreaterThan(0);
-    expect(seen.of("underAttack")[0]).toEqual({ kind: "underAttack", hit: "building", at: { x: 13, y: 15 }, inBase: true });
+    expect(seen.of("underAttack")[0]).toEqual({ kind: "underAttack", hit: "building", at: { x: 13, y: 15 }, nearOwnBuildings: true });
   });
 
   it("out of sight gives nothing, not even when the Player comes back and finds it gone", () => {
@@ -181,14 +181,14 @@ describe("a Building that is destroyed", () => {
 });
 
 describe("under attack", () => {
-  it("counts a Unit hit beside one of its Player's Buildings as the base being attacked", () => {
+  it("counts a Unit hit beside one of its Player's Buildings as the Buildings being attacked", () => {
     const match = createMatch(openMap(40, 30), 1);
     addTestBuilding(match, 0, "turret", { x: 10, y: 14 });
     addTestUnit(match, 1, "harvester", { x: 10, y: 11 });
     addTestBuilding(match, 1, "refinery", { x: 12, y: 9 });
     const seen = watch(match, 1);
     seen.run(1);
-    expect(seen.of("underAttack")).toEqual([{ kind: "underAttack", hit: "unit", at: { x: 10.5, y: 11.5 }, inBase: true }]);
+    expect(seen.of("underAttack")).toEqual([{ kind: "underAttack", hit: "unit", at: { x: 10.5, y: 11.5 }, nearOwnBuildings: true }]);
   });
 
   it("does not count a Unit hit far from every Building of its Player", () => {
@@ -198,12 +198,12 @@ describe("under attack", () => {
     addTestBuilding(match, 1, "refinery", { x: 30, y: 9 });
     const seen = watch(match, 1);
     seen.run(1);
-    expect(seen.of("underAttack")).toMatchObject([{ hit: "unit", inBase: false }]);
+    expect(seen.of("underAttack")).toMatchObject([{ hit: "unit", nearOwnBuildings: false }]);
   });
 
   it("tells of the Building when a Building and a far-off Unit are hit in the same Tick", () => {
     const match = createMatch(openMap(40, 30), 1);
-    // Far from the base, Player 1's Harvester is shot by a Turret...
+    // Far from its Buildings, Player 1's Harvester is shot by a Turret...
     addTestBuilding(match, 0, "turret", { x: 10, y: 14 });
     addTestUnit(match, 1, "harvester", { x: 10, y: 11 });
     // ...while a Raider shoots Player 1's Barracks.
@@ -211,7 +211,7 @@ describe("under attack", () => {
     addTestUnit(match, 0, "raider", { x: 30, y: 15 });
     const seen = watch(match, 1);
     seen.run(1);
-    expect(seen.of("underAttack")).toEqual([{ kind: "underAttack", hit: "building", at: { x: 33, y: 15 }, inBase: true }]);
+    expect(seen.of("underAttack")).toEqual([{ kind: "underAttack", hit: "building", at: { x: 33, y: 15 }, nearOwnBuildings: true }]);
   });
 });
 
@@ -401,7 +401,7 @@ describe("building and training", () => {
 
   it("gives building placed for the other Player's Building going up in sight, not for one coming into sight", () => {
     const match = createMatch(openMap(40, 30), 1);
-    // Player 1's base is in the bottom right corner; this Barracks has stood apart from it all along.
+    // Player 1's other Buildings are in the bottom right corner; this Barracks has stood apart from them all along.
     addTestBuilding(match, 1, "barracks", { x: 20, y: 5 });
     const old = buildingId(match, 1, "barracks");
     // A Harvester looks without shooting; it sees 3 Cells.

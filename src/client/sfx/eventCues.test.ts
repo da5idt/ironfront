@@ -58,7 +58,7 @@ describe("sounds for presentation events", () => {
   });
 
   it("plays nothing for under attack, which is an alert and not an effect", () => {
-    expect(soundsForEvent({ kind: "underAttack", hit: "building", at, inBase: true })).toEqual([]);
+    expect(soundsForEvent({ kind: "underAttack", hit: "building", at, nearOwnBuildings: true })).toEqual([]);
   });
 });
 
@@ -68,14 +68,14 @@ describe("the alert a presentation event raises", () => {
     expect(alertForEvent({ kind: "unitTrained", unit: "raider" }, 0)).toEqual({ kind: "unitReady" });
   });
 
-  it("tells the person when their base is under attack: a Building hit, or a Unit among their Buildings", () => {
-    expect(alertForEvent({ kind: "underAttack", hit: "building", at, inBase: true }, 0)).toEqual({ kind: "baseUnderAttack" });
-    expect(alertForEvent({ kind: "underAttack", hit: "unit", at, inBase: true }, 0)).toEqual({ kind: "baseUnderAttack" });
+  it("tells the person when their Buildings are under attack: a Building hit, or a Unit among their Buildings", () => {
+    expect(alertForEvent({ kind: "underAttack", hit: "building", at, nearOwnBuildings: true }, 0)).toEqual({ kind: "buildingsUnderAttack" });
+    expect(alertForEvent({ kind: "underAttack", hit: "unit", at, nearOwnBuildings: true }, 0)).toEqual({ kind: "buildingsUnderAttack" });
   });
 
-  it("does not call it the base when a Unit is hit somewhere out on the Map", () => {
+  it("does not raise it when a Unit is hit somewhere out on the Map", () => {
     // Spec #16: the alert is "Base under attack"; a skirmish at the far end of the Map is not that.
-    expect(alertForEvent({ kind: "underAttack", hit: "unit", at, inBase: false }, 0)).toBeNull();
+    expect(alertForEvent({ kind: "underAttack", hit: "unit", at, nearOwnBuildings: false }, 0)).toBeNull();
   });
 
   it("tells the person of their own losses, and not of the other Player's", () => {
