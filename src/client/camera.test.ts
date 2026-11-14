@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { CELL_PX, clampCamera, EDGE_PX, mapToScreen, screenToCell, scrollCamera, scrollDirection } from "./camera";
+import { CELL_PX, clampCamera, mapToScreen, screenToCell, scrollCamera, scrollDirection } from "./camera";
 
 const screen = { width: 800, height: 600 };
 const map = { width: 64, height: 64 };
+const still = { dx: 0, dy: 0 };
 
 describe("camera", () => {
   it("is clamped to the Map", () => {
@@ -21,16 +22,16 @@ describe("camera", () => {
   });
 
   it("scrolls with arrow keys and WASD", () => {
-    expect(scrollDirection(new Set(["ArrowRight"]), null, screen)).toEqual({ dx: 1, dy: 0 });
-    expect(scrollDirection(new Set(["KeyW", "KeyA"]), null, screen)).toEqual({ dx: -1, dy: -1 });
-    expect(scrollDirection(new Set(["KeyA", "KeyD"]), null, screen)).toEqual({ dx: 0, dy: 0 });
+    expect(scrollDirection(new Set(["ArrowRight"]), still)).toEqual({ dx: 1, dy: 0 });
+    expect(scrollDirection(new Set(["KeyW", "KeyA"]), still)).toEqual({ dx: -1, dy: -1 });
+    expect(scrollDirection(new Set(["KeyA", "KeyD"]), still)).toEqual({ dx: 0, dy: 0 });
   });
 
-  it("scrolls when the mouse is at the screen edge", () => {
+  it("adds the mouse's edge-scroll to the keys, never faster than one step per axis", () => {
     const none = new Set<string>();
-    expect(scrollDirection(none, { x: 0, y: 300 }, screen)).toEqual({ dx: -1, dy: 0 });
-    expect(scrollDirection(none, { x: 799, y: 599 }, screen)).toEqual({ dx: 1, dy: 1 });
-    expect(scrollDirection(none, { x: EDGE_PX, y: 300 }, screen)).toEqual({ dx: 0, dy: 0 });
+    expect(scrollDirection(none, { dx: -1, dy: 1 })).toEqual({ dx: -1, dy: 1 });
+    expect(scrollDirection(new Set(["ArrowLeft"]), { dx: -1, dy: 0 })).toEqual({ dx: -1, dy: 0 });
+    expect(scrollDirection(new Set(["ArrowRight"]), { dx: -1, dy: 0 })).toEqual({ dx: 0, dy: 0 });
   });
 
   it("moves by speed times time and stays on the Map", () => {
