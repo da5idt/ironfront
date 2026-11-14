@@ -59,9 +59,9 @@ export class EffectPainter {
   private readonly blasts = new Map<BlastName, HTMLCanvasElement>();
   /** Per weapon: facings across, frames down. */
   private readonly muzzles = new Map<Weapon, HTMLCanvasElement>();
-  /** Per team: the fall's frames across; the mirrored fall on the second row. */
+  /** Per Player: the fall's frames across; the mirrored fall on the second row. */
   private readonly falls = new Map<PlayerId, HTMLCanvasElement>();
-  /** Per team: the two ways a body lies. */
+  /** Per Player: the two ways a body lies. */
   private readonly bodies = new Map<PlayerId, HTMLCanvasElement>();
   /** Per vehicle: facings across. */
   private readonly wrecks = new Map<UnitKind, HTMLCanvasElement>();
@@ -77,10 +77,10 @@ export class EffectPainter {
       const cells = range(MUZZLE_FRAMES).flatMap((frame) => range(FACINGS).map((facing) => paintMuzzle(weapon, facing, frame)));
       this.muzzles.set(weapon, strip(cells, FACINGS));
     }
-    for (const team of PLAYER_IDS) {
-      const cells = [false, true].flatMap((flip) => range(FALL_FRAMES).map((f) => paintFall(team, f, flip)));
-      this.falls.set(team, strip(cells, FALL_FRAMES));
-      this.bodies.set(team, strip([paintBody(team, false), paintBody(team, true)], 2));
+    for (const owner of PLAYER_IDS) {
+      const cells = [false, true].flatMap((flip) => range(FALL_FRAMES).map((f) => paintFall(owner, f, flip)));
+      this.falls.set(owner, strip(cells, FALL_FRAMES));
+      this.bodies.set(owner, strip([paintBody(owner, false), paintBody(owner, true)], 2));
     }
     for (const kind of VEHICLES) {
       this.wrecks.set(kind, strip(range(FACINGS).map((facing) => paintWreck(kind, facing)), FACINGS));
@@ -109,7 +109,7 @@ export class EffectPainter {
         art.drawImage(this.wrecks.get(m.unit)!, m.facing * S, 0, S, S, x - S / 2, y - S / 2, S, S);
       } else {
         const S = FALL_PX;
-        art.drawImage(this.bodies.get(m.team)!, fallsLeft(m.facing) ? S : 0, 0, S, S, x - S / 2, y - S / 2 + 1, S, S);
+        art.drawImage(this.bodies.get(m.owner)!, fallsLeft(m.facing) ? S : 0, 0, S, S, x - S / 2, y - S / 2 + 1, S, S);
       }
     }
     art.globalAlpha = 1;
@@ -156,7 +156,7 @@ export class EffectPainter {
           const S = FALL_PX;
           const frame = Math.min(FALL_FRAMES - 1, Math.floor(progress * FALL_FRAMES));
           art.drawImage(
-            this.falls.get(e.team)!,
+            this.falls.get(e.owner)!,
             frame * S,
             fallsLeft(e.facing) ? S : 0,
             S,

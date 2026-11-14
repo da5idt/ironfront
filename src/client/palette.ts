@@ -1,7 +1,7 @@
 import type { Visibility } from "../sim";
 import { ART } from "./art/artPalette";
 
-// Interface colours. Art colours (terrain, Ore, teams, concrete and so on)
+// Interface colours. Art colours (terrain, Ore, the Players' colours, concrete and so on)
 // live in the one art table, ART in ./art/artPalette (ADR 0003).
 
 /** Opacity (0..255) of the black laid over each Cell: Unexplored hides all, Fogged dims. */

@@ -41,8 +41,8 @@ const C = ART.concrete;
 const K = C[0];
 const { glass, windowLight, lamp, khaki, sandbag, tank, hazard, ore, fire, smoke } = ART;
 
-/** The legend every template shares; D, T and L are the owner's team colour. */
-function legendFor(team: Ramp): Legend {
+/** The legend every template shares; D, T and L are the owner's colours. */
+function legendFor(colours: Ramp): Legend {
   return {
     k: K,
     "1": C[1],
@@ -51,9 +51,9 @@ function legendFor(team: Ramp): Legend {
     "4": C[4],
     "5": C[5],
     "6": C[6],
-    D: team.dark,
-    T: team.mid,
-    L: team.light,
+    D: colours.dark,
+    T: colours.mid,
+    L: colours.light,
     a: khaki.dark,
     b: khaki.mid,
     c: khaki.light,
@@ -64,15 +64,15 @@ function legendFor(team: Ramp): Legend {
 }
 
 /** One idle frame of a Building in its owner's colours. */
-export function paintBuilding(kind: BuildingKind, team: PlayerId, frame: number): PixelBuffer {
+export function paintBuilding(kind: BuildingKind, owner: PlayerId, frame: number): PixelBuffer {
   const { width, height } = BUILDING_STATS[kind];
   const b = brushOn(createPixelBuffer(width * ART_CELL_PX, height * ART_CELL_PX));
   const f = ((frame % IDLE_FRAMES[kind]) + IDLE_FRAMES[kind]) % IDLE_FRAMES[kind];
-  PAINTERS[kind](b, ART.team[team], f);
+  PAINTERS[kind](b, ART.player[owner], f);
   return b.buf;
 }
 
-type Painter = (b: Brush, team: Ramp, frame: number) => void;
+type Painter = (b: Brush, colours: Ramp, frame: number) => void;
 
 /** A concrete slab the size of the footprint, worn with a few darker and lighter flecks. */
 function slab(b: Brush, w: number, h: number, salt: number): void {
@@ -111,7 +111,7 @@ function smallFan(b: Brush, x: number, y: number, phase: number): void {
 const CHEVRON = ["...L...", "..LLT..", ".LL.TT.", "LL...TT", ".......", ".LLTTT."];
 
 /**
- * HQ: a long command hall with the team emblem, a cooling fan and a vehicle
+ * HQ: a long command hall with the Player's emblem, a cooling fan and a vehicle
  * door, beside a taller tower with a turning radar dish, a blinking mast and
  * a lit operations room.
  */
@@ -466,8 +466,8 @@ const PAINTERS: Readonly<Record<BuildingKind, Painter>> = {
 };
 
 /** The Turret's gun, a domed head and a barrel, facing one of the 16 ways. */
-export function paintTurretGun(team: PlayerId, facing: number): PixelBuffer {
-  const t = ART.team[team];
+export function paintTurretGun(owner: PlayerId, facing: number): PixelBuffer {
+  const t = ART.player[owner];
   const b = brushOn(createPixelBuffer(TURRET_GUN_PX, TURRET_GUN_PX));
   const mid = TURRET_GUN_PX / 2 - 0.5;
   const a = (facing / FACINGS) * Math.PI * 2;

@@ -218,21 +218,21 @@ function paintRows(buf: PixelBuffer, rows: readonly string[], legend: Readonly<R
   }
 }
 
-function fallLegend(team: PlayerId): Readonly<Record<string, string>> {
-  const ramp = ART.team[team];
+function fallLegend(owner: PlayerId): Readonly<Record<string, string>> {
+  const ramp = ART.player[owner];
   return { k: ART.concrete[0], h: ART.khaki.mid, s: ART.skin.light, t: ramp.mid, d: ramp.dark };
 }
 
 /** One frame of a Rifleman going down; `flip` mirrors it, so not every one falls the same way. */
-export function paintFall(team: PlayerId, frame: number, flip: boolean): PixelBuffer {
+export function paintFall(owner: PlayerId, frame: number, flip: boolean): PixelBuffer {
   const buf = createPixelBuffer(FALL_PX, FALL_PX);
   const rows = FALL_ROWS[Math.max(0, Math.min(FALL_FRAMES - 1, frame))]!;
-  paintRows(buf, flip ? rows.map((r) => [...r].reverse().join("")) : rows, fallLegend(team));
+  paintRows(buf, flip ? rows.map((r) => [...r].reverse().join("")) : rows, fallLegend(owner));
   return buf;
 }
 
-/** What a fallen Rifleman leaves: where he lies, on a dark stain, in his team's colours gone dull. */
-export function paintBody(team: PlayerId, flip: boolean): PixelBuffer {
+/** What a fallen Rifleman leaves: where he lies, on a dark stain, in his Player's colours gone dull. */
+export function paintBody(owner: PlayerId, flip: boolean): PixelBuffer {
   const buf = createPixelBuffer(FALL_PX, FALL_PX);
   for (let y = 5; y < 11; y++) {
     for (let x = 0; x < FALL_PX; x++) {
@@ -240,7 +240,7 @@ export function paintBody(team: PlayerId, flip: boolean): PixelBuffer {
       if (d < 1 && hash2(x, y, 81) > d * d * 0.8) setPixel(buf, x, y, ART.scorch, 120);
     }
   }
-  const lying = paintFall(team, FALL_FRAMES - 1, flip);
+  const lying = paintFall(owner, FALL_FRAMES - 1, flip);
   const dull = rgbOf(ART.smoke[1]);
   for (let i = 0; i < lying.data.length; i += 4) {
     if (lying.data[i + 3] === 0) continue;
@@ -256,7 +256,7 @@ export const WRECK_PX = UNIT_SPRITE_PX + 4;
 /** Burnt metal, darkest first: what a wreck's colours turn to. */
 const BURNT = [ART.scorch, ART.concrete[0], ART.smoke[0], ART.concrete[1], ART.smoke[1], ART.concrete[2]] as const;
 
-/** A burnt-out vehicle as it stood, on scorched ground; the same for both teams, as the paint has burnt off. */
+/** A burnt-out vehicle as it stood, on scorched ground; the same for both Players, as the paint has burnt off. */
 export function paintWreck(kind: UnitKind, facing: number): PixelBuffer {
   const buf = createPixelBuffer(WRECK_PX, WRECK_PX);
   const mid = WRECK_PX / 2;

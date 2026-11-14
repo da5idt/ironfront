@@ -41,9 +41,9 @@ export class MinimapPainter {
       const my = u.prevY + (u.y - u.prevY) * alpha;
       const x = Math.round(area.x + mx * scale - dot / 2);
       const y = Math.round(area.y + my * scale - dot / 2);
-      ctx.fillStyle = ART.team[u.owner].dark;
+      ctx.fillStyle = ART.player[u.owner].dark;
       ctx.fillRect(x - 1, y - 1, dot + 2, dot + 2);
-      ctx.fillStyle = ART.team[u.owner].light;
+      ctx.fillStyle = ART.player[u.owner].light;
       ctx.fillRect(x, y, dot, dot);
     }
 
@@ -96,7 +96,7 @@ function paintLayer(layer: HTMLCanvasElement, view: PlayerView): void {
     for (let y = b.y; y < b.y + b.height; y++) {
       for (let x = b.x; x < b.x + b.width; x++) {
         const edge = x === b.x || y === b.y || x === b.x + b.width - 1 || y === b.y + b.height - 1;
-        colours[y * width + x] = edge ? ART.team[b.owner].mid : ART.team[b.owner].light;
+        colours[y * width + x] = edge ? ART.player[b.owner].mid : ART.player[b.owner].light;
         isBuilding[y * width + x] = 1;
       }
     }

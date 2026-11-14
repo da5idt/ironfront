@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { PlayerId, UnitKind } from "../../sim";
+import { PLAYER_IDS, type UnitKind } from "../../sim";
 import { ART } from "./artPalette";
 import { type PixelBuffer, pixelAt } from "./pixelBuffer";
 import { FACINGS } from "./buildingArt";
@@ -7,7 +7,6 @@ import { unitSprite } from "./spriteSheet";
 import { HARVESTER_LOADS, paintUnit, UNIT_FRAMES, UNIT_SPRITE_PX, unitFrame } from "./unitArt";
 
 const KINDS: readonly UnitKind[] = ["rifleman", "raider", "harvester"];
-const TEAMS: readonly PlayerId[] = [0, 1];
 
 const same = (a: PixelBuffer, b: PixelBuffer) => a.data.every((v, i) => v === b.data[i]);
 
@@ -44,11 +43,11 @@ function box(buf: PixelBuffer): { width: number; height: number } {
 const ORE = [ART.ore.dark, ART.ore.mid, ART.ore.light];
 
 describe("Unit sprites", () => {
-  it("come in all 16 facings for both teams, every frame the same square size", () => {
+  it("come in all 16 facings for both Players, every frame the same square size", () => {
     expect(FACINGS).toBe(16);
     for (const kind of KINDS) {
-      for (const team of TEAMS) {
-        const { frames, damaged } = unitSprite(kind, team);
+      for (const owner of PLAYER_IDS) {
+        const { frames, damaged } = unitSprite(kind, owner);
         for (const sheet of [frames, damaged]) {
           expect(sheet).toHaveLength(16);
           for (const facing of sheet) {
@@ -67,7 +66,7 @@ describe("Unit sprites", () => {
     }
   });
 
-  it("differ between the teams only where a pixel is in the team's colour, step for step", () => {
+  it("differ between the Players only where a pixel is in the Player's colour, step for step", () => {
     const steps = ["dark", "mid", "light"] as const;
     for (const kind of KINDS) {
       const a = unitSprite(kind, 0);
@@ -77,19 +76,19 @@ describe("Unit sprites", () => {
           for (let frame = 0; frame < UNIT_FRAMES[kind]; frame++) {
             const fa = sheetA[facing]![frame]!;
             const fb = sheetB[facing]![frame]!;
-            let teamPixels = 0;
+            let playerPixels = 0;
             for (let y = 0; y < fa.height; y++) {
               for (let x = 0; x < fa.width; x++) {
                 const pa = pixelAt(fa, x, y);
-                const step = steps.find((s) => ART.team[0][s] === pa);
-                if (step) teamPixels++;
+                const step = steps.find((s) => ART.player[0][s] === pa);
+                if (step) playerPixels++;
                 expect(pixelAt(fb, x, y), `${kind} facing ${facing} frame ${frame} at ${x},${y}`).toBe(
-                  step ? ART.team[1][step] : pa,
+                  step ? ART.player[1][step] : pa,
                 );
               }
             }
             // Enough of it that the owner reads at a glance, even on the smallest Unit.
-            expect(teamPixels, `${kind} facing ${facing} frame ${frame}`).toBeGreaterThanOrEqual(kind === "rifleman" ? 4 : 12);
+            expect(playerPixels, `${kind} facing ${facing} frame ${frame}`).toBeGreaterThanOrEqual(kind === "rifleman" ? 4 : 12);
           }
         }
       }

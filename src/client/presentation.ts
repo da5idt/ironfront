@@ -101,7 +101,7 @@ export interface Effect {
   /** Which of the FACINGS a shot left along, or the Unit faced as it fell. */
   readonly facing: number;
   /** Whose Rifleman is falling; unused by the other kinds. */
-  readonly team: PlayerId;
+  readonly owner: PlayerId;
   readonly start: number;
   readonly end: number;
 }
@@ -113,7 +113,7 @@ export interface Mark {
   readonly at: Vec;
   /** Which Unit it was; null for rubble. */
   readonly unit: UnitKind | null;
-  readonly team: PlayerId;
+  readonly owner: PlayerId;
   /** The way the Unit faced when it died. */
   readonly facing: number;
   /** The Building's footprint in Cells; 0 for a Unit's mark. */
@@ -287,10 +287,10 @@ export function present(prev: Presentation | null, view: PlayerView): Presented 
     visibleAt(x + reach, y + reach);
   const effect = (kind: EffectKind, at: Vec, more: Partial<Effect> = {}): void => {
     const start = more.start ?? tick;
-    effects.push({ kind, at, to: at, weapon: null, facing: 0, team: me, ...more, start, end: start + ticksOf(EFFECT_SECONDS[kind]) });
+    effects.push({ kind, at, to: at, weapon: null, facing: 0, owner: me, ...more, start, end: start + ticksOf(EFFECT_SECONDS[kind]) });
   };
   const mark = (kind: MarkKind, at: Vec, more: Partial<Mark>): void => {
-    marks.push({ kind, at, unit: null, team: me, facing: 0, width: 0, height: 0, ...more, start: tick, end: tick + ticksOf(MARK_SECONDS[kind]) });
+    marks.push({ kind, at, unit: null, owner: me, facing: 0, width: 0, height: 0, ...more, start: tick, end: tick + ticksOf(MARK_SECONDS[kind]) });
   };
 
   const unitAims = new Map<EntityId, Vec>();
@@ -361,8 +361,8 @@ export function present(prev: Presentation | null, view: PlayerView): Presented 
       const vehicle = was.kind !== "rifleman";
       events.push({ kind: "unitDied", unit: was.kind, vehicle, owner: was.owner, at });
       if (vehicle) effect("smallExplosion", at);
-      else effect("fall", at, { team: was.owner, facing: was.facing });
-      mark(vehicle ? "wreck" : "body", at, { unit: was.kind, team: was.owner, facing: was.facing });
+      else effect("fall", at, { owner: was.owner, facing: was.facing });
+      mark(vehicle ? "wreck" : "body", at, { unit: was.kind, owner: was.owner, facing: was.facing });
       if (own) hitUnit(at);
     }
     for (const [id, u] of units) {
@@ -395,7 +395,7 @@ export function present(prev: Presentation | null, view: PlayerView): Presented 
           { start: tick + ticksOf(AFTER_BLAST_GAP_SECONDS * (i + 1)) },
         );
       }
-      mark("rubble", at, { team: was.owner, width: was.width, height: was.height });
+      mark("rubble", at, { owner: was.owner, width: was.width, height: was.height });
       if (was.owner === me) hitBuilding(at);
     }
     if (attack) events.push(attack);

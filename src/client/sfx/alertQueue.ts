@@ -20,7 +20,7 @@ export type AlertKind = (typeof ALERT_KINDS)[number];
 /** Something the person should hear about. Extra fields on a wider event are ignored. */
 export type AlertEvent = { readonly [K in AlertKind]: { readonly kind: K } }[AlertKind];
 
-const ALERT_TEXT: Record<AlertKind, string> = {
+const ALERT_WORDS: Record<AlertKind, string> = {
   buildingReady: "Building ready",
   unitReady: "Unit ready",
   creditsShort: "Not enough Credits",
@@ -33,7 +33,7 @@ const ALERT_TEXT: Record<AlertKind, string> = {
 
 /** The words spoken, and shown when there is no voice. */
 export function alertText(event: AlertEvent): string {
-  return ALERT_TEXT[event.kind];
+  return ALERT_WORDS[event.kind];
 }
 
 /** The alert for a Match that ended between two looks at its status, as `me` hears it; null when it did not end just then. */

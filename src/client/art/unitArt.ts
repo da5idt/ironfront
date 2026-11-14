@@ -84,7 +84,7 @@ const block = (z: number, x0: number, x1: number, halfWidth: number, ramp: Ramp)
 const treads = (roll: number) => (x: number): Ramp => (Math.floor(x + 20 + roll) % 2 === 0 ? TYRE_A : TYRE_B);
 
 /** Raider: a low wedge on four open wheels, with a gun on a ring mount behind the windscreen. */
-function raiderParts(team: Ramp, roll: number): Part[] {
+function raiderParts(colours: Ramp, roll: number): Part[] {
   const tread = treads(roll);
   return [
     {
@@ -94,7 +94,7 @@ function raiderParts(team: Ramp, roll: number): Part[] {
       ramp: tread,
     },
     // The body narrows to the nose, which is what makes it read as fast.
-    { z: 1, has: (x, y) => x >= -6.2 && x <= 6.8 && Math.abs(y) <= 3.1 - Math.max(0, x - 2.2) * 0.42, ramp: () => team },
+    { z: 1, has: (x, y) => x >= -6.2 && x <= 6.8 && Math.abs(y) <= 3.1 - Math.max(0, x - 2.2) * 0.42, ramp: () => colours },
     block(2, -5.2, -0.4, 2.1, DECK),
     block(2, 0.2, 2.2, 2.2, glass),
     { z: 3, has: (x, y) => (x + 2.8) ** 2 + y ** 2 <= 1.8 ** 2, ramp: () => GUNMETAL },
@@ -102,7 +102,7 @@ function raiderParts(team: Ramp, roll: number): Part[] {
 }
 
 /** Harvester: a heavy tracked hull, an open bin behind the cab and a striped scoop across the front. */
-function harvesterParts(team: Ramp, roll: number, load: number): Part[] {
+function harvesterParts(colours: Ramp, roll: number, load: number): Part[] {
   const tread = treads(roll);
   const heap = (x: number, y: number): Ramp => {
     const h = hash2(Math.floor(x + 20), Math.floor(y + 20), 61);
@@ -118,9 +118,9 @@ function harvesterParts(team: Ramp, roll: number, load: number): Part[] {
       ramp: (_x, y) => flat(Math.floor(y + 20) % 2 === 0 ? hazard.yellow : hazard.black),
     },
     // The bin's rim is a ring, so the hold (or the Ore in it) shows inside.
-    { z: 3, has: (x, y) => x >= -6.4 && x <= 1.9 && Math.abs(y) <= 3.7 && !inHold(x, y), ramp: () => team },
+    { z: 3, has: (x, y) => x >= -6.4 && x <= 1.9 && Math.abs(y) <= 3.7 && !inHold(x, y), ramp: () => colours },
     { z: 2, has: inHold, ramp: () => HOLD },
-    block(4, 3, 6.6, 2.9, team),
+    block(4, 3, 6.6, 2.9, colours),
     block(5, 4.9, 6.1, 2.2, glass),
   ];
   // Part full: Ore lies in the back of the bin, below its rim. Full: it heaps over the rim.
@@ -215,8 +215,8 @@ function ray(facing: number, from: number, to: number, originX = 0, originY = 0)
   return out;
 }
 
-function paintRaider(buf: PixelBuffer, team: Ramp, facing: number, frame: number): void {
-  paintParts(buf, raiderParts(team, frame % WHEEL_FRAMES), facing);
+function paintRaider(buf: PixelBuffer, colours: Ramp, facing: number, frame: number): void {
+  paintParts(buf, raiderParts(colours, frame % WHEEL_FRAMES), facing);
   // The gun runs from its mount out over the bonnet; painted after the blocks so it stays one clean pixel wide.
   const a = (facing / FACINGS) * Math.PI * 2;
   const barrel = ray(facing, 1.2, 7, -Math.cos(a) * 2.8, -Math.sin(a) * 2.8);
@@ -224,33 +224,33 @@ function paintRaider(buf: PixelBuffer, team: Ramp, facing: number, frame: number
   outline(buf);
 }
 
-function paintHarvester(buf: PixelBuffer, team: Ramp, facing: number, frame: number): void {
-  paintParts(buf, harvesterParts(team, frame % WHEEL_FRAMES, Math.floor(frame / WHEEL_FRAMES)), facing);
+function paintHarvester(buf: PixelBuffer, colours: Ramp, facing: number, frame: number): void {
+  paintParts(buf, harvesterParts(colours, frame % WHEEL_FRAMES, Math.floor(frame / WHEEL_FRAMES)), facing);
   outline(buf);
 }
 
 /**
- * Rifleman: a helmet in the team's colour over a khaki jacket and dark legs.
+ * Rifleman: a helmet in his Player's colour over a khaki jacket and dark legs.
  * He stands upright whichever way he faces; his face shows on the side he
  * looks to and his rifle points there.
  */
-function paintRifleman(buf: PixelBuffer, team: Ramp, facing: number, frame: number): void {
+function paintRifleman(buf: PixelBuffer, colours: Ramp, facing: number, frame: number): void {
   const a = (facing / FACINGS) * Math.PI * 2;
   const dx = Math.cos(a);
   const dy = Math.sin(a);
   const left = 8;
   const topRow = 5;
   // Helmet, two rows.
-  setPixel(buf, left, topRow, team.light);
-  setPixel(buf, left + 1, topRow, team.light);
-  setPixel(buf, left + 2, topRow, team.mid);
-  setPixel(buf, left, topRow + 1, team.mid);
-  setPixel(buf, left + 1, topRow + 1, team.mid);
-  setPixel(buf, left + 2, topRow + 1, team.dark);
+  setPixel(buf, left, topRow, colours.light);
+  setPixel(buf, left + 1, topRow, colours.light);
+  setPixel(buf, left + 2, topRow, colours.mid);
+  setPixel(buf, left, topRow + 1, colours.mid);
+  setPixel(buf, left + 1, topRow + 1, colours.mid);
+  setPixel(buf, left + 2, topRow + 1, colours.dark);
   // The face shows only on the side he looks to; from behind it is all helmet.
   for (const i of [-1, 0, 1]) {
     const shows = dy * 0.8 + i * dx > 0.25;
-    setPixel(buf, left + 1 + i, topRow + 2, shows ? (i < 0 ? skin.light : skin.dark) : team.dark);
+    setPixel(buf, left + 1 + i, topRow + 2, shows ? (i < 0 ? skin.light : skin.dark) : colours.dark);
   }
   // Jacket, three rows ending in a belt, with an arm at each shoulder.
   for (let row = 0; row < 3; row++) {
@@ -317,9 +317,9 @@ function castShadow(buf: PixelBuffer): void {
 const SALT: Readonly<Record<UnitKind, number>> = { rifleman: 71, raider: 72, harvester: 73 };
 
 /** One frame of a Unit in its owner's colours, facing one of the 16 ways; `damaged` gives its look below half health. */
-export function paintUnit(kind: UnitKind, team: PlayerId, facing: number, frame: number, damaged: boolean): PixelBuffer {
+export function paintUnit(kind: UnitKind, owner: PlayerId, facing: number, frame: number, damaged: boolean): PixelBuffer {
   const buf = createPixelBuffer(UNIT_SPRITE_PX, UNIT_SPRITE_PX);
-  const ramp = ART.team[team];
+  const ramp = ART.player[owner];
   const f = ((frame % UNIT_FRAMES[kind]) + UNIT_FRAMES[kind]) % UNIT_FRAMES[kind];
   const way = ((facing % FACINGS) + FACINGS) % FACINGS;
   if (kind === "rifleman") paintRifleman(buf, ramp, way, f);

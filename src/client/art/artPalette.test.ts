@@ -23,7 +23,7 @@ describe("art palette", () => {
 
   it("runs every ramp from dark to light", () => {
     const ramps: (readonly string[])[] = [ART.concrete, ART.fire, ART.smoke, ART.shore.sand];
-    for (const t of Object.values(ART.team)) ramps.push([t.dark, t.mid, t.light]);
+    for (const t of Object.values(ART.player)) ramps.push([t.dark, t.mid, t.light]);
     ramps.push([ART.glass.dark, ART.glass.mid, ART.glass.light]);
     for (const r of [ART.khaki, ART.sandbag, ART.tank]) ramps.push([r.dark, r.mid, r.light]);
     ramps.push(ART.packedEarth);
@@ -33,8 +33,8 @@ describe("art palette", () => {
     }
   });
 
-  it("gives the two teams different colours at every step", () => {
-    const [a, b] = [ART.team[0], ART.team[1]];
+  it("gives the two Players different colours at every step", () => {
+    const [a, b] = [ART.player[0], ART.player[1]];
     expect(new Set([a.dark, a.mid, a.light, b.dark, b.mid, b.light]).size).toBe(6);
   });
 });

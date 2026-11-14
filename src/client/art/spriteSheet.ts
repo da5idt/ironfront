@@ -36,7 +36,7 @@ export interface BuildingSprite {
 }
 
 export interface DamageSprite {
-  /** Fire and smoke loop, the same for both teams. Wider than the Building, and `rise` taller. */
+  /** Fire and smoke loop, the same for both Players. Wider than the Building, and `rise` taller. */
   readonly frames: readonly PixelBuffer[];
   /** How far above the Building's top the frames start. */
   readonly rise: number;
@@ -53,28 +53,28 @@ const buildings = new Map<string, BuildingSprite>();
 const units = new Map<string, UnitSprite>();
 const damage = new Map<BuildingKind, DamageSprite>();
 
-export function buildingSprite(kind: BuildingKind, team: PlayerId): BuildingSprite {
-  const key = `${kind}/${team}`;
+export function buildingSprite(kind: BuildingKind, owner: PlayerId): BuildingSprite {
+  const key = `${kind}/${owner}`;
   let sprite = buildings.get(key);
   if (!sprite) {
-    const frames = Array.from({ length: IDLE_FRAMES[kind] }, (_, f) => paintBuilding(kind, team, f));
+    const frames = Array.from({ length: IDLE_FRAMES[kind] }, (_, f) => paintBuilding(kind, owner, f));
     sprite = {
       frames,
       shadow: silhouette(frames[0]!, ART.fog, SHADOW_ALPHA),
-      gun: kind === "turret" ? Array.from({ length: FACINGS }, (_, facing) => paintTurretGun(team, facing)) : null,
+      gun: kind === "turret" ? Array.from({ length: FACINGS }, (_, facing) => paintTurretGun(owner, facing)) : null,
     };
     buildings.set(key, sprite);
   }
   return sprite;
 }
 
-export function unitSprite(kind: UnitKind, team: PlayerId): UnitSprite {
-  const key = `${kind}/${team}`;
+export function unitSprite(kind: UnitKind, owner: PlayerId): UnitSprite {
+  const key = `${kind}/${owner}`;
   let sprite = units.get(key);
   if (!sprite) {
     const sheet = (damaged: boolean) =>
       Array.from({ length: FACINGS }, (_, facing) =>
-        Array.from({ length: UNIT_FRAMES[kind] }, (_, frame) => paintUnit(kind, team, facing, frame, damaged)),
+        Array.from({ length: UNIT_FRAMES[kind] }, (_, frame) => paintUnit(kind, owner, facing, frame, damaged)),
       );
     sprite = { frames: sheet(false), damaged: sheet(true) };
     units.set(key, sprite);

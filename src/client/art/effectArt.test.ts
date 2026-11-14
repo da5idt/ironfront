@@ -36,7 +36,7 @@ function colours(buf: PixelBuffer): Set<string> {
 
 const painted = (buf: PixelBuffer) => buf.data.filter((_, i) => i % 4 === 3 && buf.data[i]! > 0).length;
 const same = (a: PixelBuffer, b: PixelBuffer) => a.data.every((v, i) => v === b.data[i]);
-const TEAM_COLOURS = [0, 1].flatMap((t) => Object.values(ART.team[t as 0 | 1]));
+const PLAYER_COLOURS = [0, 1].flatMap((t) => Object.values(ART.player[t as 0 | 1]));
 
 describe("blasts", () => {
   const names = Object.keys(BLASTS) as BlastName[];
@@ -112,24 +112,24 @@ describe("muzzle flashes", () => {
 });
 
 describe("what a death leaves", () => {
-  it("a falling Rifleman wears his team's colours in every frame, and can fall either way", () => {
+  it("a falling Rifleman wears his Player's colours in every frame, and can fall either way", () => {
     for (let f = 0; f < FALL_FRAMES; f++) {
       const blue = paintFall(0, f, false);
       expect([blue.width, blue.height]).toEqual([FALL_PX, FALL_PX]);
-      expect(colours(blue).has(ART.team[0].mid)).toBe(true);
-      expect(colours(paintFall(1, f, false)).has(ART.team[1].mid)).toBe(true);
+      expect(colours(blue).has(ART.player[0].mid)).toBe(true);
+      expect(colours(paintFall(1, f, false)).has(ART.player[1].mid)).toBe(true);
       expect(same(blue, paintFall(0, f, true))).toBe(false);
     }
     expect(same(paintBody(0, false), paintBody(1, false))).toBe(false);
   });
 
-  it("a wreck is burnt bare: no team colour is left on it, and it keeps the way the vehicle faced", () => {
+  it("a wreck is burnt bare: none of its Player's colour is left on it, and it keeps the way the vehicle faced", () => {
     for (const kind of ["raider", "harvester"] as const) {
       const pictures = new Set<string>();
       for (let facing = 0; facing < 16; facing++) {
         const wreck = paintWreck(kind, facing);
         expect([wreck.width, wreck.height]).toEqual([WRECK_PX, WRECK_PX]);
-        for (const c of TEAM_COLOURS) expect(colours(wreck).has(c)).toBe(false);
+        for (const c of PLAYER_COLOURS) expect(colours(wreck).has(c)).toBe(false);
         pictures.add(wreck.data.join());
       }
       expect(pictures.size).toBe(16);

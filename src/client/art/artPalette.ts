@@ -32,7 +32,8 @@ export const ART = {
   concrete: ["#14161a", "#2b2f35", "#3e434a", "#5b6168", "#7b828a", "#9aa1a9", "#c4cad1"],
   /** The brightest glint on bare metal, such as the lit side of the radar dish. */
   steelShine: "#eef1f4",
-  team: {
+  /** Each Player's colours, by PlayerId. */
+  player: {
     0: { dark: "#1d4a80", mid: "#3b82d6", light: "#a7cdf5" },
     1: { dark: "#7f2a1b", mid: "#d6543b", light: "#f5b5a7" },
   },
@@ -61,6 +62,6 @@ export const ART = {
   frame: { dark: "#0c0e12", mid: "#3a414c", light: "#6b7480" },
 } as const satisfies {
   readonly terrain: Record<Terrain, readonly string[]>;
-  readonly team: Record<PlayerId, Ramp>;
+  readonly player: Record<PlayerId, Ramp>;
   readonly [part: string]: unknown;
 };

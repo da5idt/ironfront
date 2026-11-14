@@ -73,8 +73,8 @@ export class BuildingPainter {
       this.damage.set(kind, damageSprite(kind).frames.map(toCanvas));
       this.sprites.set(
         kind,
-        PLAYER_IDS.map((team) => {
-          const sprite = buildingSprite(kind, team);
+        PLAYER_IDS.map((owner) => {
+          const sprite = buildingSprite(kind, owner);
           const icon = iconOf(sprite);
           return {
             frames: sprite.frames.map(toCanvas),
@@ -88,13 +88,13 @@ export class BuildingPainter {
     }
   }
 
-  private of(kind: BuildingKind, team: PlayerId): BuildingCanvases {
-    return this.sprites.get(kind)![team]!;
+  private of(kind: BuildingKind, owner: PlayerId): BuildingCanvases {
+    return this.sprites.get(kind)![owner]!;
   }
 
   /** The Building's still picture, for a button. A Turret's is TURRET_GUN_PX square, as its gun overhangs the Cell. */
-  icon(kind: BuildingKind, team: PlayerId): HTMLCanvasElement {
-    return this.of(kind, team).icon;
+  icon(kind: BuildingKind, owner: PlayerId): HTMLCanvasElement {
+    return this.of(kind, owner).icon;
   }
 
   /**
@@ -168,9 +168,9 @@ export class BuildingPainter {
     }
   }
 
-  /** The Building being placed, in `team`'s colours washed green where it fits and red where it does not. */
-  drawPlacing(art: CanvasRenderingContext2D, placing: PlacingPreview, team: PlayerId): void {
-    const sprite = this.of(placing.kind, team);
+  /** The Building being placed, in `owner`'s colours washed green where it fits and red where it does not. */
+  drawPlacing(art: CanvasRenderingContext2D, placing: PlacingPreview, owner: PlayerId): void {
+    const sprite = this.of(placing.kind, owner);
     const off = sprite.gun ? gunOffset : 0;
     const x = placing.at.x * ART_CELL_PX;
     const y = placing.at.y * ART_CELL_PX;

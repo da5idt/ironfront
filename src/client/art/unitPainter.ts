@@ -7,7 +7,7 @@ import { DAMAGED_BELOW, UNIT_FRAMES, UNIT_SPRITE_PX, unitSprite } from "./sprite
 import { ART_CELL_PX } from "./terrainArt";
 import { unitFrame } from "./unitArt";
 
-// Draws Units into the pixel world from the sprite sheet. Each kind and team
+// Draws Units into the pixel world from the sprite sheet. Each kind and Player
 // gets one canvas holding every facing and frame, made once at startup;
 // drawing a Unit copies one square of it.
 
@@ -24,8 +24,8 @@ export interface UnitPose {
 }
 
 /** Facings run across the sheet; frames run down it, the damaged ones below the whole ones. */
-function sheetOf(kind: UnitKind, team: PlayerId): HTMLCanvasElement {
-  const sprite = unitSprite(kind, team);
+function sheetOf(kind: UnitKind, owner: PlayerId): HTMLCanvasElement {
+  const sprite = unitSprite(kind, owner);
   const frames = UNIT_FRAMES[kind];
   const sheet = document.createElement("canvas");
   sheet.width = FACINGS * S;
@@ -41,8 +41,8 @@ function sheetOf(kind: UnitKind, team: PlayerId): HTMLCanvasElement {
 }
 
 /** The Unit's still picture cut down to what is painted, so a button can show it as large as fits. */
-function iconOf(kind: UnitKind, team: PlayerId): HTMLCanvasElement {
-  const buf = unitSprite(kind, team).frames[ICON_FACING[kind]]![unitFrame(kind, null, 0)]!;
+function iconOf(kind: UnitKind, owner: PlayerId): HTMLCanvasElement {
+  const buf = unitSprite(kind, owner).frames[ICON_FACING[kind]]![unitFrame(kind, null, 0)]!;
   let x0 = S;
   let y0 = S;
   let x1 = 0;
@@ -75,14 +75,14 @@ export class UnitPainter {
 
   constructor() {
     for (const kind of KINDS) {
-      this.sheets.set(kind, PLAYER_IDS.map((team) => sheetOf(kind, team)));
-      this.icons.set(kind, PLAYER_IDS.map((team) => iconOf(kind, team)));
+      this.sheets.set(kind, PLAYER_IDS.map((owner) => sheetOf(kind, owner)));
+      this.icons.set(kind, PLAYER_IDS.map((owner) => iconOf(kind, owner)));
     }
   }
 
   /** The Unit's still picture, for a button. */
-  icon(kind: UnitKind, team: PlayerId): HTMLCanvasElement {
-    return this.icons.get(kind)![team]!;
+  icon(kind: UnitKind, owner: PlayerId): HTMLCanvasElement {
+    return this.icons.get(kind)![owner]!;
   }
 
   /**

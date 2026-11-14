@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { BuildingKind, PlayerId } from "../../sim";
+import { type BuildingKind, PLAYER_IDS } from "../../sim";
 import { ART } from "./artPalette";
 import { FACINGS, paintBuilding, paintDamage, paintTurretGun } from "./buildingArt";
 import type { PixelBuffer } from "./pixelBuffer";
@@ -7,7 +7,6 @@ import { pixelAt } from "./pixelBuffer";
 import { buildingSprite, damageSprite, loopFrame, TURRET_GUN_PX } from "./spriteSheet";
 
 const KINDS: readonly BuildingKind[] = ["hq", "refinery", "barracks", "vehicleFactory", "turret"];
-const TEAMS: readonly PlayerId[] = [0, 1];
 
 /** Footprints in Cells times the 12 art pixels a Cell takes. */
 const SIZES: Record<BuildingKind, [number, number]> = {
@@ -44,10 +43,10 @@ function lean(buf: PixelBuffer): { x: number; y: number } {
 }
 
 describe("Building sprites", () => {
-  it("are 12 art pixels per Cell of the footprint, in every frame, for both teams", () => {
+  it("are 12 art pixels per Cell of the footprint, in every frame, for both Players", () => {
     for (const kind of KINDS) {
-      for (const team of TEAMS) {
-        const { frames, shadow } = buildingSprite(kind, team);
+      for (const owner of PLAYER_IDS) {
+        const { frames, shadow } = buildingSprite(kind, owner);
         expect(frames.length).toBeGreaterThan(0);
         for (const f of [...frames, shadow]) expect([f.width, f.height], kind).toEqual(SIZES[kind]);
       }
@@ -61,29 +60,29 @@ describe("Building sprites", () => {
     }
   });
 
-  it("differ between the teams only where a pixel is in the team's colour, step for step", () => {
+  it("differ between the Players only where a pixel is in the Player's colour, step for step", () => {
     const steps = ["dark", "mid", "light"] as const;
     for (const kind of KINDS) {
       const a = buildingSprite(kind, 0);
       const b = buildingSprite(kind, 1);
       expect(b.frames.length).toBe(a.frames.length);
-      let teamPixels = 0;
+      let playerPixels = 0;
       for (const [f, fa] of a.frames.entries()) {
         const fb = b.frames[f]!;
         for (let y = 0; y < fa.height; y++) {
           for (let x = 0; x < fa.width; x++) {
             const pa = pixelAt(fa, x, y);
             const pb = pixelAt(fb, x, y);
-            const step = steps.find((s) => ART.team[0][s] === pa);
+            const step = steps.find((s) => ART.player[0][s] === pa);
             if (step) {
-              expect(pb, `${kind} frame ${f} at ${x},${y}`).toBe(ART.team[1][step]);
-              teamPixels++;
+              expect(pb, `${kind} frame ${f} at ${x},${y}`).toBe(ART.player[1][step]);
+              playerPixels++;
             } else expect(pb, `${kind} frame ${f} at ${x},${y}`).toBe(pa);
           }
         }
       }
       // Enough of it that the owner reads at a glance.
-      expect(teamPixels / a.frames.length, kind).toBeGreaterThanOrEqual(kind === "turret" ? 4 : 30);
+      expect(playerPixels / a.frames.length, kind).toBeGreaterThanOrEqual(kind === "turret" ? 4 : 30);
     }
   });
 

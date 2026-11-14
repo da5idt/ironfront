@@ -65,7 +65,7 @@ describe("a Unit that dies in sight", () => {
     const seen = watch(match);
     seen.runUntil("unitDied", 400);
     expect(seen.of("unitDied")).toMatchObject([{ unit: "rifleman", vehicle: false, owner: 1 }]);
-    expect(seen.state.marks).toMatchObject([{ kind: "body", unit: "rifleman", team: 1 }]);
+    expect(seen.state.marks).toMatchObject([{ kind: "body", unit: "rifleman", owner: 1 }]);
     expect(seen.state.effects.some((e) => e.kind === "fall")).toBe(true);
     expect(seen.state.effects.some((e) => e.kind === "smallExplosion")).toBe(false);
   });
@@ -100,7 +100,7 @@ describe("a Unit that goes from the view out of sight", () => {
     expect(getPlayerView(match, 1).units.some((u) => u.id === other)).toBe(false);
     // Only this Player's own.
     expect(seen.of("unitDied")).toMatchObject([{ owner: 0 }]);
-    expect(seen.state.marks).toMatchObject([{ team: 0 }]);
+    expect(seen.state.marks).toMatchObject([{ owner: 0 }]);
     expect(seen.state.effects.filter((e) => e.kind === "fall")).toHaveLength(1);
   });
 
