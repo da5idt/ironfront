@@ -51,6 +51,14 @@ export const BUTTON_COST = "#f0c040";
 export const BUTTON_READY_EDGE = "#5fd35f";
 /** The frame round the button of the Building being placed. */
 export const BUTTON_PLACING_EDGE = "#f4f4a0";
+/** The sound strip: lit and unlit steps of a volume level, and a muted channel's mark. */
+export const VOLUME_ON = "#6fb0e0";
+export const VOLUME_OFF = "#2c323c";
+export const SOUND_MUTED = "#f06a55";
+/** The banner that shows an alert's text when it is not spoken. */
+export const ALERT_BG = "#15181e";
+export const ALERT_EDGE = "#f0c040";
+export const ALERT_TEXT = "#f2f2f2";
 
 export const PANEL_BG = "#15181e";
 export const PANEL_EDGE = "#2c323c";
