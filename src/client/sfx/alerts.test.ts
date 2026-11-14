@@ -242,6 +242,44 @@ describe("starting a new Match", () => {
   });
 });
 
+describe("alerts after the Match has ended", () => {
+  it("says nothing after Defeat, though the last Building's loss is reported after it", () => {
+    const { alerts, said, finish } = setup();
+    alerts.raise({ kind: "defeat" }, 10);
+    alerts.raise({ kind: "buildingLost" }, 10);
+    alerts.raise({ kind: "buildingsUnderAttack" }, 10);
+    alerts.update(10, false);
+    finish(true);
+    alerts.raise({ kind: "unitLost" }, 11);
+    alerts.update(11, false);
+    alerts.update(20, false);
+    expect(said.map((s) => s.text)).toEqual(["Defeat"]);
+  });
+
+  it("keeps Defeat on screen for its full time when it is shown and not spoken", () => {
+    const { alerts, chimes } = setup(false);
+    alerts.raise({ kind: "defeat" }, 10);
+    alerts.raise({ kind: "buildingLost" }, 10);
+    alerts.raise({ kind: "buildingsUnderAttack" }, 10);
+    for (let t = 10; t < 10 + BANNER_SECONDS; t += 0.25) {
+      alerts.update(t, false);
+      expect(alerts.banner(t)).toBe("Defeat");
+    }
+    expect(chimes()).toBe(1);
+  });
+
+  it("speaks again in the next Match", () => {
+    const { alerts, said, finish } = setup();
+    alerts.raise({ kind: "victory" }, 10);
+    alerts.update(10, false);
+    finish(true);
+    alerts.reset();
+    alerts.raise({ kind: "buildingReady" }, 12);
+    alerts.update(12, false);
+    expect(said.map((s) => s.text)).toEqual(["Victory", "Building finished"]);
+  });
+});
+
 describe("alerts without a local voice", () => {
   it("plays the chime and shows the text for a few seconds", () => {
     const { alerts, chimes } = setup(false);

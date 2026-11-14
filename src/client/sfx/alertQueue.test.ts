@@ -187,8 +187,30 @@ describe("the alert queue", () => {
     expect(takeAll(raised(["unitLost", 0], ["buildingLost", 0], ["defeat", 0.1]), 0.1)).toEqual(["defeat"]);
   });
 
-  it("says Victory again for the next Match, with no cooldown", () => {
-    const first = takeAlert(raised(["victory", 0]), 0);
-    expect(takeAll(raiseAlert(first.queue, { kind: "victory" }, 1), 1)).toEqual(["victory"]);
+  it("takes nothing raised after the Match is over, said or not yet said", () => {
+    // The last Building's fall is reported in the same Tick as the defeat it causes, and just after it.
+    expect(takeAll(raised(["defeat", 5], ["buildingLost", 5], ["buildingsUnderAttack", 5]), 5)).toEqual(["defeat"]);
+    expect(
+      play(
+        ["raise", "defeat", 5],
+        ["take", 5],
+        ["raise", "buildingLost", 5.05],
+        ["raise", "unitLost", 6],
+        ["raise", "buildingReady", 7],
+        ["take", 8],
+        ["take", 30],
+      ).said,
+    ).toEqual(["defeat"]);
+  });
+
+  it("says the end of a Match once, whatever is raised after it", () => {
+    expect(play(["raise", "victory", 0], ["take", 0], ["raise", "victory", 1], ["raise", "defeat", 2], ["take", 3]).said).toEqual([
+      "victory",
+    ]);
+  });
+
+  it("says Victory again for the next Match, which starts from an empty queue", () => {
+    expect(takeAll(raised(["victory", 0]), 0)).toEqual(["victory"]);
+    expect(takeAll(raised(["victory", 1]), 1)).toEqual(["victory"]);
   });
 });

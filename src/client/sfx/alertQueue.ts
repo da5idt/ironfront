@@ -92,19 +92,25 @@ export interface AlertQueue {
   readonly waiting: readonly Waiting[];
   /** When each alert was last handed out to be said, for its cooldown. One dropped unsaid leaves no mark here. */
   readonly lastSaid: Readonly<Partial<Record<AlertKind, number>>>;
+  /** True once Victory or defeat was raised: the Match is over, and nothing more is taken until a fresh queue. */
+  readonly matchOver: boolean;
 }
 
-export const EMPTY_ALERTS: AlertQueue = { waiting: [], lastSaid: {} };
+/** The queue a Match starts with. */
+export const EMPTY_ALERTS: AlertQueue = { waiting: [], lastSaid: {}, matchOver: false };
 
 /**
  * Notes an event at `now` (seconds on any clock that only runs forward). It
- * is ignored while the same alert is inside its cooldown or already waiting.
+ * is ignored while the same alert is inside its cooldown or already waiting,
+ * and once the Match is over: the last Building's fall is reported in the
+ * very Tick of the defeat it causes, and would otherwise be said after it.
  */
 export function raiseAlert(queue: AlertQueue, event: AlertEvent, now: number): AlertQueue {
   const { kind } = event;
+  if (queue.matchOver) return queue;
   const raised = { kind, raisedAt: now };
   // The Match is over: whatever was waiting to be said about it no longer matters.
-  if (endsMatch(kind)) return { ...queue, waiting: [raised] };
+  if (endsMatch(kind)) return { ...queue, waiting: [raised], matchOver: true };
   const last = queue.lastSaid[kind];
   if (last !== undefined && now - last < ALERT_COOLDOWN_S[kind]) return queue;
   // Stale ones go first, or one waiting too long to be said would also keep its fresh successor out.
@@ -122,7 +128,7 @@ export function takeAlert(queue: AlertQueue, now: number): { readonly queue: Ale
   const next = fresh.find((a) => endsMatch(a.kind)) ?? fresh.find((a) => isBattle(a.kind)) ?? fresh[0];
   if (!next) return { queue: { ...queue, waiting: fresh }, alert: null };
   return {
-    queue: { waiting: fresh.filter((a) => a !== next), lastSaid: { ...queue.lastSaid, [next.kind]: now } },
+    queue: { ...queue, waiting: fresh.filter((a) => a !== next), lastSaid: { ...queue.lastSaid, [next.kind]: now } },
     alert: next.kind,
   };
 }
