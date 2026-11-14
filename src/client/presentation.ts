@@ -276,8 +276,7 @@ export function present(prev: Presentation | null, view: PlayerView): Presented 
   const events: PresentationEvent[] = [];
   const effects = last ? last.effects.filter((e) => e.end > tick) : [];
   const marks = last ? last.marks.filter((m) => m.end > tick) : [];
-  const visibleAt = (x: number, y: number) =>
-    view.map.visibility[cellIndexIn(view.map, Math.floor(x), Math.floor(y))] === "visible";
+  const visibleAt = (x: number, y: number) => visibleIn(view.map, x, y);
   /** True when every Cell within `reach` (under a Cell) of the place is Visible. */
   const visibleAround = (x: number, y: number, reach: number) =>
     visibleAt(x, y) &&

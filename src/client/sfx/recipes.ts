@@ -109,7 +109,7 @@ export const RECIPES: Record<SoundName, Recipe> = {
       { kind: "noise", filter: "bandpass", q: 2, start: 0.3, duration: 0.9, gain: 0.2, from: 2600, to: 500, attack: 0.1 },
     ],
   },
-  // A soldier falling: a soft, falling note in a puff of noise. Deliberately not a voice.
+  // A Rifleman falling: a soft, falling note in a puff of noise. Deliberately not a voice.
   unitDeath: {
     cap: 3,
     layers: [
