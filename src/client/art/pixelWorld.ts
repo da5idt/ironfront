@@ -7,7 +7,7 @@ import { paintFogCell } from "./fogArt";
 import { ORE_LEVELS, ORE_VARIANTS, oreLevel, oreVariant, paintOreCell } from "./oreArt";
 import { type PixelBuffer, rgbOf } from "./pixelBuffer";
 import { ART_CELL_PX, paintTerrain } from "./terrainArt";
-import { waterGlints } from "./waterArt";
+import { eachWaterGlint } from "./waterArt";
 
 // The pixel world (ADR 0003): ground, Ore and whatever stands on the ground
 // are drawn into a low-resolution canvas at 12 art pixels per Cell, then
@@ -49,8 +49,17 @@ export class PixelWorld {
   );
   private readonly fog = document.createElement("canvas");
   private fogImage: ImageData | null = null;
+  private fogCtx: CanvasRenderingContext2D | null = null;
   /** The visibility the fog canvas shows; only Cells that change (and their neighbours) are repainted. */
   private fogShows: readonly Visibility[] | null = null;
+  /** Where the water Cell being drawn starts in the low-resolution canvas, for paintGlint. */
+  private glintX = 0;
+  private glintY = 0;
+  /** One function for every water Cell of every frame, rather than a new one each. */
+  private readonly paintGlint = (x: number, y: number, colour: string): void => {
+    this.lowCtx.fillStyle = colour;
+    this.lowCtx.fillRect(this.glintX + x, this.glintY + y, 1, 1);
+  };
 
   constructor() {
     this.lowCtx = this.lowRes.getContext("2d")!;
@@ -137,10 +146,9 @@ export class PixelWorld {
         const level = oreLevel(ore[i] ?? 0, ECONOMY.orePerCell);
         if (level > 0) lc.drawImage(this.oreSprites[level]![oreVariant(cx, cy)]!, cx * U - ox, cy * U - oy);
         else if (this.isWater![i]) {
-          for (const g of waterGlints(cx, cy, seconds)) {
-            lc.fillStyle = g.colour;
-            lc.fillRect(cx * U + g.x - ox, cy * U + g.y - oy, 1, 1);
-          }
+          this.glintX = cx * U - ox;
+          this.glintY = cy * U - oy;
+          eachWaterGlint(cx, cy, seconds, this.paintGlint);
         }
       }
     }
@@ -177,7 +185,8 @@ export class PixelWorld {
     if (!this.fogImage || this.fogShows?.length !== visibility.length) {
       this.fog.width = width * U;
       this.fog.height = height * U;
-      this.fogImage = this.fog.getContext("2d")!.createImageData(width * U, height * U);
+      this.fogCtx = this.fog.getContext("2d")!;
+      this.fogImage = this.fogCtx.createImageData(width * U, height * U);
       const [r, g, b] = rgbOf(ART.fog);
       const d = this.fogImage.data;
       for (let i = 0; i < d.length; i += 4) {
@@ -205,10 +214,6 @@ export class PixelWorld {
     }
     this.fogShows = visibility;
 
-    let minX = width;
-    let minY = height;
-    let maxX = -1;
-    let maxY = -1;
     const around = new Array<number>(9);
     const data = this.fogImage.data;
     const rowPx = width * U;
@@ -226,15 +231,18 @@ export class PixelWorld {
         for (let ly = 0; ly < U; ly++) {
           for (let lx = 0; lx < U; lx++) data[((cy * U + ly) * rowPx + cx * U + lx) * 4 + 3] = cell[ly * U + lx]!;
         }
-        minX = Math.min(minX, cx);
-        minY = Math.min(minY, cy);
-        maxX = Math.max(maxX, cx);
-        maxY = Math.max(maxY, cy);
       }
     }
-    if (maxX < 0) return;
-    this.fog
-      .getContext("2d")!
-      .putImageData(this.fogImage, 0, 0, minX * U, minY * U, (maxX - minX + 1) * U, (maxY - minY + 1) * U);
+    // Only the repainted Cells go to the canvas, a run of neighbours in a row at a time. One box round
+    // all of them would be most of the Map whenever Units far apart move in the same Tick.
+    const ctx = this.fogCtx!;
+    for (let cy = 0; cy < height; cy++) {
+      for (let cx = 0; cx < width; cx++) {
+        if (!dirty[cy * width + cx]) continue;
+        const from = cx;
+        while (cx + 1 < width && dirty[cy * width + cx + 1]) cx++;
+        ctx.putImageData(this.fogImage, 0, 0, from * U, cy * U, (cx - from + 1) * U, U);
+      }
+    }
   }
 }

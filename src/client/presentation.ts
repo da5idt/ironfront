@@ -447,6 +447,15 @@ export function present(prev: Presentation | null, view: PlayerView): Presented 
 /** How finely a tracer's line is checked against Fog of War, in Cells: one art pixel, as fine as it is drawn. */
 const SIGHT_STEP_CELLS = 1 / ART_CELL_PX;
 
+type FogMap = Pick<PlayerView["map"], "width" | "height" | "visibility">;
+
+/** Whether the Cell holding a place is Visible; off the Map nothing is. */
+function visibleIn(map: FogMap, x: number, y: number): boolean {
+  const cx = Math.floor(x);
+  const cy = Math.floor(y);
+  return cx >= 0 && cy >= 0 && cx < map.width && cy < map.height && map.visibility[cy * map.width + cx] === "visible";
+}
+
 /**
  * How much of an effect shows under the Fog of War of the moment it is drawn:
  * 0 none, 1 all of it. An effect is made only for what the view showed, but
@@ -455,20 +464,15 @@ const SIGHT_STEP_CELLS = 1 / ART_CELL_PX;
  * Player's to see. A tracer shows from the barrel up to the first Cell that
  * is not Visible, and the number is that share of its flight.
  */
-export function effectInSight(e: Effect, map: Pick<PlayerView["map"], "width" | "height" | "visibility">): number {
-  const visible = (x: number, y: number): boolean => {
-    const cx = Math.floor(x);
-    const cy = Math.floor(y);
-    return cx >= 0 && cy >= 0 && cx < map.width && cy < map.height && map.visibility[cy * map.width + cx] === "visible";
-  };
-  if (!visible(e.at.x, e.at.y)) return 0;
+export function effectInSight(e: Effect, map: FogMap): number {
+  if (!visibleIn(map, e.at.x, e.at.y)) return 0;
   if (e.kind !== "tracer") return 1;
   const dx = e.to.x - e.at.x;
   const dy = e.to.y - e.at.y;
   const length = Math.hypot(dx, dy);
   const steps = Math.ceil(length / SIGHT_STEP_CELLS);
   for (let i = 1; i <= steps; i++) {
-    if (!visible(e.at.x + (dx * i) / steps, e.at.y + (dy * i) / steps)) return (i - 1) / steps;
+    if (!visibleIn(map, e.at.x + (dx * i) / steps, e.at.y + (dy * i) / steps)) return (i - 1) / steps;
   }
   return 1;
 }

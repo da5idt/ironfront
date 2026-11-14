@@ -8,15 +8,24 @@ const { marker } = ART;
 
 /** Corner brackets round a rect, with a dark edge below and right so they read on any ground. */
 export function drawBrackets(art: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, arm: number): void {
-  for (const [dx, dy, colour] of [[1, 1, marker.healthBack], [0, 0, marker.selection]] as const) {
-    art.fillStyle = colour;
-    for (const [cx, sx] of [[x, 1], [x + w - 1, -1]] as const) {
-      for (const [cy, sy] of [[y, 1], [y + h - 1, -1]] as const) {
-        art.fillRect(dx + (sx > 0 ? cx : cx - arm + 1), dy + cy, arm, 1);
-        art.fillRect(dx + cx, dy + (sy > 0 ? cy : cy - arm + 1), 1, arm);
-      }
-    }
-  }
+  art.fillStyle = marker.healthBack;
+  bracketCorners(art, x + 1, y + 1, w, h, arm);
+  art.fillStyle = marker.selection;
+  bracketCorners(art, x, y, w, h, arm);
+}
+
+/** The four corners in the current fill colour. Written out: it runs for every selected Unit in every frame. */
+function bracketCorners(art: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, arm: number): void {
+  const right = x + w - 1;
+  const bottom = y + h - 1;
+  art.fillRect(x, y, arm, 1);
+  art.fillRect(x, y, 1, arm);
+  art.fillRect(right - arm + 1, y, arm, 1);
+  art.fillRect(right, y, 1, arm);
+  art.fillRect(x, bottom, arm, 1);
+  art.fillRect(x, bottom - arm + 1, 1, arm);
+  art.fillRect(right - arm + 1, bottom, arm, 1);
+  art.fillRect(right, bottom - arm + 1, 1, arm);
 }
 
 /** Height of a health bar: a dark frame round one row of colour. */

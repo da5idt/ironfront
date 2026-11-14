@@ -64,28 +64,32 @@ function tinted(icon: HTMLCanvasElement, colour: string): HTMLCanvasElement {
 }
 
 export class BuildingPainter {
-  private readonly sprites = new Map<string, BuildingCanvases>();
+  /** By kind, then by Player (a PlayerId is its index): looked up several times a Building in every frame, so no key is built. */
+  private readonly sprites = new Map<BuildingKind, readonly BuildingCanvases[]>();
   private readonly damage = new Map<BuildingKind, readonly HTMLCanvasElement[]>();
 
   constructor() {
     for (const kind of KINDS) {
       this.damage.set(kind, damageSprite(kind).frames.map(toCanvas));
-      for (const team of PLAYER_IDS) {
-        const sprite = buildingSprite(kind, team);
-        const icon = iconOf(sprite);
-        this.sprites.set(`${kind}/${team}`, {
-          frames: sprite.frames.map(toCanvas),
-          shadow: toCanvas(sprite.shadow),
-          gun: sprite.gun?.map(toCanvas) ?? null,
-          icon,
-          placing: [tinted(icon, ART.placing.fits), tinted(icon, ART.placing.blocked)],
-        });
-      }
+      this.sprites.set(
+        kind,
+        PLAYER_IDS.map((team) => {
+          const sprite = buildingSprite(kind, team);
+          const icon = iconOf(sprite);
+          return {
+            frames: sprite.frames.map(toCanvas),
+            shadow: toCanvas(sprite.shadow),
+            gun: sprite.gun?.map(toCanvas) ?? null,
+            icon,
+            placing: [tinted(icon, ART.placing.fits), tinted(icon, ART.placing.blocked)],
+          };
+        }),
+      );
     }
   }
 
   private of(kind: BuildingKind, team: PlayerId): BuildingCanvases {
-    return this.sprites.get(`${kind}/${team}`)!;
+    return this.sprites.get(kind)![team]!;
   }
 
   /** The Building's still picture, for a button. A Turret's is TURRET_GUN_PX square, as its gun overhangs the Cell. */

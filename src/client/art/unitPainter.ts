@@ -63,22 +63,26 @@ function iconOf(kind: UnitKind, team: PlayerId): HTMLCanvasElement {
   return icon;
 }
 
+/** Top of the Map first. */
+const byRow = (a: UnitView, b: UnitView): number => a.y - b.y;
+
 export class UnitPainter {
-  private readonly sheets = new Map<string, HTMLCanvasElement>();
-  private readonly icons = new Map<string, HTMLCanvasElement>();
+  /** By kind, then by Player (a PlayerId is its index): looked up for every Unit in every frame, so no key is built. */
+  private readonly sheets = new Map<UnitKind, readonly HTMLCanvasElement[]>();
+  private readonly icons = new Map<UnitKind, readonly HTMLCanvasElement[]>();
+  /** The Units of the frame in drawing order; kept between frames so sorting them makes no new list each time. */
+  private readonly ordered: UnitView[] = [];
 
   constructor() {
     for (const kind of KINDS) {
-      for (const team of PLAYER_IDS) {
-        this.sheets.set(`${kind}/${team}`, sheetOf(kind, team));
-        this.icons.set(`${kind}/${team}`, iconOf(kind, team));
-      }
+      this.sheets.set(kind, PLAYER_IDS.map((team) => sheetOf(kind, team)));
+      this.icons.set(kind, PLAYER_IDS.map((team) => iconOf(kind, team)));
     }
   }
 
   /** The Unit's still picture, for a button. */
   icon(kind: UnitKind, team: PlayerId): HTMLCanvasElement {
-    return this.icons.get(`${kind}/${team}`)!;
+    return this.icons.get(kind)![team]!;
   }
 
   /**
@@ -99,7 +103,10 @@ export class UnitPainter {
     const U = ART_CELL_PX;
     const seconds = time / TICKS_PER_SECOND;
     // Top of the Map first, so a Unit standing lower overlaps the one behind it.
-    const ordered = units.length > 1 ? [...units].sort((a, b) => a.y - b.y) : units;
+    const { ordered } = this;
+    ordered.length = 0;
+    for (const u of units) ordered.push(u);
+    ordered.sort(byRow);
     for (const u of ordered) {
       const shown = poses.get(u.id);
       if (!shown) continue;
@@ -109,7 +116,7 @@ export class UnitPainter {
       const cx = Math.round((u.prevX + (u.x - u.prevX) * alpha) * U);
       const cy = Math.round((u.prevY + (u.y - u.prevY) * alpha) * U);
       art.drawImage(
-        this.sheets.get(`${u.kind}/${u.owner}`)!,
+        this.sheets.get(u.kind)![u.owner]!,
         shown.facing * S,
         row * S,
         S,

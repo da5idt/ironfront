@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { ART } from "./artPalette";
-import { waterGlints } from "./waterArt";
+import { eachWaterGlint } from "./waterArt";
+
+/** The sparkles lit on a water Cell at a moment, gathered into a list. */
+function waterGlints(cx: number, cy: number, seconds: number) {
+  const glints: { x: number; y: number; colour: string }[] = [];
+  eachWaterGlint(cx, cy, seconds, (x, y, colour) => glints.push({ x, y, colour }));
+  return glints;
+}
 
 const times = Array.from({ length: 80 }, (_, i) => i * 0.05);
 
