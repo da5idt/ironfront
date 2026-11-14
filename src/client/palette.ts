@@ -1,12 +1,16 @@
 import type { PlayerId, Terrain, Visibility } from "../sim";
+import { ART } from "./art/artPalette";
 
-// Placeholder look, drawn in code (ADR 0001). Original colours, no borrowed art.
+// Interface colours. Art colours (terrain, Ore, teams, concrete and so on)
+// live in the one art table, ART in ./art/artPalette (ADR 0003); the names
+// below that point into it are kept for the code that still uses them.
 
+/** One flat colour per terrain, where a single pixel stands for a Cell (the minimap). */
 export const TERRAIN_COLOURS: Record<Terrain, string> = {
-  open: "#4f6b3a",
-  rough: "#7a6b47",
-  rock: "#56565c",
-  water: "#2b5f8a",
+  open: ART.terrain.open[1],
+  rough: ART.terrain.rough[2],
+  rock: ART.terrain.rock[2],
+  water: ART.terrain.water[2],
 };
 
 /** Opacity (0..255) of the black laid over each Cell: Unexplored hides all, Fogged dims. */
@@ -16,12 +20,11 @@ export const FOG_ALPHA: Record<Visibility, number> = {
   visible: 0,
 };
 
-export const ORE_COLOUR = "#e0b030";
-export const ORE_SHADOW = "#7a5a10";
+export const ORE_COLOUR = ART.ore.mid;
 
 export const TEAM_COLOURS: Record<PlayerId, { fill: string; dark: string; light: string }> = {
-  0: { fill: "#3b82d6", dark: "#1d4a80", light: "#a7cdf5" },
-  1: { fill: "#d6543b", dark: "#7f2a1b", light: "#f5b5a7" },
+  0: { fill: ART.team[0].mid, dark: ART.team[0].dark, light: ART.team[0].light },
+  1: { fill: ART.team[1].mid, dark: ART.team[1].dark, light: ART.team[1].light },
 };
 
 export const SELECTION_MARKER = "#f4f4a0";
@@ -49,7 +52,6 @@ export const PLACE_INVALID = "rgba(224, 74, 58, 0.5)";
 export const PANEL_BG = "#15181e";
 export const PANEL_EDGE = "#2c323c";
 export const MINIMAP_BACK = "#000";
-export const MINIMAP_BORDER = "#3a414c";
 export const MINIMAP_FRAME = "#f2f2f2";
 
 /** The Victory, defeat and Paused screens. */
