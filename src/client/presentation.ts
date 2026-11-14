@@ -409,15 +409,19 @@ export function present(prev: Presentation | null, view: PlayerView): Presented 
 
     if (view.production?.ready && !last.ready) events.push({ kind: "buildingReady" });
 
-    // A new Unit of the Player's own was trained if a Barracks or Vehicle Factory that had its kind at the
-    // head of its queue now has a shorter queue. (The Harvester that comes with a Refinery was not.)
+    // A new Unit of the Player's own was trained if a Barracks or Vehicle Factory had its kind at the head of
+    // its queue, done or a Tick from done, and has since started afresh. (The Harvester that comes with a
+    // Refinery was not.) The queue's length says nothing: a Command between two Ticks can add to it or take from it.
     const usedTrainers = new Set<EntityId>();
     for (const u of view.units) {
       if (u.owner !== me || last.units.has(u.id)) continue;
       for (const [id, was] of last.buildings) {
-        const queue = was.owner === me ? was.training?.queue : undefined;
-        if (!queue || queue[0] !== u.kind || usedTrainers.has(id)) continue;
-        if ((buildings.get(id)?.training?.queue.length ?? 0) >= queue.length) continue;
+        const training = was.owner === me ? was.training : null;
+        if (!training || training.queue[0] !== u.kind || usedTrainers.has(id)) continue;
+        // A whisker short of 1, as progress is a fraction of whole Ticks and the sum may round down.
+        if (training.progress + 1 / UNIT_STATS[u.kind].trainTicks < 1 - 1e-9) continue;
+        const now = buildings.get(id)?.training;
+        if (now && now.progress >= training.progress) continue;
         usedTrainers.add(id);
         events.push({ kind: "unitTrained", unit: u.kind });
         break;

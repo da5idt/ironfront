@@ -1,5 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { advanceTick, createMatch, getPlayerView, issueCommand, type Match, type PlayerId, TICKS_PER_SECOND } from "../sim";
+import {
+  advanceTick,
+  createMatch,
+  getPlayerView,
+  issueCommand,
+  type Match,
+  type PlayerId,
+  TICKS_PER_SECOND,
+  UNIT_STATS,
+} from "../sim";
 import { openMap } from "../sim/testing/maps";
 import {
   addTestBuilding,
@@ -435,6 +444,43 @@ describe("building and training", () => {
     issueCommand(match, 0, { type: "train", buildingId: barracks, kind: "rifleman" });
     seen.runUntil("unitTrained", 1000);
     expect(seen.of("unitTrained")).toEqual([{ kind: "unitTrained", unit: "rifleman" }]);
+  });
+
+  it("gives unit trained for a Unit that steps out just as another is added to the queue", () => {
+    const match = createMatch(openMap(30, 30), 1);
+    addTestBuilding(match, 0, "barracks", { x: 5, y: 5 });
+    setTestCredits(match, 0, 5000);
+    const barracks = buildingId(match, 0, "barracks");
+    const seen = watch(match);
+    const riflemen = () => [...seen.state.units.values()].filter((u) => u.owner === 0 && u.kind === "rifleman").length;
+    const atStart = riflemen();
+    issueCommand(match, 0, { type: "train", buildingId: barracks, kind: "rifleman" });
+    // Up to the last Tick before the Rifleman is done (the first Tick of work is the one after the Command).
+    seen.run(UNIT_STATS.rifleman.trainTicks - 1);
+    expect(riflemen()).toBe(atStart);
+    // A click between two Ticks: the queue is as long after the Rifleman leaves as it was before.
+    expect(issueCommand(match, 0, { type: "train", buildingId: barracks, kind: "rifleman" }).ok).toBe(true);
+    seen.run(1);
+    expect(riflemen()).toBe(atStart + 1);
+    expect(seen.of("unitTrained")).toEqual([{ kind: "unitTrained", unit: "rifleman" }]);
+    // The one queued in that moment is reported in its own time, once.
+    seen.run(UNIT_STATS.rifleman.trainTicks);
+    expect(riflemen()).toBe(atStart + 2);
+    expect(seen.of("unitTrained")).toHaveLength(2);
+  });
+
+  it("gives no unit trained when the Unit in training is cancelled at the last moment and another is queued", () => {
+    const match = createMatch(openMap(30, 30), 1);
+    addTestBuilding(match, 0, "barracks", { x: 5, y: 5 });
+    setTestCredits(match, 0, 5000);
+    const barracks = buildingId(match, 0, "barracks");
+    const seen = watch(match);
+    issueCommand(match, 0, { type: "train", buildingId: barracks, kind: "rifleman" });
+    seen.run(UNIT_STATS.rifleman.trainTicks - 1);
+    issueCommand(match, 0, { type: "cancelTraining", buildingId: barracks });
+    issueCommand(match, 0, { type: "train", buildingId: barracks, kind: "rifleman" });
+    seen.run(5);
+    expect(seen.of("unitTrained")).toEqual([]);
   });
 
   it("gives no unit trained for the Harvester that comes with a Refinery, nor for the other Player's Units", () => {
