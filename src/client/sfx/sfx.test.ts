@@ -5,8 +5,14 @@ import { createSfx, type SoundOutput } from "./sfx";
 import { memoryStorage } from "./testing/memoryStorage";
 
 /**
- * Stands in for the Web Audio engine (engine.ts): a clock that is null until
- * sound has started, and a record of what it was asked to play.
+ * Stands in for the Web Audio engine (engine.ts, createSoundEngine) and
+ * copies how it behaves before sound has started, which is what `time` null
+ * means here:
+ * - now() is null (the engine's is `audio && !paused ? currentTime : null`);
+ * - start() silently does nothing (the engine's begins `if (!audio) return`).
+ * Once started, start() records what it was asked to play, and
+ * applySettings() records the settings at any time, as the engine keeps them
+ * for when sound does start.
  */
 function fakeOutput(now: number | null = 0) {
   const started: { name: SoundName; gain: number; pan: number }[] = [];
@@ -14,7 +20,10 @@ function fakeOutput(now: number | null = 0) {
   const output: SoundOutput & { time: number | null } = {
     time: now,
     now: () => output.time,
-    start: (name, gain, pan) => void started.push({ name, gain, pan }),
+    start: (name, gain, pan) => {
+      if (output.time === null) return;
+      started.push({ name, gain, pan });
+    },
     applySettings: (settings) => void applied.push(settings),
   };
   return { output, started, applied };

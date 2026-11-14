@@ -67,8 +67,21 @@ export interface SettingsStorage {
 }
 
 /**
- * The saved settings, or the defaults. Storage can be missing, blocked (it
- * then throws) or hold anything at all, and sound settings are never worth
+ * The browser's storage, or null where it is blocked: the read of
+ * `localStorage` itself then throws, so it is passed in as a function. Sound
+ * settings are not worth failing over; without storage they last one visit.
+ */
+export function storageOrNull(open: () => SettingsStorage): SettingsStorage | null {
+  try {
+    return open();
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The saved settings, or the defaults. Storage can be missing (or blocked,
+ * which storageOrNull turns into missing) or hold anything at all, and sound settings are never worth
  * failing over: whatever cannot be read falls back to its default.
  */
 export function loadSettings(storage: SettingsStorage | null): MixerSettings {

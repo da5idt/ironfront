@@ -8,18 +8,37 @@ import {
   saveSettings,
   SETTINGS_KEY,
   type SettingsStorage,
+  storageOrNull,
 } from "./mixer";
 import { memoryStorage } from "./testing/memoryStorage";
 
-/** A browser with storage blocked throws from every call (SecurityError). */
-const blockedStorage: SettingsStorage = {
-  getItem: () => {
-    throw new Error("blocked");
-  },
-  setItem: () => {
-    throw new Error("blocked");
-  },
+/**
+ * Stands in for reading `window.localStorage` in a browser that blocks
+ * storage (site data or cookies turned off). Source: the HTML Standard's Web
+ * Storage section, where the localStorage getter throws a SecurityError
+ * DOMException when the request goes against a policy decision. So it is the
+ * read of the attribute that throws, before there is any object to call
+ * getItem or setItem on.
+ */
+const blockedLocalStorage = (): SettingsStorage => {
+  throw new DOMException("The operation is insecure.", "SecurityError");
 };
+
+/**
+ * Stands in for a localStorage that is full, or one with no room at all
+ * (older Safari in a private window). Same source: getItem does not throw,
+ * and setItem throws a QuotaExceededError DOMException when the new value
+ * could not be set, leaving what was stored as it was.
+ */
+function fullStorage(initial: Record<string, string> = {}): SettingsStorage {
+  const stored = memoryStorage(initial);
+  return {
+    getItem: stored.getItem,
+    setItem: () => {
+      throw new DOMException("The quota has been exceeded.", "QuotaExceededError");
+    },
+  };
+}
 
 function volumeOf(s: MixerSettings, channel: "effects" | "music" | "alerts"): number {
   return s.channels[channel].volume;
@@ -84,12 +103,24 @@ describe("mixer settings storage", () => {
     expect(loadSettings(storage)).toEqual(s);
   });
 
-  it("starts from the defaults when nothing was saved, storage is missing or it is blocked", () => {
+  it("starts from the defaults when nothing was saved or there is no storage", () => {
     expect(loadSettings(memoryStorage())).toEqual(DEFAULT_SETTINGS);
     expect(loadSettings(null)).toEqual(DEFAULT_SETTINGS);
-    expect(loadSettings(blockedStorage)).toEqual(DEFAULT_SETTINGS);
-    expect(() => saveSettings(blockedStorage, DEFAULT_SETTINGS)).not.toThrow();
     expect(() => saveSettings(null, DEFAULT_SETTINGS)).not.toThrow();
+  });
+
+  it("takes blocked storage as no storage, and does not fail over it", () => {
+    expect(storageOrNull(blockedLocalStorage)).toBeNull();
+    const storage = memoryStorage();
+    expect(storageOrNull(() => storage)).toBe(storage);
+  });
+
+  it("carries on when storage has no room: the saved settings are still read, and a change is just not kept", () => {
+    const saved = applyMixerAction(DEFAULT_SETTINGS, { type: "mute", channel: "music" });
+    const storage = fullStorage({ [SETTINGS_KEY]: JSON.stringify(saved) });
+    expect(loadSettings(storage)).toEqual(saved);
+    expect(() => saveSettings(storage, DEFAULT_SETTINGS)).not.toThrow();
+    expect(loadSettings(storage)).toEqual(saved);
   });
 
   it("falls back to the defaults for anything it cannot read", () => {

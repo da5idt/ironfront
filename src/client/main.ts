@@ -51,7 +51,7 @@ import { alertForEvent } from "./sfx/eventCues";
 import { createMusic } from "./sfx/musicPlayer";
 import { moodFor } from "./sfx/musicTimeline";
 import { listenerFor } from "./sfx/hearing";
-import { channelGain } from "./sfx/mixer";
+import { channelGain, storageOrNull } from "./sfx/mixer";
 import { createSfx } from "./sfx/sfx";
 import { soundStripAction } from "./sfx/soundStrip";
 import { type ButtonTarget, creditsShortPress, keyButtonIndex, sidePanelPress } from "./sidePanel";
@@ -124,16 +124,8 @@ function resize(): void {
 window.addEventListener("resize", resize);
 resize();
 
-/** Blocked storage throws on the very mention of it, and sound settings are not worth failing over. */
-function settingsStorage(): Storage | null {
-  try {
-    return window.localStorage;
-  } catch {
-    return null;
-  }
-}
 const soundEngine = createSoundEngine();
-const sfx = createSfx(soundEngine, settingsStorage());
+const sfx = createSfx(soundEngine, storageOrNull(() => window.localStorage));
 /** Spoken alerts: `alerts.raise(event, playSeconds)` from anywhere; said one at a time, on the alerts channel. */
 const alerts = createAlerts({
   voice: createAlertVoice(),
