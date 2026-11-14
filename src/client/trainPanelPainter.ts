@@ -1,21 +1,31 @@
-import { BUILDING_STATS, TRAINING, UNIT_STATS } from "../sim";
+import { BUILDING_STATS, TRAINING, UNIT_STATS, type UnitKind } from "../sim";
 import { BUTTON_MARGIN, BUTTONS_HEADER } from "./buildPanel";
-import { drawKeyBadge } from "./buildPanelPainter";
+import { drawMenuButton } from "./buttonPainter";
 import type { Rect } from "./layout";
-import { BUTTON_BG, BUTTON_DISABLED_TEXT, BUTTON_EDGE, BUTTON_PROGRESS, HUD_TEXT } from "./palette";
-import { buttonKeyLabel } from "./sidePanel";
+import { BUTTON_EDGE, BUTTON_PROGRESS, HUD_TEXT } from "./palette";
 import { type Trainer, trainButtons, trainButtonState, type TrainButtonState } from "./trainPanel";
 
 // Draws the selected Barracks or Vehicle Factory's train buttons from the same
-// pure functions main.ts hit-tests with.
+// pure functions main.ts hit-tests with, laid out like the build buttons
+// (buttonPainter.ts).
 
-function hint(state: TrainButtonState): string {
-  if (state.status === "full") return "queue full";
-  if (state.status === "unaffordable") return "not enough Credits";
-  return state.queued > 0 ? "click to train, right-click cancels" : "click to train";
+function hints(state: TrainButtonState): readonly string[] {
+  if (state.status === "full") return ["queue full"];
+  if (state.status === "unaffordable") return ["not enough", "Credits"];
+  return state.queued > 0 ? ["click: one more", "right-click: cancel"] : ["click to train"];
 }
 
-export function drawTrainPanel(ctx: CanvasRenderingContext2D, credits: number, building: Trainer, area: Rect): void {
+/** A Unit's sprite is small, so its picture may be blown up well past the Map's 2 to fill the well. */
+const LARGEST_PICTURE_SCALE = 5;
+
+/** `icon` gives a Unit's still picture in the Player's colours. */
+export function drawTrainPanel(
+  ctx: CanvasRenderingContext2D,
+  credits: number,
+  building: Trainer,
+  area: Rect,
+  icon: (kind: UnitKind) => HTMLCanvasElement,
+): void {
   const { training } = building;
   ctx.textBaseline = "middle";
   ctx.font = "bold 13px system-ui, sans-serif";
@@ -32,26 +42,22 @@ export function drawTrainPanel(ctx: CanvasRenderingContext2D, credits: number, b
 
   for (const [index, { kind, rect }] of trainButtons(area, building.kind).entries()) {
     const state = trainButtonState(credits, training, kind);
-    ctx.fillStyle = BUTTON_BG;
-    ctx.fillRect(rect.x, rect.y, rect.width, rect.height);
-    if (state.progress !== null) {
-      ctx.fillStyle = BUTTON_PROGRESS;
-      ctx.fillRect(rect.x, rect.y, rect.width * state.progress, rect.height);
-    }
-    ctx.strokeStyle = BUTTON_EDGE;
-    ctx.lineWidth = 1;
-    ctx.strokeRect(rect.x + 0.5, rect.y + 0.5, rect.width - 1, rect.height - 1);
-
+    const greyed = state.status !== "available";
     const stats = UNIT_STATS[kind];
-    const nameX = drawKeyBadge(ctx, buttonKeyLabel(index), rect);
-    ctx.fillStyle = state.status === "available" ? HUD_TEXT : BUTTON_DISABLED_TEXT;
-    ctx.font = "bold 13px system-ui, sans-serif";
-    ctx.textAlign = "left";
-    ctx.fillText(state.queued > 0 ? `${stats.name} x${state.queued}` : stats.name, nameX, rect.y + 15);
-    ctx.textAlign = "right";
-    ctx.fillText(`${stats.cost}`, rect.x + rect.width - 8, rect.y + 15);
-    ctx.font = "11px system-ui, sans-serif";
-    ctx.textAlign = "left";
-    ctx.fillText(hint(state), rect.x + 8, rect.y + 32);
+    drawMenuButton(ctx, rect, {
+      index,
+      name: stats.name,
+      cost: stats.cost,
+      greyed,
+      picture: icon(kind),
+      largestScale: LARGEST_PICTURE_SCALE,
+      // Dim only when a click would do nothing and none of this Unit is on its way.
+      pictureDimmed: greyed && state.queued === 0,
+      builtShare: null,
+      corner: state.queued > 0 ? `x${state.queued}` : null,
+      hints: hints(state),
+      bar: state.progress !== null ? { share: state.progress, colour: BUTTON_PROGRESS } : null,
+      edge: { colour: BUTTON_EDGE, thick: 1 },
+    });
   }
 }

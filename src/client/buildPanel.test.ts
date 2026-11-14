@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { BUILDING_STATS, HQ_BUILDS, type ProductionView } from "../sim";
-import { buildButtons, buttonAt, buttonState, footprintAt, type PanelView, panelClick } from "./buildPanel";
+import { buildButtons, buttonAt, buttonLook, buttonState, footprintAt, type PanelView, panelClick } from "./buildPanel";
 
 const AREA = { x: 1000, y: 230, width: 220, height: 500 };
 
@@ -53,6 +53,23 @@ describe("build button states", () => {
   });
 });
 
+describe("what a build button looks like", () => {
+  const ready = viewWith(0, { kind: "barracks", progress: 1, ready: true });
+
+  it("shows 'placing' on the finished Building's button while the person is placing it", () => {
+    expect(buttonLook(ready, "barracks", "barracks")).toBe("placing");
+  });
+
+  it("shows the button's state when nothing is being placed", () => {
+    expect(buttonLook(ready, "barracks", null)).toBe("ready");
+    expect(buttonLook(viewWith(10_000, null), "turret", null)).toBe("available");
+  });
+
+  it("leaves the other buttons as they are while placing", () => {
+    expect(buttonLook(ready, "turret", "barracks")).toBe("busy");
+  });
+});
+
 describe("clicking a build button", () => {
   const free = viewWith(10_000, null);
   const inProgress = viewWith(0, { kind: "barracks", progress: 0.4, ready: false });
@@ -66,10 +83,9 @@ describe("clicking a build button", () => {
     expect(panelClick(free, "barracks", "right")).toBeNull();
   });
 
-  it("cancels the one in progress with either button", () => {
-    const cancel = { type: "command", command: { type: "cancelBuilding" } };
-    expect(panelClick(inProgress, "barracks", "left")).toEqual(cancel);
-    expect(panelClick(inProgress, "barracks", "right")).toEqual(cancel);
+  it("cancels the one in progress with a right-click only: a left-click on it does nothing", () => {
+    expect(panelClick(inProgress, "barracks", "left")).toBeNull();
+    expect(panelClick(inProgress, "barracks", "right")).toEqual({ type: "command", command: { type: "cancelBuilding" } });
   });
 
   it("enters placement mode for a finished one, or cancels it with a right-click", () => {

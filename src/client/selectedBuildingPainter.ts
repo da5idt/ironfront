@@ -2,30 +2,15 @@ import type { BuildingView, CellPos } from "../sim";
 import { type Camera, CELL_PX, mapToScreen } from "./camera";
 import { RALLY_FLAG, RALLY_LINE, SELECTION_MARKER } from "./palette";
 
-// The selected own Building: corner brackets round its footprint and, for a
-// Barracks or Vehicle Factory with a rally point, a dashed line out to a flag.
+// The selected Barracks or Vehicle Factory's rally point: a dashed line from
+// the Building out to a flag. (Its selection brackets are pixel art, drawn
+// with the other markers in the renderer.)
 
-export function drawSelectedBuilding(ctx: CanvasRenderingContext2D, b: BuildingView, cam: Camera): void {
-  const p = mapToScreen(cam, b.x, b.y);
-  const w = b.width * CELL_PX;
-  const h = b.height * CELL_PX;
-  const arm = CELL_PX * 0.35;
-  ctx.strokeStyle = SELECTION_MARKER;
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-  for (const [cx, cy, sx, sy] of [
-    [p.x, p.y, 1, 1],
-    [p.x + w, p.y, -1, 1],
-    [p.x, p.y + h, 1, -1],
-    [p.x + w, p.y + h, -1, -1],
-  ] as const) {
-    ctx.moveTo(cx + sx * arm, cy);
-    ctx.lineTo(cx, cy);
-    ctx.lineTo(cx, cy + sy * arm);
-  }
-  ctx.stroke();
+export function drawRallyPoint(ctx: CanvasRenderingContext2D, b: BuildingView, cam: Camera): void {
   const rally = b.training?.rallyPoint;
-  if (rally) drawRally(ctx, { x: p.x + w / 2, y: p.y + h / 2 }, rally, cam);
+  if (!rally) return;
+  const p = mapToScreen(cam, b.x + b.width / 2, b.y + b.height / 2);
+  drawRally(ctx, p, rally, cam);
 }
 
 function drawRally(ctx: CanvasRenderingContext2D, from: { x: number; y: number }, rally: CellPos, cam: Camera): void {

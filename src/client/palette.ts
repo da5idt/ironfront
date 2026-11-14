@@ -1,13 +1,8 @@
-import type { PlayerId, Terrain, Visibility } from "../sim";
+import type { Visibility } from "../sim";
+import { ART } from "./art/artPalette";
 
-// Placeholder look, drawn in code (ADR 0001). Original colours, no borrowed art.
-
-export const TERRAIN_COLOURS: Record<Terrain, string> = {
-  open: "#4f6b3a",
-  rough: "#7a6b47",
-  rock: "#56565c",
-  water: "#2b5f8a",
-};
+// Interface colours. Art colours (terrain, Ore, the Players' colours, concrete and so on)
+// live in the one art table, ART in ./art/artPalette (ADR 0003).
 
 /** Opacity (0..255) of the black laid over each Cell: Unexplored hides all, Fogged dims. */
 export const FOG_ALPHA: Record<Visibility, number> = {
@@ -16,22 +11,10 @@ export const FOG_ALPHA: Record<Visibility, number> = {
   visible: 0,
 };
 
-export const ORE_COLOUR = "#e0b030";
-export const ORE_SHADOW = "#7a5a10";
-
-export const TEAM_COLOURS: Record<PlayerId, { fill: string; dark: string; light: string }> = {
-  0: { fill: "#3b82d6", dark: "#1d4a80", light: "#a7cdf5" },
-  1: { fill: "#d6543b", dark: "#7f2a1b", light: "#f5b5a7" },
-};
-
-export const SELECTION_MARKER = "#f4f4a0";
-export const HEALTH_BACK = "rgba(0, 0, 0, 0.7)";
-export const HEALTH_GOOD = "#5fd35f";
-export const HEALTH_LOW = "#e04a3a";
+export const SELECTION_MARKER = ART.marker.selection;
 export const MOVE_MARKER = "#8ef08e";
 export const RALLY_LINE = "rgba(244, 244, 160, 0.7)";
 export const RALLY_FLAG = "#f0c040";
-export const SHOT_TRACER = "#fff2a8";
 export const DRAG_BOX_LINE = "#d8f0d8";
 export const DRAG_BOX_FILL = "rgba(200, 240, 200, 0.12)";
 
@@ -43,15 +26,26 @@ export const BUTTON_EDGE = "#3a414c";
 export const BUTTON_PROGRESS = "rgba(80, 140, 220, 0.45)";
 export const BUTTON_READY = "rgba(95, 211, 95, 0.4)";
 export const BUTTON_DISABLED_TEXT = "#6b717b";
-/** The key number badge on a button. */
-export const BUTTON_KEY_BG = "#3a414c";
-export const PLACE_VALID = "rgba(95, 211, 95, 0.45)";
-export const PLACE_INVALID = "rgba(224, 74, 58, 0.5)";
+/** The key number badge on a button: the frame's own colour, so the badge reads as part of the button. */
+export const BUTTON_KEY_BG = BUTTON_EDGE;
+/** The dark well a button's picture sits in. */
+export const BUTTON_WELL = "#0d1014";
+export const BUTTON_COST = "#f0c040";
+export const BUTTON_READY_EDGE = "#5fd35f";
+/** The frame round the button of the Building being placed. */
+export const BUTTON_PLACING_EDGE = "#f4f4a0";
+/** The sound strip: lit and unlit steps of a volume level, and a muted channel's mark. */
+export const VOLUME_ON = "#6fb0e0";
+export const VOLUME_OFF = "#2c323c";
+export const SOUND_MUTED = "#f06a55";
+/** The banner that shows an alert's text when it is not spoken. */
+export const ALERT_BG = "#15181e";
+export const ALERT_EDGE = "#f0c040";
+export const ALERT_TEXT = "#f2f2f2";
 
 export const PANEL_BG = "#15181e";
 export const PANEL_EDGE = "#2c323c";
 export const MINIMAP_BACK = "#000";
-export const MINIMAP_BORDER = "#3a414c";
 export const MINIMAP_FRAME = "#f2f2f2";
 
 /** The Victory, defeat and Paused screens. */

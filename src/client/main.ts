@@ -27,6 +27,7 @@ import { computeLayout, contains, edgeScroll, type Layout, toMapView } from "./l
 import { type Clock, interpolationAlpha, stepClock } from "./loop";
 import { cameraOnMinimapPoint } from "./minimap";
 import { type PlacingOutcome, placingMapClick, placingPreview } from "./placing";
+import { present, type Presentation } from "./presentation";
 import { type Overlay, Renderer } from "./renderer";
 import { keyAction, type ScreenOverlay, screenOverlay } from "./screenOverlay";
 import {
@@ -41,7 +42,19 @@ import {
   unitAt,
   unitsInBox,
 } from "./selection";
-import { type ButtonTarget, keyButtonIndex, sidePanelPress } from "./sidePanel";
+import { createAlertChime } from "./sfx/alertChime";
+import { matchEndAlert } from "./sfx/alertQueue";
+import { createAlerts } from "./sfx/alerts";
+import { createAlertVoice } from "./sfx/alertVoice";
+import { createSoundEngine } from "./sfx/engine";
+import { alertForEvent } from "./sfx/eventCues";
+import { createMusic } from "./sfx/musicPlayer";
+import { moodFor } from "./sfx/musicTimeline";
+import { listenerFor } from "./sfx/hearing";
+import { channelGain, storageOrNull } from "./sfx/mixer";
+import { createSfx } from "./sfx/sfx";
+import { soundStripAction } from "./sfx/soundStrip";
+import { type ButtonTarget, creditsShortPress, keyButtonIndex, sidePanelPress } from "./sidePanel";
 
 // Wires the browser to the Simulation: a fixed-Tick clock, the camera, input
 // (selection stays here; Commands go to the Simulation) and drawing.
@@ -66,8 +79,11 @@ function step(): void {
   if (ticksRun % THINK_EVERY_TICKS === 0 && getMatchStatus(match).state === "running") {
     for (const command of opponent.think(getPlayerView(match, COMPUTER))) issueCommand(match, COMPUTER, command);
   }
+  const before = getMatchStatus(match);
   advanceTick(match);
   ticksRun++;
+  const ended = matchEndAlert(before, getMatchStatus(match), HUMAN);
+  if (ended) alerts.raise(ended, playSeconds);
 }
 
 let screen: Size = { width: window.innerWidth, height: window.innerHeight };
@@ -75,6 +91,8 @@ let layout: Layout = computeLayout(screen);
 /** The camera's screen size: the Map view, not the whole window, so nothing sits under the side panel. */
 let viewSize: Size = layout.mapView;
 let view = getPlayerView(match, HUMAN);
+/** Facings, Turret aim, effects, wrecks and the like: client-only, moved on once for every Tick's view (ADR 0002). */
+let presentation: Presentation = present(null, view).state;
 const mapSize = { width: view.map.width, height: view.map.height };
 
 function cameraOnHq(): Camera {
@@ -106,6 +124,23 @@ function resize(): void {
 window.addEventListener("resize", resize);
 resize();
 
+const soundEngine = createSoundEngine();
+const sfx = createSfx(soundEngine, storageOrNull(() => window.localStorage));
+/** Spoken alerts: `alerts.raise(event, playSeconds)` from anywhere; said one at a time, on the alerts channel. */
+const alerts = createAlerts({
+  voice: createAlertVoice(),
+  chime: createAlertChime(soundEngine),
+  volume: () => channelGain(sfx.settings(), "alerts"),
+  soundUnlocked: () => soundEngine.unlocked(),
+});
+/** Seconds of play: stops while paused, so alert cooldowns and waits do not run under the Paused screen. */
+let playSeconds = 0;
+const music = createMusic(soundEngine, newSeed());
+// Browsers only let sound start from a click or key press. Captured on the window, so this runs
+// before the game's own handlers and the very first click already makes its sound.
+window.addEventListener("pointerdown", () => soundEngine.unlock(), { capture: true });
+window.addEventListener("keydown", () => soundEngine.unlock(), { capture: true });
+
 const keys = new Set<string>();
 let mouse: { x: number; y: number } | null = null;
 window.addEventListener("keydown", (e) => {
@@ -114,10 +149,12 @@ window.addEventListener("keydown", (e) => {
   const action = keyAction(e.code, placing !== null);
   if (action === "cancelPlacement") placing = null;
   else if (action === "togglePause") paused = !paused;
+  // Works under the Paused screen too: silencing the game is never blocked.
+  if (e.code === "KeyM" && !e.ctrlKey && !e.metaKey && !e.altKey) sfx.apply({ type: "muteAll" });
   // Ctrl/Cmd/Alt+number belongs to the browser (held-key repeats were already dropped above).
   const index = e.ctrlKey || e.metaKey || e.altKey ? null : keyButtonIndex(e.code);
   // Like a click, a key presses nothing under a Victory, defeat or Paused screen.
-  if (index !== null && !currentScreenOverlay()) pressSidePanel({ key: index }, "left");
+  if (index !== null && !currentScreenOverlay()) pressSidePanel({ index }, "left");
 });
 window.addEventListener("keyup", (e) => keys.delete(e.code));
 window.addEventListener("blur", () => keys.clear());
@@ -153,6 +190,7 @@ function orderTo(cell: CellPos): void {
   const others = ids.filter((id) => !harvesters.includes(id));
   if (harvesters.length > 0) issue({ type: "harvest", unitIds: harvesters, target: cell });
   if (others.length > 0) issue({ type: "move", unitIds: others, target: cell });
+  sfx.play("orderAck");
 }
 
 /** The finished Building being placed, while the person picks a spot; null otherwise. */
@@ -161,7 +199,13 @@ let placing: BuildingKind | null = null;
 /** A click on, or the number key of, a side panel button: the build menu's or the selected trainer's. */
 function pressSidePanel(target: ButtonTarget, button: "left" | "right"): void {
   const action = sidePanelPress(view, selectedBuilding, layout.buttons, target, button);
-  if (!action) return;
+  if (!action) {
+    if (creditsShortPress(view, selectedBuilding, layout.buttons, target, button)) {
+      alerts.raise({ kind: "creditsShort" }, playSeconds);
+    }
+    return;
+  }
+  sfx.play("menuClick");
   if (action.type === "place") {
     placing = action.kind;
     return;
@@ -179,10 +223,15 @@ function onPlacingOutcome(outcome: PlacingOutcome): void {
       if (issueCommand(match, HUMAN, outcome.command).ok) {
         placing = null;
         view = getPlayerView(match, HUMAN);
+        // Its sound comes with the presentation's "building placed" event on the next Tick, like every other Building's.
+      } else {
+        // The client thought the spot free; the person hears the same refusal as for a spot it knew was taken.
+        sfx.play("cantBuild");
       }
       return;
     case "cantBuildThere":
-      // Placing carries on. Ticket #23 plays the "can't build there" sound from here.
+      // Placing carries on.
+      sfx.play("cantBuild");
       return;
     case "cancel":
       placing = null;
@@ -212,6 +261,16 @@ canvas.addEventListener("mousedown", (e) => {
     moveCameraToMinimap(at);
     return;
   }
+  // Before the buttons and the Map: a click on the sound strip is never anything else.
+  if (contains(layout.soundStrip, at.x, at.y)) {
+    const change = e.button === 0 ? soundStripAction(layout.soundStrip, at.x, at.y) : null;
+    if (change) {
+      sfx.apply(change);
+      // After the change, so the click is heard at the new volume.
+      sfx.play("menuClick");
+    }
+    return;
+  }
   if (contains(layout.buttons, at.x, at.y)) {
     pressSidePanel({ point: at }, e.button === 0 ? "left" : "right");
     return;
@@ -235,6 +294,7 @@ canvas.addEventListener("mousedown", (e) => {
     if (issueCommand(match, HUMAN, { type: "setRallyPoint", buildingId: selectedBuilding, target: cell }).ok) {
       view = getPlayerView(match, HUMAN);
       moveMarker = { cell, at: performance.now() };
+      sfx.play("orderAck");
     }
   } else if (e.button === 2 && selection.size > 0) {
     const cell = screenToCell(camera, inView.x, inView.y);
@@ -244,6 +304,7 @@ canvas.addEventListener("mousedown", (e) => {
     const enemy = enemyUnitAt(view.units, point, HUMAN) ?? enemyBuildingAt(view.buildings, point, HUMAN);
     if (enemy) {
       issue({ type: "attack", unitIds: [...selection], targetId: enemy.id });
+      sfx.play("orderAck");
       return;
     }
     orderTo(cell);
@@ -288,6 +349,7 @@ function restart(): void {
   opponent = createOpponent(COMPUTER, newSeed());
   ticksRun = 0;
   view = getPlayerView(match, HUMAN);
+  presentation = present(null, view).state;
   camera = cameraOnHq();
   selection = new Set();
   // Ids start again from 1 in the new Match, so a kept id could name a different Building.
@@ -297,10 +359,26 @@ function restart(): void {
   placing = null;
   paused = false;
   clock = { accumulatedMs: 0 };
+  // "Defeat" may still be being said, and the old Match's cooldowns would swallow the new one's first alerts.
+  alerts.reset();
 }
 
 /** Set only from the dev hook below: whose view is drawn, when not the person's. */
 let peekPlayer: PlayerId | null = null;
+
+/** Takes the view of the Tick just run, moves the presentation on by it and plays what happened in it. */
+function showTick(): void {
+  view = getPlayerView(match, HUMAN);
+  const next = present(presentation, peekPlayer === null ? view : getPlayerView(match, peekPlayer));
+  presentation = next.state;
+  // Only what the view shows is in the events, so nothing under Fog of War is heard.
+  for (const event of next.events) {
+    sfx.playEvent(event);
+    // Alerts are for the person's own things: not for the other Player's while a dev peek shows its view.
+    const alert = presentation.playerId === HUMAN ? alertForEvent(event, HUMAN) : null;
+    if (alert) alerts.raise(alert, playSeconds);
+  }
+}
 
 // A hook for screenshots and manual poking in dev builds only; production has no way in.
 if (import.meta.env.DEV) {
@@ -313,10 +391,13 @@ if (import.meta.env.DEV) {
       issue,
       issueAs: (player: PlayerId, command: Command) => issueCommand(match, player, command),
       advance: (ticks = 1) => {
-        for (let i = 0; i < ticks; i++) step();
-        view = getPlayerView(match, HUMAN);
+        for (let i = 0; i < ticks; i++) {
+          step();
+          showTick();
+        }
       },
       view: () => view,
+      presentation: () => presentation,
       camera: () => camera,
       /** Centres the camera on a Cell. */
       lookAt: (x: number, y: number) => {
@@ -328,6 +409,11 @@ if (import.meta.env.DEV) {
       },
       /** Draws another Player's view (the Opponent's base under its own eyes); null goes back to the person's. */
       peek: (player: PlayerId | null) => (peekPlayer = player),
+      sfx,
+      soundEngine,
+      alerts,
+      playSeconds: () => playSeconds,
+      music,
     },
   });
 }
@@ -346,9 +432,12 @@ function frame(now: number): void {
   // Paused: no time builds up, so resuming doesn't burst through missed Ticks.
   const stepped = stepClock(clock, paused ? 0 : frameMs);
   clock = stepped.clock;
-  for (let i = 0; i < stepped.ticks; i++) step();
+  // Every Tick's view is shown to the presentation, not just the last: a shot is only in the view of its own Tick.
+  for (let i = 0; i < stepped.ticks; i++) {
+    step();
+    showTick();
+  }
   if (stepped.ticks > 0) {
-    view = getPlayerView(match, HUMAN);
     selection = pruneSelection(selection, view.units);
     if (!view.buildings.some((b) => b.id === selectedBuilding)) selectedBuilding = null;
   }
@@ -357,6 +446,12 @@ function frame(now: number): void {
 
   const cameraSeconds = Math.min(frameMs, MAX_CAMERA_FRAME_MS) / 1000;
   camera = scrollCamera(camera, scrollDirection(keys, edgeScroll(layout, mouse)), cameraSeconds, viewSize, mapSize);
+  // A paused game is quiet; the audio clock stops with it, so sounds and music carry on from where they were.
+  soundEngine.setPaused(paused);
+  music.setMood(moodFor(getMatchStatus(match), HUMAN));
+  sfx.setListener(listenerFor(camera, viewSize));
+  if (!paused) playSeconds += frameMs / 1000;
+  alerts.update(playSeconds, paused);
   const markerAge = moveMarker ? (now - moveMarker.at) / MOVE_MARKER_MS : 1;
   if (markerAge >= 1) moveMarker = null;
   const drawn = peekPlayer === null ? view : getPlayerView(match, peekPlayer);
@@ -366,7 +461,11 @@ function frame(now: number): void {
       drag && isDrag(drag.start, drag.now) ? { a: toMapView(layout, drag.start), b: toMapView(layout, drag.now) } : null,
     moveMarker: moveMarker ? { cell: moveMarker.cell, age: Math.max(0, markerAge) } : null,
     placement: placementPreview(),
+    placing,
     selectedBuilding,
+    presentation,
+    sound: sfx.settings(),
+    alert: alerts.banner(playSeconds),
     screen: currentScreenOverlay(),
   });
   requestAnimationFrame(frame);
