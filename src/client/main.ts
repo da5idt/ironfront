@@ -114,7 +114,8 @@ window.addEventListener("keydown", (e) => {
   const action = keyAction(e.code, placing !== null);
   if (action === "cancelPlacement") placing = null;
   else if (action === "togglePause") paused = !paused;
-  const index = keyButtonIndex(e.code);
+  // A held key auto-repeats, which would queue a Unit per repeat; and Ctrl/Cmd/Alt+number belongs to the browser.
+  const index = e.repeat || e.ctrlKey || e.metaKey || e.altKey ? null : keyButtonIndex(e.code);
   // Like a click, a key presses nothing under a Victory, defeat or Paused screen.
   if (index !== null && !currentScreenOverlay()) pressSidePanel({ key: index }, "left");
 });
