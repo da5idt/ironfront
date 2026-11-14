@@ -48,6 +48,10 @@ export const BUTTON_READY = "rgba(95, 211, 95, 0.4)";
 export const BUTTON_DISABLED_TEXT = "#6b717b";
 /** The key number badge on a button. */
 export const BUTTON_KEY_BG = "#3a414c";
+/** The sound strip: lit and unlit steps of a volume level, and a muted channel's mark. */
+export const VOLUME_ON = "#6fb0e0";
+export const VOLUME_OFF = "#2c323c";
+export const SOUND_MUTED = "#f06a55";
 export const PLACE_VALID = "rgba(95, 211, 95, 0.45)";
 export const PLACE_INVALID = "rgba(224, 74, 58, 0.5)";
 

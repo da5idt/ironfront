@@ -36,6 +36,8 @@ import {
 } from "./palette";
 import { drawSelectedBuilding } from "./selectedBuildingPainter";
 import type { Selection } from "./selection";
+import type { MixerSettings } from "./sfx/mixer";
+import { drawSoundStrip } from "./sfx/soundStripPainter";
 import { trainerOf } from "./trainPanel";
 import { drawTrainPanel } from "./trainPanelPainter";
 
@@ -60,6 +62,8 @@ export interface Overlay {
   readonly placement: { readonly kind: BuildingKind; readonly at: CellPos; readonly valid: boolean } | null;
   /** The Victory, defeat or Paused screen over everything, if one shows. */
   readonly screen: ScreenOverlay | null;
+  /** The sound settings, shown in the strip at the bottom of the panel. */
+  readonly sound: MixerSettings;
   /** The selected own Building, if any; a Barracks or Vehicle Factory turns the side panel into its train buttons. */
   readonly selectedBuilding: EntityId | null;
 }
@@ -114,6 +118,7 @@ export class Renderer {
     const trainer = trainerOf(view.buildings, overlay.selectedBuilding);
     if (trainer) drawTrainPanel(ctx, view.credits, trainer, layout.buttons);
     else drawBuildPanel(ctx, view, layout.buttons);
+    drawSoundStrip(ctx, overlay.sound, layout.soundStrip);
     if (overlay.screen) drawScreenOverlay(ctx, overlay.screen, screen);
   }
 
