@@ -83,10 +83,9 @@ describe("clicking a build button", () => {
     expect(panelClick(free, "barracks", "right")).toBeNull();
   });
 
-  it("cancels the one in progress with either button", () => {
-    const cancel = { type: "command", command: { type: "cancelBuilding" } };
-    expect(panelClick(inProgress, "barracks", "left")).toEqual(cancel);
-    expect(panelClick(inProgress, "barracks", "right")).toEqual(cancel);
+  it("cancels the one in progress with a right-click only: a left-click on it does nothing", () => {
+    expect(panelClick(inProgress, "barracks", "left")).toBeNull();
+    expect(panelClick(inProgress, "barracks", "right")).toEqual({ type: "command", command: { type: "cancelBuilding" } });
   });
 
   it("enters placement mode for a finished one, or cancels it with a right-click", () => {

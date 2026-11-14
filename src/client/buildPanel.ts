@@ -65,13 +65,13 @@ export function buttonLook(view: PanelView, kind: BuildingKind, placing: Buildin
   return state === "ready" && placing === kind ? "placing" : state;
 }
 
-/** Left-click starts or places; clicking the one in progress, or right-clicking it, cancels. */
+/** Left-click starts or places; right-click cancels the one in progress or waiting. A left-click on the one in progress does nothing, so a second click on a button just pressed cannot throw the Building away. */
 export function panelClick(view: PanelView, kind: BuildingKind, button: "left" | "right"): PanelAction | null {
   switch (buttonState(view, kind)) {
     case "available":
       return button === "left" ? { type: "command", command: { type: "startBuilding", kind } } : null;
     case "building":
-      return { type: "command", command: { type: "cancelBuilding" } };
+      return button === "right" ? { type: "command", command: { type: "cancelBuilding" } } : null;
     case "ready":
       return button === "left" ? { type: "place", kind } : { type: "command", command: { type: "cancelBuilding" } };
     case "unaffordable":

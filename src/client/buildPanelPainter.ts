@@ -25,7 +25,7 @@ const HINTS: Record<Look, readonly string[]> = {
   available: [],
   unaffordable: ["not enough", "Credits"],
   busy: ["HQ busy"],
-  building: ["click to cancel"],
+  building: ["right-click", "to cancel"],
   ready: ["ready: click,", "then pick a spot"],
   placing: ["placing: pick a spot", "Esc cancels"],
 };

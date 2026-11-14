@@ -100,10 +100,11 @@ describe("clicking a side panel button", () => {
     expect(sidePanelPress(view, 3, AREA, { point: middle(secondTrain) }, "left")).toEqual(trained);
   });
 
-  it("a key on the Building in progress does nothing, while a click on it still cancels", () => {
+  it("a key or a left-click on the Building in progress does nothing, while a right-click on it cancels", () => {
     const view = { ...panelView(10_000), production: { kind: "barracks" as const, progress: 0.5, ready: false } };
     expect(sidePanelPress(view, null, AREA, { index: 1 }, "left")).toBeNull();
     const rect = buildButtons(AREA)[1]!.rect;
+    expect(sidePanelPress(view, null, AREA, { point: { x: rect.x + 1, y: rect.y + 1 } }, "left")).toBeNull();
     expect(sidePanelPress(view, null, AREA, { point: { x: rect.x + 1, y: rect.y + 1 } }, "right")).toEqual({
       type: "command",
       command: { type: "cancelBuilding" },
