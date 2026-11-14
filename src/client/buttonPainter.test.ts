@@ -27,19 +27,36 @@ describe("what a menu button shows at its height", () => {
       const hintY = parts.hintYs[0]!;
       // Top to bottom without one row running into the next, and all of it inside the button.
       expect(parts.nameY - HALF_LINE).toBeGreaterThanOrEqual(0);
-      expect(parts.keyY).toBeGreaterThanOrEqual(parts.nameY + HALF_LINE - 2);
-      expect(parts.costY).toBe(parts.keyY + KEY_BADGE / 2);
-      expect(hintY - HALF_LINE).toBeGreaterThanOrEqual(parts.keyY + KEY_BADGE - 2);
-      expect(parts.barY).toBeGreaterThanOrEqual(hintY + HALF_LINE - 2);
-      expect(parts.barY + BAR_HEIGHT).toBeLessThan(height);
+      expect(parts.keyY!).toBeGreaterThanOrEqual(parts.nameY + HALF_LINE - 2);
+      expect(parts.costY).toBe(parts.keyY! + KEY_BADGE / 2);
+      expect(hintY - HALF_LINE).toBeGreaterThanOrEqual(parts.keyY! + KEY_BADGE - 2);
+      expect(parts.barY!).toBeGreaterThanOrEqual(hintY + HALF_LINE - 2);
+      expect(parts.barY! + BAR_HEIGHT).toBeLessThan(height);
       // The well stays square and inside the button, leaving the text more width.
       expect(parts.wellWidth).toBeLessThanOrEqual(height - 8);
       expect(parts.wellWidth).toBeGreaterThanOrEqual(40);
     }
   });
 
-  it("drops the hint, and never draws a well of less than nothing, on a button too small for them", () => {
-    expect(menuButtonParts(40).hintYs).toEqual([]);
+  it("keeps the name, the key with the cost and the bar clear of each other on the smallest button the layout makes", () => {
+    // 42 pixels: what the layout holds the buttons to while it can (layout.test.ts).
+    for (let height = 42; height < 52; height++) {
+      const parts = menuButtonParts(height);
+      expect(parts.hintYs).toEqual([]);
+      expect(parts.keyY).not.toBeNull();
+      expect(parts.barY).not.toBeNull();
+      expect(parts.keyY!).toBeGreaterThanOrEqual(parts.nameY + HALF_LINE - 2);
+      expect(parts.barY!).toBeGreaterThanOrEqual(parts.keyY! + KEY_BADGE);
+      expect(parts.barY! + BAR_HEIGHT).toBeLessThan(height);
+    }
+  });
+
+  it("shows only what fits whole on a button smaller than that", () => {
+    // No bar across the key's badge, and no badge cut off at the button's edge.
+    expect(menuButtonParts(41).barY).toBeNull();
+    expect(menuButtonParts(36).keyY).not.toBeNull();
+    expect(menuButtonParts(35).keyY).toBeNull();
+    expect(menuButtonParts(35).costY).toBeNull();
     expect(menuButtonParts(0).wellWidth).toBe(0);
   });
 });

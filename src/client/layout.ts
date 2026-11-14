@@ -17,6 +17,14 @@ export const MINIMAP_MARGIN = 10;
 export const PANEL_EDGE_SCROLL_PX = 4;
 /** Room at the bottom of the panel for the sound settings: a heading, a row per channel and the mute-all button. */
 export const SOUND_STRIP_HEIGHT = 128;
+/** The strip cut down to its mute-all button, for a window too short for all of it. */
+export const SOUND_STRIP_COMPACT_HEIGHT = 34;
+/**
+ * The least room a menu of four buttons can use: its heading, and buttons
+ * just tall enough for a name, a key with a cost and a progress bar. The
+ * sound strip gives way before the buttons get less than this.
+ */
+export const MENU_ROOM_NEEDED = 200;
 
 export interface Rect {
   readonly x: number;
@@ -33,7 +41,7 @@ export interface Layout {
   readonly minimap: Rect;
   /** Space for buttons, below the minimap and above the sound strip. */
   readonly buttons: Rect;
-  /** The sound settings, at the bottom of the panel. */
+  /** The sound settings, at the bottom of the panel: all of them, only mute-all, or (height 0) nothing, as the window's height allows. */
   readonly soundStrip: Rect;
 }
 
@@ -43,14 +51,18 @@ export function computeLayout(screen: Size): Layout {
   const side = Math.max(0, panelWidth - MINIMAP_MARGIN * 2);
   const minimap = { x: panel.x + MINIMAP_MARGIN, y: MINIMAP_MARGIN, width: side, height: side };
   const buttonsTop = minimap.y + minimap.height + MINIMAP_MARGIN;
-  // On a screen too short for both, the buttons give way: the strip keeps to the bottom but never climbs over the minimap.
-  const stripTop = Math.max(buttonsTop, screen.height - SOUND_STRIP_HEIGHT);
+  // On a window too short for everything the sound strip gives way first, as its M key works without it:
+  // down to its mute-all button, then to nothing. Only after that do the buttons go below their least size.
+  const below = Math.max(0, screen.height - buttonsTop);
+  const stripHeight =
+    [SOUND_STRIP_HEIGHT, SOUND_STRIP_COMPACT_HEIGHT].find((height) => below - height >= MENU_ROOM_NEEDED) ?? 0;
+  const stripTop = buttonsTop + below - stripHeight;
   return {
     mapView: { x: panelWidth, y: 0, width: screen.width - panelWidth, height: screen.height },
     panel,
     minimap,
     buttons: { x: panel.x, y: buttonsTop, width: panelWidth, height: stripTop - buttonsTop },
-    soundStrip: { x: panel.x, y: stripTop, width: panelWidth, height: Math.max(0, screen.height - stripTop) },
+    soundStrip: { x: panel.x, y: stripTop, width: panelWidth, height: stripHeight },
   };
 }
 

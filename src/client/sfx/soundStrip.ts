@@ -1,4 +1,4 @@
-import { contains, type Rect } from "../layout";
+import { contains, type Rect, SOUND_STRIP_COMPACT_HEIGHT, SOUND_STRIP_HEIGHT } from "../layout";
 import { type Channel, CHANNELS, type MixerAction } from "./mixer";
 
 // The sound settings strip at the bottom of the side panel: where its
@@ -18,6 +18,15 @@ const CONTROL_GAP = 5;
 const LABEL_WIDTH = 52;
 const MUTE_ALL_HEIGHT = 22;
 
+/**
+ * How much of the strip an area has room for: the layout hands out a full
+ * one, one just tall enough for the mute-all button, or none (layout.ts).
+ */
+export function stripSize(area: Rect): "full" | "muteAllOnly" | "none" {
+  if (area.height >= SOUND_STRIP_HEIGHT) return "full";
+  return area.height >= SOUND_STRIP_COMPACT_HEIGHT ? "muteAllOnly" : "none";
+}
+
 const LABELS: Record<Channel, string> = { effects: "Effects", music: "Music", alerts: "Alerts" };
 
 export interface StripRow {
@@ -32,7 +41,9 @@ export interface StripRow {
   readonly mute: Rect;
 }
 
+/** A row per channel; none on a strip cut down for a short window. */
 export function soundStripRows(area: Rect): StripRow[] {
+  if (stripSize(area) !== "full") return [];
   const left = area.x + MARGIN;
   const right = area.x + area.width - MARGIN;
   return CHANNELS.map((channel, i) => {
@@ -54,11 +65,20 @@ export function soundStripRows(area: Rect): StripRow[] {
   });
 }
 
-/** Mute-all, under the rows; it carries the M key's hint, so the key needs no remembering. */
-export function muteAllButton(area: Rect): Rect {
+/**
+ * Mute-all, under the rows, or alone in the middle of a cut-down strip; null
+ * when there is no strip. It carries the M key's hint, so the key needs no
+ * remembering.
+ */
+export function muteAllButton(area: Rect): Rect | null {
+  const size = stripSize(area);
+  if (size === "none") return null;
   return {
     x: area.x + MARGIN,
-    y: area.y + STRIP_HEADER + CHANNELS.length * (ROW_HEIGHT + ROW_GAP) + 2,
+    y:
+      size === "full"
+        ? area.y + STRIP_HEADER + CHANNELS.length * (ROW_HEIGHT + ROW_GAP) + 2
+        : area.y + Math.floor((area.height - MUTE_ALL_HEIGHT) / 2),
     width: Math.max(0, area.width - MARGIN * 2),
     height: MUTE_ALL_HEIGHT,
   };
@@ -71,5 +91,6 @@ export function soundStripAction(area: Rect, x: number, y: number): MixerAction 
     if (contains(row.up, x, y)) return { type: "volume", channel: row.channel, step: 1 };
     if (contains(row.mute, x, y)) return { type: "mute", channel: row.channel };
   }
-  return contains(muteAllButton(area), x, y) ? { type: "muteAll" } : null;
+  const all = muteAllButton(area);
+  return all && contains(all, x, y) ? { type: "muteAll" } : null;
 }

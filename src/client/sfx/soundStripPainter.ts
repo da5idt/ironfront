@@ -12,21 +12,26 @@ import {
   VOLUME_ON,
 } from "../palette";
 import { type MixerSettings, VOLUME_MAX, VOLUME_STEP } from "./mixer";
-import { muteAllButton, soundStripRows, STRIP_HEADER } from "./soundStrip";
+import { muteAllButton, soundStripRows, STRIP_HEADER, stripSize } from "./soundStrip";
 
 // Draws the sound strip from the same pure functions main.ts hit-tests with.
 
 export function drawSoundStrip(ctx: CanvasRenderingContext2D, settings: MixerSettings, area: Rect): void {
+  const size = stripSize(area);
+  const all = muteAllButton(area);
+  if (size === "none" || !all) return;
   // Its own ground, so the strip reads as one block whatever was drawn before it; the panel's edge line on the right is left alone.
   ctx.fillStyle = PANEL_BG;
   ctx.fillRect(area.x, area.y, area.width - 1, area.height);
   ctx.fillStyle = PANEL_EDGE;
   ctx.fillRect(area.x, area.y, area.width - 1, 1);
   ctx.textBaseline = "middle";
-  ctx.font = "bold 13px system-ui, sans-serif";
-  ctx.fillStyle = HUD_TEXT;
-  ctx.textAlign = "left";
-  ctx.fillText("Sound", area.x + 10, area.y + STRIP_HEADER / 2 + 1);
+  if (size === "full") {
+    ctx.font = "bold 13px system-ui, sans-serif";
+    ctx.fillStyle = HUD_TEXT;
+    ctx.textAlign = "left";
+    ctx.fillText("Sound", area.x + 10, area.y + STRIP_HEADER / 2 + 1);
+  }
 
   for (const row of soundStripRows(area)) {
     const { volume, muted } = settings.channels[row.channel];
@@ -69,7 +74,6 @@ export function drawSoundStrip(ctx: CanvasRenderingContext2D, settings: MixerSet
     drawSpeaker(ctx, row.mute, muted);
   }
 
-  const all = muteAllButton(area);
   drawButton(ctx, all);
   if (settings.muteAll) {
     ctx.strokeStyle = SOUND_MUTED;

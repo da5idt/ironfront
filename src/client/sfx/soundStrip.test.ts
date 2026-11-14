@@ -24,7 +24,7 @@ describe("sound strip layout", () => {
       expect(row.level.x + row.level.width).toBeLessThanOrEqual(row.up.x);
       expect(row.up.x + row.up.width).toBeLessThanOrEqual(row.mute.x);
     }
-    expect(inside(area, muteAllButton(area))).toBe(true);
+    expect(inside(area, muteAllButton(area)!)).toBe(true);
   });
 });
 
@@ -43,7 +43,7 @@ describe("sound strip clicks", () => {
   });
 
   it("mutes everything from the mute-all button", () => {
-    expect(at(muteAllButton(area))).toEqual({ type: "muteAll" });
+    expect(at(muteAllButton(area)!)).toEqual({ type: "muteAll" });
   });
 
   it("does nothing between the controls", () => {
@@ -68,6 +68,24 @@ describe("the sound strip in the layout", () => {
   it("never rises above the minimap on a short screen", () => {
     const l = computeLayout({ width: 1280, height: 260 });
     expect(l.soundStrip.y).toBeGreaterThanOrEqual(l.minimap.y + l.minimap.height);
-    expect(l.buttons.height).toBe(0);
+  });
+});
+
+describe("the sound strip on a window too short for all of it", () => {
+  it("is only the mute-all button, whole and clickable, with no channel rows", () => {
+    const strip = computeLayout({ width: 1280, height: 500 }).soundStrip;
+    expect(soundStripRows(strip)).toEqual([]);
+    const all = muteAllButton(strip)!;
+    expect(inside(strip, all)).toBe(true);
+    const p = middle(all);
+    expect(soundStripAction(strip, p.x, p.y)).toEqual({ type: "muteAll" });
+  });
+
+  it("has nothing to draw or click once it is gone", () => {
+    const strip = computeLayout({ width: 1280, height: 430 }).soundStrip;
+    expect(strip.height).toBe(0);
+    expect(soundStripRows(strip)).toEqual([]);
+    expect(muteAllButton(strip)).toBeNull();
+    expect(soundStripAction(strip, strip.x + 20, strip.y)).toBeNull();
   });
 });

@@ -78,23 +78,29 @@ export interface MenuButtonParts {
   readonly wellWidth: number;
   /** Middle of the name's line. */
   readonly nameY: number;
-  /** Top of the key's badge. */
-  readonly keyY: number;
-  /** Middle of the cost's line, level with the badge. */
-  readonly costY: number;
+  /** Top of the key's badge; null on a button with no room for it whole. */
+  readonly keyY: number | null;
+  /** Middle of the cost's line, level with the badge; null with it. */
+  readonly costY: number | null;
   /** Middle of each line of hint there is room for: two, one or none. */
   readonly hintYs: readonly number[];
-  /** Top of the progress bar. */
-  readonly barY: number;
+  /** Top of the progress bar; null on a button where it would run across the key and cost. */
+  readonly barY: number | null;
 }
 
 /** The least height that still has a line for the hint between the cost and the bar. */
 const HINT_NEEDS = 52;
+/** The least height with the bar clear below the key's badge: what the layout holds the buttons to while it can. */
+const BAR_NEEDS = 42;
+/** The least height that holds the key's badge whole. */
+const KEY_NEEDS = 36;
 
 /**
  * A full-size button has two lines of hint under the cost. A shorter one, on
  * a short window, packs its rows closer and keeps one line; its well shrinks
- * to stay square, which gives that one line more width.
+ * to stay square, which gives that one line more width. Shorter still it
+ * loses the hint, then the bar, then the key and cost: each part is shown
+ * whole or not at all, and the name goes last.
  */
 export function menuButtonParts(height: number): MenuButtonParts {
   if (height >= BUILD_BUTTON_HEIGHT) {
@@ -103,10 +109,10 @@ export function menuButtonParts(height: number): MenuButtonParts {
   return {
     wellWidth: Math.max(0, Math.min(WELL, height - WELL_INSET * 2)),
     nameY: 10,
-    keyY: 18,
-    costY: 18 + KEY_BADGE / 2,
+    keyY: height >= KEY_NEEDS ? 18 : null,
+    costY: height >= KEY_NEEDS ? 18 + KEY_BADGE / 2 : null,
     hintYs: height >= HINT_NEEDS ? [41] : [],
-    barY: height - 6,
+    barY: height >= BAR_NEEDS ? height - 6 : null,
   };
 }
 
@@ -160,12 +166,14 @@ export function drawMenuButton(ctx: CanvasRenderingContext2D, rect: Rect, button
   ctx.textAlign = "left";
   ctx.fillText(button.name, textX, rect.y + parts.nameY, textW);
   // The key number sits beside the cost: the name needs the whole line next to the picture.
-  const key = buttonKeyLabel(button.index);
-  if (key !== null) drawKeyBadgeAt(ctx, key, textX, rect.y + parts.keyY);
-  ctx.fillStyle = greyed ? BUTTON_DISABLED_TEXT : BUTTON_COST;
-  ctx.font = "bold 13px system-ui, sans-serif";
-  ctx.textAlign = "left";
-  ctx.fillText(`${button.cost}`, key === null ? textX : textX + KEY_BADGE + 6, rect.y + parts.costY);
+  const key = parts.keyY === null ? null : buttonKeyLabel(button.index);
+  if (key !== null && parts.keyY !== null) drawKeyBadgeAt(ctx, key, textX, rect.y + parts.keyY);
+  if (parts.costY !== null) {
+    ctx.fillStyle = greyed ? BUTTON_DISABLED_TEXT : BUTTON_COST;
+    ctx.font = "bold 13px system-ui, sans-serif";
+    ctx.textAlign = "left";
+    ctx.fillText(`${button.cost}`, key === null ? textX : textX + KEY_BADGE + 6, rect.y + parts.costY);
+  }
   ctx.fillStyle = greyed ? BUTTON_DISABLED_TEXT : HUD_TEXT;
   ctx.font = "11px system-ui, sans-serif";
   // With fewer lines than hints, the hints run on in the last line, squeezed to its width.
@@ -175,7 +183,7 @@ export function drawMenuButton(ctx: CanvasRenderingContext2D, rect: Rect, button
       ? [...button.hints.slice(0, lines - 1), button.hints.slice(lines - 1).join(" ")]
       : button.hints.slice(0, lines);
   for (const [line, text] of hints.entries()) ctx.fillText(text, textX, rect.y + parts.hintYs[line]!, textW);
-  if (button.bar) {
+  if (button.bar && parts.barY !== null) {
     const bar = { x: textX, y: rect.y + parts.barY, width: textW, height: 4 };
     ctx.fillStyle = BUTTON_WELL;
     ctx.fillRect(bar.x, bar.y, bar.width, bar.height);

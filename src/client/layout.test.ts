@@ -1,6 +1,16 @@
 import { describe, expect, it } from "vitest";
 import { BUILD_BUTTON_HEIGHT, BUTTON_MARGIN, buildButtons } from "./buildPanel";
-import { computeLayout, contains, EDGE_PX, edgeScroll, PANEL_EDGE_SCROLL_PX, PANEL_WIDTH, toMapView } from "./layout";
+import {
+  computeLayout,
+  contains,
+  EDGE_PX,
+  edgeScroll,
+  PANEL_EDGE_SCROLL_PX,
+  PANEL_WIDTH,
+  SOUND_STRIP_COMPACT_HEIGHT,
+  SOUND_STRIP_HEIGHT,
+  toMapView,
+} from "./layout";
 import { trainButtons } from "./trainPanel";
 
 describe("the side panel on a short window", () => {
@@ -40,6 +50,44 @@ describe("the side panel on a short window", () => {
     // Name, key with cost and one line of hint take about 50 pixels.
     expect(heightAt(657)).toBeGreaterThanOrEqual(60);
     expect(heightAt(600)).toBeGreaterThanOrEqual(50);
+  });
+
+  it("gives up the sound strip, in two steps, before the buttons get too small to use", () => {
+    // 42 pixels is a button with its name, its key and cost, and its progress bar clear of each other.
+    const at = (height: number) => {
+      const l = computeLayout({ width: 1024, height });
+      return { strip: l.soundStrip.height, button: buildButtons(l.buttons)[0]!.rect.height };
+    };
+    // The whole strip while the buttons keep their least height beside it...
+    for (const height of [800, 600, 560, 548]) {
+      expect(at(height).strip, `window height ${height}`).toBe(SOUND_STRIP_HEIGHT);
+      expect(at(height).button, `window height ${height}`).toBeGreaterThanOrEqual(42);
+    }
+    // ...then only its mute-all button...
+    for (const height of [547, 520, 480, 454]) {
+      expect(at(height).strip, `window height ${height}`).toBe(SOUND_STRIP_COMPACT_HEIGHT);
+      expect(at(height).button, `window height ${height}`).toBeGreaterThanOrEqual(42);
+    }
+    // ...then none of it (the M key still mutes).
+    for (const height of [453, 440, 420]) {
+      expect(at(height).strip, `window height ${height}`).toBe(0);
+      expect(at(height).button, `window height ${height}`).toBeGreaterThanOrEqual(42);
+    }
+  });
+
+  it("keeps the minimap, the buttons and the sound strip inside the window and off each other at any height", () => {
+    for (let height = 0; height <= 900; height += 7) {
+      const l = computeLayout({ width: 1024, height });
+      const rects = buildButtons(l.buttons).map((b) => b.rect);
+      expect(l.buttons.y, `window height ${height}`).toBeGreaterThanOrEqual(l.minimap.y + l.minimap.height);
+      expect(l.buttons.height, `window height ${height}`).toBeGreaterThanOrEqual(0);
+      expect(rects[3]!.y + rects[3]!.height, `window height ${height}`).toBeLessThanOrEqual(l.soundStrip.y);
+      expect(l.soundStrip.y, `window height ${height}`).toBe(l.buttons.y + l.buttons.height);
+      // A strip that shows at all shows whole: it never hangs off the bottom of the window.
+      if (l.soundStrip.height > 0) {
+        expect(l.soundStrip.y + l.soundStrip.height, `window height ${height}`).toBe(height);
+      }
+    }
   });
 
   it("sizes the train buttons like the build buttons", () => {
