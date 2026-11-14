@@ -25,6 +25,8 @@ describe("art palette", () => {
     const ramps: (readonly string[])[] = [ART.concrete, ART.fire, ART.smoke, ART.shore.sand];
     for (const t of Object.values(ART.team)) ramps.push([t.dark, t.mid, t.light]);
     ramps.push([ART.glass.dark, ART.glass.mid, ART.glass.light]);
+    for (const r of [ART.khaki, ART.sandbag, ART.tank]) ramps.push([r.dark, r.mid, r.light]);
+    ramps.push(ART.packedEarth);
     ramps.push([ART.ore.shadow, ART.ore.dark, ART.ore.mid, ART.ore.light]);
     for (const ramp of ramps) {
       for (let i = 1; i < ramp.length; i++) expect(luma(ramp[i]!), ramp.join()).toBeGreaterThan(luma(ramp[i - 1]!));

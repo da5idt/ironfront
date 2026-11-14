@@ -5,7 +5,10 @@ import { contains, type Rect } from "./layout";
 // is in and what a click on one means. Pure, so the rules are unit tested;
 // the renderer draws from the same functions and main.ts acts on the result.
 
+/** A button with text only: the train buttons, until they get pictures. */
 export const BUTTON_HEIGHT = 44;
+/** A build button: tall enough for a 3 by 3 Cell Building's picture at twice its art size. */
+export const BUILD_BUTTON_HEIGHT = 80;
 export const BUTTON_GAP = 6;
 export const BUTTON_MARGIN = 10;
 /** Room above the buttons for the panel's heading. */
@@ -32,9 +35,9 @@ export function buildButtons(area: Rect): BuildButton[] {
     kind,
     rect: {
       x: area.x + BUTTON_MARGIN,
-      y: area.y + BUTTONS_HEADER + i * (BUTTON_HEIGHT + BUTTON_GAP),
+      y: area.y + BUTTONS_HEADER + i * (BUILD_BUTTON_HEIGHT + BUTTON_GAP),
       width: Math.max(0, area.width - BUTTON_MARGIN * 2),
-      height: BUTTON_HEIGHT,
+      height: BUILD_BUTTON_HEIGHT,
     },
   }));
 }
@@ -50,6 +53,16 @@ export function buttonState(view: PanelView, kind: BuildingKind): ButtonState {
     return p.ready ? "ready" : "building";
   }
   return view.credits >= BUILDING_STATS[kind].cost ? "available" : "unaffordable";
+}
+
+/**
+ * What the button shows: its state, or "placing" on the finished Building's
+ * button while the person is picking its spot, so placing mode shows even
+ * with the mouse still over the panel.
+ */
+export function buttonLook(view: PanelView, kind: BuildingKind, placing: BuildingKind | null): ButtonState | "placing" {
+  const state = buttonState(view, kind);
+  return state === "ready" && placing === kind ? "placing" : state;
 }
 
 /** Left-click starts or places; clicking the one in progress, or right-clicking it, cancels. */

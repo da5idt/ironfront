@@ -30,6 +30,8 @@ export const ART = {
   fog: "#05070b",
   /** Concrete and metal for Buildings, darkest first. */
   concrete: ["#14161a", "#2b2f35", "#3e434a", "#5b6168", "#7b828a", "#9aa1a9", "#c4cad1"],
+  /** The brightest glint on bare metal, such as the lit side of the radar dish. */
+  steelShine: "#eef1f4",
   team: {
     0: { dark: "#1d4a80", mid: "#3b82d6", light: "#a7cdf5" },
     1: { dark: "#7f2a1b", mid: "#d6543b", light: "#f5b5a7" },
@@ -39,6 +41,20 @@ export const ART = {
   fire: ["#b8381a", "#f07a24", "#ffc040", "#fffbe0"],
   smoke: ["#262320", "#3a342c", "#5a544c", "#8a847a"],
   scorch: "#14100a",
+  /** Khaki canvas and timber: the Barracks' roofs and crates. */
+  khaki: { dark: "#6b5d40", mid: "#9b8a66", light: "#c2b088" },
+  sandbag: { dark: "#5e5a40", mid: "#a39a70", light: "#d2ca9c" },
+  /** Painted copper-brown steel: the Refinery's tank. */
+  tank: { dark: "#6a4426", mid: "#a8703a", light: "#e0aa62" },
+  packedEarth: ["#55472d", "#625337", "#706042"],
+  hazard: { yellow: "#e8b820", black: "#1c1a14" },
+  /** Small lights on Buildings, lit and unlit. */
+  lamp: { redOn: "#ff5040", redOff: "#4a1812", amberOn: "#ffb030", amberOff: "#4a3410", flood: "#ffe9a0" },
+  weldSpark: "#d8f4ff",
+  /** The placement preview's wash: green where the Building fits, red where it does not. */
+  placing: { fits: "#5fd35f", blocked: "#e04a3a" },
+  /** Pixel-style selection brackets and health bars. */
+  marker: { selection: "#f4f4a0", healthBack: "#0a0c0e", healthGood: "#5fd35f", healthLow: "#e04a3a" },
   /** Minimap and frame trims around the Map view. */
   frame: { dark: "#0c0e12", mid: "#3a414c", light: "#6b7480" },
 } as const satisfies {

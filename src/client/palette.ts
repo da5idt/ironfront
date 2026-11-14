@@ -27,10 +27,7 @@ export const TEAM_COLOURS: Record<PlayerId, { fill: string; dark: string; light:
   1: { fill: ART.team[1].mid, dark: ART.team[1].dark, light: ART.team[1].light },
 };
 
-export const SELECTION_MARKER = "#f4f4a0";
-export const HEALTH_BACK = "rgba(0, 0, 0, 0.7)";
-export const HEALTH_GOOD = "#5fd35f";
-export const HEALTH_LOW = "#e04a3a";
+export const SELECTION_MARKER = ART.marker.selection;
 export const MOVE_MARKER = "#8ef08e";
 export const RALLY_LINE = "rgba(244, 244, 160, 0.7)";
 export const RALLY_FLAG = "#f0c040";
@@ -48,8 +45,12 @@ export const BUTTON_READY = "rgba(95, 211, 95, 0.4)";
 export const BUTTON_DISABLED_TEXT = "#6b717b";
 /** The key number badge on a button. */
 export const BUTTON_KEY_BG = "#3a414c";
-export const PLACE_VALID = "rgba(95, 211, 95, 0.45)";
-export const PLACE_INVALID = "rgba(224, 74, 58, 0.5)";
+/** The dark well a button's picture sits in. */
+export const BUTTON_WELL = "#0d1014";
+export const BUTTON_COST = "#f0c040";
+export const BUTTON_READY_EDGE = "#5fd35f";
+/** The frame round the button of the Building being placed. */
+export const BUTTON_PLACING_EDGE = "#f4f4a0";
 
 export const PANEL_BG = "#15181e";
 export const PANEL_EDGE = "#2c323c";

@@ -1,7 +1,5 @@
 import {
-  BUILDING_STATS,
   type BuildingKind,
-  type BuildingView,
   type CellPos,
   ECONOMY,
   type EntityId,
@@ -9,7 +7,11 @@ import {
   type ShotView,
   type UnitView,
 } from "../sim";
+import { BuildingPainter } from "./art/buildingPainter";
+import { type BuildUps, noteBuildings } from "./art/buildUp";
+import { drawBrackets, drawHealthBar, HEALTH_BAR_PX } from "./art/markerPainter";
 import { PixelWorld } from "./art/pixelWorld";
+import { ART_CELL_PX } from "./art/terrainArt";
 import { drawBuildPanel } from "./buildPanelPainter";
 import { type Camera, CELL_PX, mapToScreen, type Size } from "./camera";
 import type { Layout, Rect } from "./layout";
@@ -19,35 +21,25 @@ import { drawScreenOverlay } from "./screenOverlayPainter";
 import {
   DRAG_BOX_FILL,
   DRAG_BOX_LINE,
-  HEALTH_BACK,
-  HEALTH_GOOD,
-  HEALTH_LOW,
   HUD_BG,
   HUD_TEXT,
   MOVE_MARKER,
   PANEL_BG,
   PANEL_EDGE,
-  PLACE_INVALID,
-  PLACE_VALID,
   ORE_COLOUR,
-  SELECTION_MARKER,
   SHOT_TRACER,
   TEAM_COLOURS,
 } from "./palette";
-import { drawSelectedBuilding } from "./selectedBuildingPainter";
+import { drawRallyPoint } from "./selectedBuildingPainter";
 import type { Selection } from "./selection";
 import { trainerOf } from "./trainPanel";
 import { drawTrainPanel } from "./trainPanelPainter";
 
 // Draws a PlayerView. It only reads; it never changes the Match (ADR 0002).
 
-const BUILDING_LABELS: Record<BuildingKind, string> = {
-  hq: "HQ",
-  refinery: "REF",
-  barracks: "BAR",
-  vehicleFactory: "VF",
-  turret: "T",
-};
+/** Side of the bracket square round a selected Unit, and the width of a Unit's health bar, in art pixels. */
+const UNIT_BRACKET_PX = 16;
+const UNIT_HEALTH_PX = 12;
 
 /** Client-only things to draw on top of the Match. */
 export interface Overlay {
@@ -58,6 +50,8 @@ export interface Overlay {
   readonly moveMarker: { readonly cell: CellPos; readonly age: number } | null;
   /** The footprint preview while placing a finished Building. */
   readonly placement: { readonly kind: BuildingKind; readonly at: CellPos; readonly valid: boolean } | null;
+  /** The finished Building the person is placing, wherever the mouse is; its button shows it. */
+  readonly placing: BuildingKind | null;
   /** The Victory, defeat or Paused screen over everything, if one shows. */
   readonly screen: ScreenOverlay | null;
   /** The selected own Building, if any; a Barracks or Vehicle Factory turns the side panel into its train buttons. */
@@ -68,6 +62,10 @@ export class Renderer {
   private readonly ctx: CanvasRenderingContext2D;
   private readonly world = new PixelWorld();
   private readonly minimap = new MinimapPainter();
+  private readonly buildings = new BuildingPainter();
+  /** Which own Buildings are newly placed and still rising; client-only (ADR 0002). */
+  private buildUps: BuildUps | null = null;
+  private buildUpsFor: PlayerView | null = null;
 
   constructor(private readonly canvas: HTMLCanvasElement) {
     const ctx = canvas.getContext("2d");
@@ -93,18 +91,28 @@ export class Renderer {
     ctx.translate(mapView.x, mapView.y);
     // The origin is already at the Map view's corner, so the pixel world draws into a rect at 0,0.
     const viewRect = { x: 0, y: 0, width: mapView.width, height: mapView.height };
-    // Ground and fog are pixel art at half resolution (ADR 0003); Buildings and Units are still drawn at full resolution between them.
-    this.world.drawGround(ctx, view, cam, viewRect, alpha);
-    for (const b of view.buildings) this.drawBuilding(b, cam);
+    if (view !== this.buildUpsFor) {
+      this.buildUps = noteBuildings(this.buildUps, view);
+      this.buildUpsFor = view;
+    }
+    const ups = this.buildUps!;
+    // Game time, so idle animation and smoke stop while paused.
+    const time = view.tick + alpha;
+    // The pixel world (ADR 0003): ground, then Buildings on it, at half resolution.
+    this.world.drawGround(ctx, view, cam, viewRect, alpha, (art) => this.buildings.draw(art, view.buildings, time, ups));
     // After the ground and Buildings, so remembered Buildings sit dimmed under it;
     // before Units, which are only ever listed where the Player can see.
     this.world.drawFog(ctx, view, cam, viewRect);
     const selectedBuilding = view.buildings.find((b) => b.id === overlay.selectedBuilding);
-    if (selectedBuilding) drawSelectedBuilding(ctx, selectedBuilding, cam);
+    if (selectedBuilding) drawRallyPoint(ctx, selectedBuilding, cam);
     if (overlay.moveMarker) this.drawMoveMarker(overlay.moveMarker.cell, overlay.moveMarker.age, cam);
-    for (const u of view.units) this.drawUnit(u, cam, alpha, overlay.selection.has(u.id));
+    for (const u of view.units) this.drawUnit(u, cam, alpha);
     for (const s of view.shots) this.drawShot(s, cam, alpha);
-    if (overlay.placement) this.drawPlacement(overlay.placement, cam);
+    // The pixel world's layer over the fog. Unit sprites and effects (tickets #21, #22) belong at the start of it.
+    this.world.drawAboveFog(ctx, cam, viewRect, (art) => {
+      this.drawMarkers(art, view, alpha, overlay);
+      if (overlay.placement) this.buildings.drawPlacing(art, overlay.placement, view.playerId);
+    });
     if (overlay.dragBox) this.drawDragBox(overlay.dragBox.a, overlay.dragBox.b);
     this.drawHud(view, mapView);
     ctx.restore();
@@ -113,20 +121,33 @@ export class Renderer {
     this.minimap.draw(ctx, view, layout.minimap, cam, mapView, alpha);
     const trainer = trainerOf(view.buildings, overlay.selectedBuilding);
     if (trainer) drawTrainPanel(ctx, view.credits, trainer, layout.buttons);
-    else drawBuildPanel(ctx, view, layout.buttons);
+    else drawBuildPanel(ctx, view, layout.buttons, overlay.placing, (kind) => this.buildings.icon(kind, view.playerId));
     if (overlay.screen) drawScreenOverlay(ctx, overlay.screen, screen);
   }
 
-  /** The footprint, tinted green where the Building may go and red where it may not. */
-  private drawPlacement(p: NonNullable<Overlay["placement"]>, cam: Camera): void {
-    const { ctx } = this;
-    const { width, height } = BUILDING_STATS[p.kind];
-    const s = mapToScreen(cam, p.at.x, p.at.y);
-    ctx.fillStyle = p.valid ? PLACE_VALID : PLACE_INVALID;
-    ctx.fillRect(s.x, s.y, width * CELL_PX, height * CELL_PX);
-    ctx.strokeStyle = HUD_TEXT;
-    ctx.lineWidth = 1;
-    ctx.strokeRect(s.x + 0.5, s.y + 0.5, width * CELL_PX - 1, height * CELL_PX - 1);
+  /** Selection brackets and health bars, in art pixels, over everything on the Map. */
+  private drawMarkers(art: CanvasRenderingContext2D, view: PlayerView, alpha: number, overlay: Overlay): void {
+    const U = ART_CELL_PX;
+    for (const b of view.buildings) {
+      const selected = b.id === overlay.selectedBuilding;
+      const x = b.x * U;
+      const y = b.y * U;
+      if (selected) drawBrackets(art, x - 1, y - 1, b.width * U + 2, b.height * U + 2, 4);
+      // Damaged Buildings always show their health; a remembered one's is only as last seen, so it shows none.
+      if (selected || (b.hp < b.maxHp && !b.remembered)) {
+        drawHealthBar(art, x + 1, y - HEALTH_BAR_PX - 2, b.width * U - 2, b.hp / b.maxHp);
+      }
+    }
+    for (const u of view.units) {
+      const selected = overlay.selection.has(u.id);
+      if (!selected && u.hp >= u.maxHp) continue;
+      const cx = Math.round((u.prevX + (u.x - u.prevX) * alpha) * U);
+      const cy = Math.round((u.prevY + (u.y - u.prevY) * alpha) * U);
+      const half = UNIT_BRACKET_PX / 2;
+      if (selected) drawBrackets(art, cx - half, cy - half, UNIT_BRACKET_PX, UNIT_BRACKET_PX, 3);
+      // Damaged Units always show their health, so a fight reads without selecting anything.
+      drawHealthBar(art, cx - UNIT_HEALTH_PX / 2, cy - half - HEALTH_BAR_PX + 1, UNIT_HEALTH_PX, u.hp / u.maxHp);
+    }
   }
 
   private drawPanel(panel: Rect): void {
@@ -138,38 +159,12 @@ export class Renderer {
     ctx.fillRect(panel.x + panel.width - 1, panel.y, 1, panel.height);
   }
 
-  private drawBuilding(b: BuildingView, cam: Camera): void {
-    const { ctx } = this;
-    const team = TEAM_COLOURS[b.owner];
-    const p = mapToScreen(cam, b.x, b.y);
-    const w = b.width * CELL_PX;
-    const h = b.height * CELL_PX;
-    const inset = 2;
-    ctx.fillStyle = team.dark;
-    ctx.fillRect(p.x + inset, p.y + inset, w - inset * 2, h - inset * 2);
-    ctx.fillStyle = team.fill;
-    ctx.fillRect(p.x + inset + 3, p.y + inset + 3, w - inset * 2 - 6, h - inset * 2 - 6);
-    if (b.kind === "turret") {
-      ctx.fillStyle = team.dark;
-      ctx.beginPath();
-      ctx.arc(p.x + w / 2, p.y + h / 2, CELL_PX * 0.28, 0, Math.PI * 2);
-      ctx.fill();
-    } else {
-      ctx.fillStyle = team.light;
-      ctx.font = `bold ${Math.min(14, h / 3)}px system-ui, sans-serif`;
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      ctx.fillText(BUILDING_LABELS[b.kind], p.x + w / 2, p.y + h / 2);
-    }
-  }
-
-  private drawUnit(u: UnitView, cam: Camera, alpha: number, selected: boolean): void {
+  private drawUnit(u: UnitView, cam: Camera, alpha: number): void {
     const { ctx } = this;
     const team = TEAM_COLOURS[u.owner];
     const mx = u.prevX + (u.x - u.prevX) * alpha;
     const my = u.prevY + (u.y - u.prevY) * alpha;
     const p = mapToScreen(cam, mx, my);
-    if (selected) this.drawSelectionMarker(p);
     ctx.lineWidth = 2;
     ctx.strokeStyle = team.dark;
     ctx.fillStyle = team.fill;
@@ -203,8 +198,6 @@ export class Renderer {
       ctx.fillStyle = ORE_COLOUR;
       ctx.fillRect(p.x - size / 2, p.y + size / 2 - filled, size, filled);
     }
-    // Damaged Units always show their health, so a fight reads without selecting anything.
-    if (selected || u.hp < u.maxHp) this.drawHealthBar(p, u.hp / u.maxHp);
   }
 
   /** A short bright line per shot, fading out before the next Tick. */
@@ -224,40 +217,6 @@ export class Renderer {
     ctx.arc(b.x, b.y, 3, 0, Math.PI * 2);
     ctx.fill();
     ctx.globalAlpha = 1;
-  }
-
-  /** Corner brackets around the Unit, so the selection reads even in a crowd. */
-  private drawSelectionMarker(p: { x: number; y: number }): void {
-    const { ctx } = this;
-    const h = CELL_PX * 0.5;
-    const arm = CELL_PX * 0.2;
-    ctx.strokeStyle = SELECTION_MARKER;
-    ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    for (const [sx, sy] of [
-      [-1, -1],
-      [1, -1],
-      [-1, 1],
-      [1, 1],
-    ] as const) {
-      const cx = p.x + sx * h;
-      const cy = p.y + sy * h;
-      ctx.moveTo(cx - sx * arm, cy);
-      ctx.lineTo(cx, cy);
-      ctx.lineTo(cx, cy - sy * arm);
-    }
-    ctx.stroke();
-  }
-
-  private drawHealthBar(p: { x: number; y: number }, share: number): void {
-    const { ctx } = this;
-    const w = CELL_PX * 0.9;
-    const x = p.x - w / 2;
-    const y = p.y - CELL_PX * 0.5 - 6;
-    ctx.fillStyle = HEALTH_BACK;
-    ctx.fillRect(x - 1, y - 1, w + 2, 5);
-    ctx.fillStyle = share > 0.35 ? HEALTH_GOOD : HEALTH_LOW;
-    ctx.fillRect(x, y, w * Math.max(0, Math.min(1, share)), 3);
   }
 
   private drawMoveMarker(cell: CellPos, age: number, cam: Camera): void {

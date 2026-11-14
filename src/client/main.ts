@@ -366,6 +366,7 @@ function frame(now: number): void {
       drag && isDrag(drag.start, drag.now) ? { a: toMapView(layout, drag.start), b: toMapView(layout, drag.now) } : null,
     moveMarker: moveMarker ? { cell: moveMarker.cell, age: Math.max(0, markerAge) } : null,
     placement: placementPreview(),
+    placing,
     selectedBuilding,
     screen: currentScreenOverlay(),
   });

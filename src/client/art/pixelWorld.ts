@@ -9,11 +9,12 @@ import { type PixelBuffer, rgbOf } from "./pixelBuffer";
 import { ART_CELL_PX, paintTerrain } from "./terrainArt";
 import { waterGlints } from "./waterArt";
 
-// The pixel world (ADR 0003): ground and Ore are drawn into a low-resolution
-// canvas at 12 art pixels per Cell, then copied to the screen at 2x with
-// smoothing off, so a Cell stays 24 screen pixels (camera CELL_PX) and all
-// camera and click maths is unchanged. Fog of War is kept at the same art
-// resolution and scaled the same way.
+// The pixel world (ADR 0003): ground, Ore and whatever stands on the ground
+// are drawn into a low-resolution canvas at 12 art pixels per Cell, then
+// copied to the screen at 2x with smoothing off, so a Cell stays 24 screen
+// pixels (camera CELL_PX) and all camera and click maths is unchanged. Fog of
+// War is kept at the same art resolution and scaled the same way, and a second
+// low-resolution layer goes over the fog for what is never dimmed by it.
 
 /** Screen pixels per art pixel. */
 export const ART_SCALE = 2;
@@ -26,9 +27,19 @@ export function toCanvas(buf: PixelBuffer): HTMLCanvasElement {
   return canvas;
 }
 
+/**
+ * Paints sprites into a layer of the pixel world. The context it gets counts
+ * in art pixels from the Map's top-left corner, so the Cell at cx, cy starts
+ * at cx * ART_CELL_PX, cy * ART_CELL_PX whatever the camera shows.
+ */
+export type ArtLayer = (art: CanvasRenderingContext2D) => void;
+
 export class PixelWorld {
   private readonly lowRes = document.createElement("canvas");
   private readonly lowCtx: CanvasRenderingContext2D;
+  /** The layer above the fog; clear wherever nothing is painted. */
+  private readonly over = document.createElement("canvas");
+  private readonly overCtx: CanvasRenderingContext2D;
   /** Terrain never changes, so it is painted once for the whole Map. */
   private terrain: HTMLCanvasElement | null = null;
   private isWater: Uint8Array | null = null;
@@ -43,25 +54,71 @@ export class PixelWorld {
 
   constructor() {
     this.lowCtx = this.lowRes.getContext("2d")!;
+    this.overCtx = this.over.getContext("2d")!;
   }
 
-  /** Terrain, Ore and water shimmer for the part of the Map the camera sees, into `dest` on screen. */
-  drawGround(ctx: CanvasRenderingContext2D, view: PlayerView, cam: Camera, dest: Rect, alpha: number): void {
+  /** Sizes a low-resolution canvas to cover `dest`; returns the art pixel of the Map at its top-left corner. */
+  private fit(canvas: HTMLCanvasElement, cam: Camera, dest: Rect): { ox: number; oy: number } {
+    const lw = Math.ceil(dest.width / ART_SCALE) + 1;
+    const lh = Math.ceil(dest.height / ART_SCALE) + 1;
+    if (canvas.width !== lw || canvas.height !== lh) {
+      canvas.width = lw;
+      canvas.height = lh;
+    }
+    // Whole art pixels for the low-res canvas; the leftover screen pixel goes into the copy to the screen.
+    return { ox: Math.floor(cam.x / ART_SCALE), oy: Math.floor(cam.y / ART_SCALE) };
+  }
+
+  /** Copies a low-resolution canvas to the screen at 2x, crisp. */
+  private present(
+    ctx: CanvasRenderingContext2D,
+    canvas: HTMLCanvasElement,
+    cam: Camera,
+    dest: Rect,
+    origin: { ox: number; oy: number },
+  ): void {
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(
+      canvas,
+      dest.x - (cam.x - origin.ox * ART_SCALE),
+      dest.y - (cam.y - origin.oy * ART_SCALE),
+      canvas.width * ART_SCALE,
+      canvas.height * ART_SCALE,
+    );
+    ctx.imageSmoothingEnabled = true;
+  }
+
+  private paintLayer(lc: CanvasRenderingContext2D, origin: { ox: number; oy: number }, layer: ArtLayer): void {
+    lc.save();
+    lc.translate(-origin.ox, -origin.oy);
+    lc.imageSmoothingEnabled = false;
+    layer(lc);
+    lc.restore();
+  }
+
+  /**
+   * Terrain, Ore and water shimmer for the part of the Map the camera sees,
+   * into `dest` on screen. `onGround` paints what stands on the ground and
+   * goes under the fog: Buildings, so that remembered ones are dimmed by it.
+   */
+  drawGround(
+    ctx: CanvasRenderingContext2D,
+    view: PlayerView,
+    cam: Camera,
+    dest: Rect,
+    alpha: number,
+    onGround?: ArtLayer,
+  ): void {
     const U = ART_CELL_PX;
     const { width, height, ore, visibility } = view.map;
     if (!this.terrain) {
       this.terrain = toCanvas(paintTerrain(view.map));
       this.isWater = Uint8Array.from(view.map.terrain, (t) => (t === "water" ? 1 : 0));
     }
-    const lw = Math.ceil(dest.width / ART_SCALE) + 1;
-    const lh = Math.ceil(dest.height / ART_SCALE) + 1;
-    if (this.lowRes.width !== lw || this.lowRes.height !== lh) {
-      this.lowRes.width = lw;
-      this.lowRes.height = lh;
-    }
-    // Whole art pixels for the low-res canvas; the leftover screen pixel goes into the copy below.
-    const ox = Math.floor(cam.x / ART_SCALE);
-    const oy = Math.floor(cam.y / ART_SCALE);
+    const origin = this.fit(this.lowRes, cam, dest);
+    const { ox, oy } = origin;
+    const lw = this.lowRes.width;
+    const lh = this.lowRes.height;
     const lc = this.lowCtx;
     lc.fillStyle = "#000";
     lc.fillRect(0, 0, lw, lh);
@@ -88,15 +145,20 @@ export class PixelWorld {
       }
     }
 
-    ctx.imageSmoothingEnabled = false;
-    ctx.drawImage(
-      this.lowRes,
-      dest.x - (cam.x - ox * ART_SCALE),
-      dest.y - (cam.y - oy * ART_SCALE),
-      lw * ART_SCALE,
-      lh * ART_SCALE,
-    );
-    ctx.imageSmoothingEnabled = true;
+    if (onGround) this.paintLayer(lc, origin, onGround);
+    this.present(ctx, this.lowRes, cam, dest, origin);
+  }
+
+  /**
+   * A layer of the pixel world over the fog, for what the fog never dims:
+   * selection brackets, health bars and the placement preview now, and Units
+   * and effects when they become sprites.
+   */
+  drawAboveFog(ctx: CanvasRenderingContext2D, cam: Camera, dest: Rect, layer: ArtLayer): void {
+    const origin = this.fit(this.over, cam, dest);
+    this.overCtx.clearRect(0, 0, this.over.width, this.over.height);
+    this.paintLayer(this.overCtx, origin, layer);
+    this.present(ctx, this.over, cam, dest, origin);
   }
 
   /** Fog of War over everything drawn so far, with dithered pixel edges. */

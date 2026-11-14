@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { BUILDING_STATS, HQ_BUILDS, type ProductionView } from "../sim";
-import { buildButtons, buttonAt, buttonState, footprintAt, type PanelView, panelClick } from "./buildPanel";
+import { buildButtons, buttonAt, buttonLook, buttonState, footprintAt, type PanelView, panelClick } from "./buildPanel";
 
 const AREA = { x: 1000, y: 230, width: 220, height: 500 };
 
@@ -50,6 +50,23 @@ describe("build button states", () => {
   it("shows the Building in progress, then ready to place", () => {
     expect(buttonState(viewWith(0, { kind: "barracks", progress: 0.4, ready: false }), "barracks")).toBe("building");
     expect(buttonState(viewWith(0, { kind: "barracks", progress: 1, ready: true }), "barracks")).toBe("ready");
+  });
+});
+
+describe("what a build button looks like", () => {
+  const ready = viewWith(0, { kind: "barracks", progress: 1, ready: true });
+
+  it("shows 'placing' on the finished Building's button while the person is placing it", () => {
+    expect(buttonLook(ready, "barracks", "barracks")).toBe("placing");
+  });
+
+  it("shows the button's state when nothing is being placed", () => {
+    expect(buttonLook(ready, "barracks", null)).toBe("ready");
+    expect(buttonLook(viewWith(10_000, null), "turret", null)).toBe("available");
+  });
+
+  it("leaves the other buttons as they are while placing", () => {
+    expect(buttonLook(ready, "turret", "barracks")).toBe("busy");
   });
 });
 
