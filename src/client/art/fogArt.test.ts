@@ -30,7 +30,7 @@ describe("Fog of War edges", () => {
   });
 
   it("uses only the fog levels it was given, so the edge is crisp pixels, not a blur", () => {
-    const fog = paintFogCell(around(UNEXPLORED, { e: VISIBLE, s: FOGGED, se: VISIBLE }), 2, 9);
+    const fog = paintFogCell(around(FOGGED, { e: VISIBLE, s: UNEXPLORED, se: VISIBLE }), 2, 9);
     for (const a of fog) expect([VISIBLE, FOGGED, UNEXPLORED]).toContain(a);
   });
 
@@ -40,8 +40,21 @@ describe("Fog of War edges", () => {
     expect(new Set(column(fog, U / 2))).toEqual(new Set([VISIBLE]));
   });
 
+  it("never thins inside an Unexplored Cell, whose ground is never seen", () => {
+    // GLOSSARY, Fog of War: Cells never seen are Unexplored. The whole soft edge lies on the neighbour's side.
+    const fog = paintFogCell(around(UNEXPLORED, { n: VISIBLE, e: VISIBLE, s: FOGGED, se: VISIBLE, nw: FOGGED }), 2, 9);
+    expect(new Set(fog)).toEqual(new Set([UNEXPLORED]));
+  });
+
+  it("covers a Visible Cell almost wholly where it touches an Unexplored one, so the edge still fades and does not step", () => {
+    const fog = paintFogCell(around(VISIBLE, { e: UNEXPLORED }), 7, 3);
+    const dark = (x: number) => column(fog, x).filter((a) => a === UNEXPLORED).length;
+    expect(dark(U - 1)).toBeGreaterThan(U * 0.75);
+    expect(dark(U - 1)).toBeGreaterThan(dark(U - 3));
+  });
+
   it("thins out with distance from the edge", () => {
-    const fog = paintFogCell(around(UNEXPLORED, { n: VISIBLE }), 5, 5);
+    const fog = paintFogCell(around(FOGGED, { n: VISIBLE }), 5, 5);
     const clear = (y: number) => row(fog, y).filter((a) => a === VISIBLE).length;
     expect(clear(0)).toBeGreaterThan(clear(2));
     expect(clear(5)).toBe(0);

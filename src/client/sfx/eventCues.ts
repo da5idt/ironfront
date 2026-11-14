@@ -29,7 +29,8 @@ export function alertForEvent(event: PresentationEvent, me: PlayerId): AlertEven
     case "unitTrained":
       return { kind: "unitReady" };
     case "underAttack":
-      return { kind: "baseUnderAttack" };
+      // The words are "Base under attack", so a Unit hit out on the Map does not raise them; its loss, if it comes to that, is told as "Unit lost".
+      return event.inBase ? { kind: "baseUnderAttack" } : null;
     case "unitDied":
       return event.owner === me ? { kind: "unitLost" } : null;
     case "buildingDestroyed":

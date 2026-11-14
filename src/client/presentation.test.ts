@@ -104,8 +104,8 @@ describe("a Unit that shoots", () => {
     // Idle armed Units fire at what comes in range by themselves.
     seen.run(1);
     expect(seen.events).toEqual([
-      { kind: "shotFired", weapon: "raiderGun", shooter: raider, from: { x: 10.5, y: 15.5 }, to: { x: 10.5, y: 12.5 } },
-      { kind: "shotFired", weapon: "rifle", shooter: rifleman, from: { x: 20.5, y: 15.5 }, to: { x: 22.5, y: 15.5 } },
+      { kind: "shotFired", weapon: "raiderGun", shooter: raider, from: { x: 10.5, y: 15.5 }, to: { x: 10.5, y: 12.5 }, landsInSight: true },
+      { kind: "shotFired", weapon: "rifle", shooter: rifleman, from: { x: 20.5, y: 15.5 }, to: { x: 22.5, y: 15.5 }, landsInSight: true },
     ]);
     // Nothing more until a weapon has reloaded.
     seen.run(5);
@@ -123,7 +123,7 @@ describe("a Unit that shoots", () => {
     expect(seen.events).toEqual([
       { kind: "impact", at: { x: 10.5, y: 15.5 } },
       // It hit the Player's own Harvester.
-      { kind: "underAttack", at: { x: 10.5, y: 15.5 } },
+      { kind: "underAttack", hit: "unit", at: { x: 10.5, y: 15.5 }, inBase: false },
     ]);
   });
 });
@@ -206,6 +206,7 @@ describe("a Turret's aim", () => {
       shooter: turret,
       from: { x: 10.5, y: 14.5 },
       to: { x: 10.5, y: 10.5 },
+      landsInSight: true,
     });
     // It swings round to north (12) the short way, a step a Tick.
     expect(turretFacing(seen.state, turret)).toBe(1);

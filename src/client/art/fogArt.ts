@@ -3,6 +3,11 @@ import { ART_CELL_PX } from "./terrainArt";
 // Fog of War edges in the pixel look: where fog levels meet, each side gives
 // way to the other over a few art pixels with an ordered dither, so the edge
 // reads as chunky pixels rather than a blur or a hard Cell-sized step.
+// An Unexplored Cell is the exception: its ground is never seen (GLOSSARY),
+// so it gives no way at all and the whole edge lies in its neighbour.
+
+/** The opacity that hides a Cell altogether: Unexplored's, in FOG_ALPHA. */
+const HIDDEN = 255;
 
 /** How many art pixels deep one Cell's fog reaches into its neighbour. */
 const EDGE_PX = 4;
@@ -31,10 +36,12 @@ export function paintFogCell(around: ArrayLike<number>, cx: number, cy: number):
   const U = ART_CELL_PX;
   const out = new Uint8Array(U * U);
   const centre = around[4]!;
+  if (centre === HIDDEN) return out.fill(HIDDEN);
   const levels = Array.from(new Set(Array.from(around))).sort((a, b) => a - b);
   for (let ly = 0; ly < U; ly++) {
     for (let lx = 0; lx < U; lx++) {
-      // The strongest pull from any differing neighbour, half-way at the shared edge.
+      // The strongest pull from any differing neighbour: half-way at the shared edge, where the neighbour
+      // comes the other half; all the way beside a hidden Cell, which does not.
       let target = centre;
       let pull = 0;
       for (const [dx, dy, k] of NEIGHBOURS) {
@@ -42,7 +49,7 @@ export function paintFogCell(around: ArrayLike<number>, cx: number, cy: number):
         if (a === centre) continue;
         const ex = dx < 0 ? lx + 0.5 : dx > 0 ? U - lx - 0.5 : 0;
         const ey = dy < 0 ? ly + 0.5 : dy > 0 ? U - ly - 0.5 : 0;
-        const w = 0.5 * (1 - Math.hypot(ex, ey) / EDGE_PX);
+        const w = (a === HIDDEN ? 1 : 0.5) * (1 - Math.hypot(ex, ey) / EDGE_PX);
         const p = w * Math.abs(a - centre);
         if (w > 0 && p > pull) {
           pull = p;

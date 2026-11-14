@@ -17,6 +17,7 @@ export type SoundEvent =
       readonly weapon: "rifle" | "raiderGun" | "turretCannon";
       readonly from: MapPos;
       readonly to: MapPos;
+      readonly landsInSight: boolean;
     }
   | { readonly kind: "impact"; readonly at: MapPos }
   /** `vehicle` is true for a Raider or Harvester, false for a Rifleman. */
@@ -32,22 +33,26 @@ export interface SoundCue {
   readonly at?: MapPos;
 }
 
-export function soundForEvent(event: SoundEvent): SoundCue {
+/** The sounds an event makes, in the order they are heard. */
+export function soundsForEvent(event: SoundEvent): readonly SoundCue[] {
   switch (event.kind) {
-    case "shotFired":
-      return { name: event.weapon, at: event.from };
+    case "shotFired": {
+      const shot: SoundCue = { name: event.weapon, at: event.from };
+      // A round crosses the screen in a blink, so the impact is cued with the shot; the impact's own cap keeps a volley from piling up.
+      return event.landsInSight ? [shot, { name: "impact", at: event.to }] : [shot];
+    }
     case "impact":
-      return { name: "impact", at: event.at };
+      return [{ name: "impact", at: event.at }];
     case "unitDied":
-      return { name: event.vehicle ? "smallExplosion" : "unitDeath", at: event.at };
+      return [{ name: event.vehicle ? "smallExplosion" : "unitDeath", at: event.at }];
     case "buildingDestroyed":
-      return { name: "largeExplosion", at: event.at };
+      return [{ name: "largeExplosion", at: event.at }];
     case "buildingPlaced":
-      return { name: "buildingPlaced", at: event.at };
+      return [{ name: "buildingPlaced", at: event.at }];
     // The person playing needs to hear these while looking elsewhere, so they have no position.
     case "buildingReady":
-      return { name: "buildingReady" };
+      return [{ name: "buildingReady" }];
     case "unitTrained":
-      return { name: "unitTrained" };
+      return [{ name: "unitTrained" }];
   }
 }

@@ -27,6 +27,7 @@ import {
   type Weapon,
 } from "./art/effectArt";
 import { hash2 } from "./art/hash";
+import { ART_CELL_PX } from "./art/terrainArt";
 import { HARVESTER_LOADS, STEP_CELLS, STEP_PHASES, unitFrame } from "./art/unitArt";
 
 // The presentation module (ADR 0003): what the client shows that the
@@ -36,11 +37,25 @@ import { HARVESTER_LOADS, STEP_CELLS, STEP_PHASES, unitFrame } from "./art/unitA
 // and gives the next presentation plus what just happened, for sounds and
 // effects. It reads only the Player view, so Fog of War holds for free, and
 // it never changes the Match (ADR 0002).
+//
+// Three things the person hears about are not events here, on purpose (see
+// ADR 0003): "Not enough Credits" comes from a press on a button, which is
+// input and in no view; Victory and defeat come from the Match status, which
+// main.ts already reads every Tick. Both are raised where they happen.
 
 /** Steps of the 16 facings a Unit turns in one Tick: half a turn takes a fifth of a second. */
 export const UNIT_TURN_PER_TICK = 2;
 /** A Turret's gun is heavier: half a turn takes two fifths of a second. */
 export const TURRET_TURN_PER_TICK = 1;
+
+/**
+ * How near one of its Player's Buildings a Unit must be, in Cells from the
+ * footprint, to count as in the base. About a Turret's range: Units this
+ * close are defending or working among the Buildings, and whoever shoots
+ * them can shoot the Buildings next. Farther out it is a fight on the Map,
+ * and calling that "Base under attack" would be a false alarm.
+ */
+export const BASE_REACH_CELLS = 5;
 
 /** A place on the Map in Cell units, like a Unit's position. */
 export interface MapPoint {
@@ -147,6 +162,8 @@ export type PresentationEvent =
       readonly shooter: EntityId | null;
       readonly from: MapPoint;
       readonly to: MapPoint;
+      /** Whether the Cell it lands in is Visible, so its impact is shown and heard; false for a shot into Fog of War. */
+      readonly landsInSight: boolean;
     }
   /** A shot from out of sight landing where the Player can see. */
   | { readonly kind: "impact"; readonly at: MapPoint }
@@ -174,8 +191,18 @@ export type PresentationEvent =
   | { readonly kind: "buildingReady" }
   /** One of the Player's own Barracks or Vehicle Factories has trained a Unit. */
   | { readonly kind: "unitTrained"; readonly unit: UnitKind }
-  /** One of the Player's own Units or Buildings was hit or lost this Tick; at most one a Tick. */
-  | { readonly kind: "underAttack"; readonly at: MapPoint };
+  /**
+   * One of the Player's own Units or Buildings was hit or lost this Tick; at
+   * most one a Tick, and of several hits the one that most concerns the base:
+   * a Building before a Unit, a Unit in the base before one out on the Map.
+   */
+  | {
+      readonly kind: "underAttack";
+      readonly hit: "building" | "unit";
+      readonly at: MapPoint;
+      /** True for a Building, and for a Unit within BASE_REACH_CELLS of one of the Player's Buildings. */
+      readonly inBase: boolean;
+    };
 
 export type { Weapon } from "./art/effectArt";
 
@@ -290,12 +317,13 @@ export function present(prev: Presentation | null, view: PlayerView): Presented 
     if (shooter.unit !== null) unitAims.set(shooter.unit, to);
     if (shooter.turret !== null) turretAims.set(shooter.turret, to);
     const { weapon } = shooter;
-    events.push({ kind: "shotFired", weapon, shooter: shooter.unit ?? shooter.turret, from, to });
+    // The view shows a shot into Fog of War whole, but what it hit there is not this Player's to see or hear.
+    const landsInSight = visibleAt(to.x, to.y);
+    events.push({ kind: "shotFired", weapon, shooter: shooter.unit ?? shooter.turret, from, to, landsInSight });
     const facing = facingToward(to.x - from.x, to.y - from.y);
     effect("muzzle", from, { weapon, facing });
     effect("tracer", from, { to, weapon, facing });
-    // The view shows a shot into Fog of War whole, but what it hit there is not this Player's to see.
-    if (visibleAt(to.x, to.y)) effect("impact", to, { weapon, start: tick + ticksOf(EFFECT_SECONDS.tracer) });
+    if (landsInSight) effect("impact", to, { weapon, start: tick + ticksOf(EFFECT_SECONDS.tracer) });
   }
 
   const units = new Map<EntityId, UnitLook>();
@@ -315,7 +343,19 @@ export function present(prev: Presentation | null, view: PlayerView): Presented 
   for (const b of view.buildings) buildings.set(b.id, b);
 
   if (last) {
-    let hit: MapPoint | null = null;
+    type Attack = Extract<PresentationEvent, { kind: "underAttack" }>;
+    let attack = null as Attack | null;
+    /** 2 for a Building, 1 for a Unit in the base, 0 for a Unit elsewhere. */
+    const concern = (a: Attack) => (a.hit === "building" ? 2 : a.inBase ? 1 : 0);
+    const hitBuilding = (at: MapPoint): void => {
+      if (attack?.hit !== "building") attack = { kind: "underAttack", hit: "building", at, inBase: true };
+    };
+    const hitUnit = (at: MapPoint): void => {
+      // Nothing a Unit's hit could add once the base is known to be under attack.
+      if (attack && concern(attack) >= 1) return;
+      const inBase = nearOwnBuilding(last.buildings, me, at);
+      if (!attack || inBase) attack = { kind: "underAttack", hit: "unit", at, inBase };
+    };
 
     // The Simulation takes a Unit out of the Match only when it dies, so one missing from the view either
     // died or is out of sight. The Player's own are always in the view: missing is dead, wherever it was.
@@ -332,11 +372,11 @@ export function present(prev: Presentation | null, view: PlayerView): Presented 
       if (vehicle) effect("smallExplosion", at);
       else effect("fall", at, { team: was.owner, facing: was.facing });
       mark(vehicle ? "wreck" : "body", at, { unit: was.kind, team: was.owner, facing: was.facing });
-      if (own) hit ??= at;
+      if (own) hitUnit(at);
     }
     for (const [id, u] of units) {
       const was = last.units.get(id);
-      if (was && u.owner === me && u.hp < was.hp) hit ??= { x: u.x, y: u.y };
+      if (was && u.owner === me && u.hp < was.hp) hitUnit({ x: u.x, y: u.y });
     }
 
     // A Building that was there (not just remembered) and is in the view no longer was destroyed in
@@ -346,7 +386,7 @@ export function present(prev: Presentation | null, view: PlayerView): Presented 
       const now = buildings.get(id);
       const at = centreOf(was);
       if (now) {
-        if (was.owner === me && now.hp < was.hp) hit ??= at;
+        if (was.owner === me && now.hp < was.hp) hitBuilding(at);
         continue;
       }
       if (was.remembered) continue;
@@ -365,9 +405,9 @@ export function present(prev: Presentation | null, view: PlayerView): Presented 
         );
       }
       mark("rubble", at, { team: was.owner, width: was.width, height: was.height });
-      if (was.owner === me) hit ??= at;
+      if (was.owner === me) hitBuilding(at);
     }
-    if (hit) events.push({ kind: "underAttack", at: hit });
+    if (attack) events.push(attack);
 
     for (const b of view.buildings) {
       if (b.remembered || last.buildings.has(b.id)) continue;
@@ -413,9 +453,49 @@ export function present(prev: Presentation | null, view: PlayerView): Presented 
   };
 }
 
+/** How finely a tracer's line is checked against Fog of War, in Cells: one art pixel, as fine as it is drawn. */
+const SIGHT_STEP_CELLS = 1 / ART_CELL_PX;
+
+/**
+ * How much of an effect shows under the Fog of War of the moment it is drawn:
+ * 0 none, 1 all of it. An effect is made only for what the view showed, but
+ * it plays on for a while, and the Cell may have gone out of sight since (the
+ * Unit that saw it died or moved on): what happens there now is no longer the
+ * Player's to see. A tracer shows from the barrel up to the first Cell that
+ * is not Visible, and the number is that share of its flight.
+ */
+export function effectInSight(e: Effect, map: Pick<PlayerView["map"], "width" | "height" | "visibility">): number {
+  const visible = (x: number, y: number): boolean => {
+    const cx = Math.floor(x);
+    const cy = Math.floor(y);
+    return cx >= 0 && cy >= 0 && cx < map.width && cy < map.height && map.visibility[cy * map.width + cx] === "visible";
+  };
+  if (!visible(e.at.x, e.at.y)) return 0;
+  if (e.kind !== "tracer") return 1;
+  const dx = e.to.x - e.at.x;
+  const dy = e.to.y - e.at.y;
+  const length = Math.hypot(dx, dy);
+  const steps = Math.ceil(length / SIGHT_STEP_CELLS);
+  for (let i = 1; i <= steps; i++) {
+    if (!visible(e.at.x + (dx * i) / steps, e.at.y + (dy * i) / steps)) return (i - 1) / steps;
+  }
+  return 1;
+}
+
 const ticksOf = (seconds: number) => Math.round(seconds * TICKS_PER_SECOND);
 
 const centreOf = (b: BuildingView): MapPoint => ({ x: b.x + b.width / 2, y: b.y + b.height / 2 });
+
+/** True when the place is within BASE_REACH_CELLS of the footprint of one of `me`'s Buildings. */
+function nearOwnBuilding(buildings: ReadonlyMap<EntityId, BuildingView>, me: PlayerId, at: MapPoint): boolean {
+  for (const b of buildings.values()) {
+    if (b.owner !== me) continue;
+    const dx = Math.max(b.x - at.x, 0, at.x - (b.x + b.width));
+    const dy = Math.max(b.y - at.y, 0, at.y - (b.y + b.height));
+    if (Math.hypot(dx, dy) <= BASE_REACH_CELLS) return true;
+  }
+  return false;
+}
 
 /** True when any Cell of the Building's footprint was Visible in the last view. */
 function wasVisible(last: Presentation, view: PlayerView, b: BuildingView): boolean {

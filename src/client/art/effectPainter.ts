@@ -122,10 +122,18 @@ export class EffectPainter {
     art.globalAlpha = 1;
   }
 
-  /** Flashes, tracers, blasts and falling Riflemen, into the pixel world's layer above the fog. `time` is game time in Ticks. */
-  drawEffects(art: CanvasRenderingContext2D, effects: readonly Effect[], time: number): void {
+  /**
+   * Flashes, tracers, blasts and falling Riflemen, into the pixel world's
+   * layer above the fog. `time` is game time in Ticks. `inSight` says how
+   * much of each effect the Fog of War lets through right now (0 none, 1
+   * all; for a tracer, the share of its flight from the barrel): this layer
+   * is not dimmed by the fog, so what the fog hides must not be drawn on it.
+   */
+  drawEffects(art: CanvasRenderingContext2D, effects: readonly Effect[], time: number, inSight: (e: Effect) => number): void {
     for (const e of effects) {
       if (time < e.start || time >= e.end) continue;
+      const seen = inSight(e);
+      if (seen <= 0) continue;
       const progress = (time - e.start) / (e.end - e.start);
       const x = e.at.x * U;
       const y = e.at.y * U;
@@ -142,7 +150,7 @@ export class EffectPainter {
           break;
         }
         case "tracer":
-          this.drawTracer(art, e, progress);
+          this.drawTracer(art, e, progress, seen);
           break;
         case "impact":
           this.drawBlast(art, impactBlast(e.weapon), x, y, progress);
@@ -178,8 +186,11 @@ export class EffectPainter {
     art.drawImage(this.blasts.get(name)!, frame * S, 0, S, S, Math.round(x - S / 2), Math.round(y - S / 2), S, S);
   }
 
-  /** A bright streak flying from the barrel to the target: a few pixels, drawn straight into the layer. */
-  private drawTracer(art: CanvasRenderingContext2D, e: Effect, progress: number): void {
+  /**
+   * A bright streak flying from the barrel to the target: a few pixels, drawn
+   * straight into the layer. Nothing is drawn past `seen` of the way there.
+   */
+  private drawTracer(art: CanvasRenderingContext2D, e: Effect, progress: number, seen: number): void {
     const weapon = e.weapon ?? "rifle";
     const dx = (e.to.x - e.at.x) * U;
     const dy = (e.to.y - e.at.y) * U;
@@ -189,20 +200,23 @@ export class EffectPainter {
     const uy = dy / length;
     const from = Math.min(length, MUZZLE_REACH[weapon]);
     // The head reaches the target as the tracer's time runs out, when the impact takes over.
-    const head = from + (length - from) * Math.min(1, progress * 1.1);
+    const flown = from + (length - from) * Math.min(1, progress * 1.1);
+    // The round flies on into the fog; only the drawing stops at its edge.
+    const limit = length * seen;
+    const head = Math.min(flown, limit);
     const streak = STREAK_PX[weapon];
-    const tail = Math.max(from, head - streak);
+    const tail = Math.max(from, flown - streak);
     const ax = e.at.x * U;
     const ay = e.at.y * U;
     // The cannon's shell trails smoke all the way back to the gun; a bullet leaves a faint bright wake.
     art.globalAlpha = weapon === "turretCannon" ? 0.5 : WAKE_ALPHA;
     art.fillStyle = weapon === "turretCannon" ? ART.smoke[3] : ART.fire[2];
-    for (let d = from; d < tail; d += weapon === "turretCannon" ? 2 : 1) {
+    for (let d = from; d < Math.min(tail, limit); d += weapon === "turretCannon" ? 2 : 1) {
       art.fillRect(Math.round(ax + ux * d), Math.round(ay + uy * d), 1, 1);
     }
     art.globalAlpha = 1;
     for (let d = tail; d <= head; d++) {
-      const nearHead = head - d < 2;
+      const nearHead = flown - d < 2;
       art.fillStyle = nearHead ? ART.fire[3] : weapon === "rifle" ? ART.fire[2] : ART.fire[1];
       const px = Math.round(ax + ux * d);
       const py = Math.round(ay + uy * d);
@@ -212,8 +226,8 @@ export class EffectPainter {
     if (weapon === "raiderGun") {
       // A second round behind the first: the Raider's gun fires bursts.
       art.fillStyle = ART.fire[2];
-      const second = head - streak - 4;
-      for (let d = Math.max(from, second - 3); d <= second; d++) art.fillRect(Math.round(ax + ux * d), Math.round(ay + uy * d), 1, 1);
+      const second = Math.min(flown - streak - 4, limit);
+      for (let d = Math.max(from, flown - streak - 7); d <= second; d++) art.fillRect(Math.round(ax + ux * d), Math.round(ay + uy * d), 1, 1);
     }
   }
 }

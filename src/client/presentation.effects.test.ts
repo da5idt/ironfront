@@ -9,7 +9,7 @@ import {
   setTestCredits,
 } from "../sim/testing/setup";
 import { EFFECT_SECONDS, MARK_SECONDS, MAX_EFFECTS, MAX_MARKS } from "./art/effectArt";
-import { type Presentation, type PresentationEvent, present } from "./presentation";
+import { effectInSight, type Presentation, type PresentationEvent, present } from "./presentation";
 
 /** Runs a real Match and shows one Player's view to the presentation module after every Tick, as the client does. */
 function watch(match: Match, player: PlayerId = 0) {
@@ -76,7 +76,8 @@ describe("a Unit that dies in sight", () => {
     addTestUnit(match, 1, "harvester", { x: 10, y: 11 });
     const seen = watch(match, 1);
     seen.run(1);
-    expect(seen.of("underAttack")).toEqual([{ kind: "underAttack", at: { x: 10.5, y: 11.5 } }]);
+    // Out on its own, with none of its Player's Buildings near: hit, but no attack on the base.
+    expect(seen.of("underAttack")).toEqual([{ kind: "underAttack", hit: "unit", at: { x: 10.5, y: 11.5 }, inBase: false }]);
     seen.runUntil("unitDied", 600);
     // Its own sight went with it, so the Cell is Fogged now; its Player still knows it is gone.
     expect(getPlayerView(match, 1).map.visibility[11 * 30 + 10]).toBe("fogged");
@@ -154,7 +155,7 @@ describe("a Building that is destroyed", () => {
     seen.runUntil("buildingDestroyed", 100);
     expect(seen.of("buildingDestroyed")).toMatchObject([{ owner: 1, building: "barracks" }]);
     expect(seen.of("underAttack").length).toBeGreaterThan(0);
-    expect(seen.of("underAttack")[0]).toEqual({ kind: "underAttack", at: { x: 13, y: 15 } });
+    expect(seen.of("underAttack")[0]).toEqual({ kind: "underAttack", hit: "building", at: { x: 13, y: 15 }, inBase: true });
   });
 
   it("out of sight gives nothing, not even when the Player comes back and finds it gone", () => {
@@ -179,6 +180,41 @@ describe("a Building that is destroyed", () => {
   });
 });
 
+describe("under attack", () => {
+  it("counts a Unit hit beside one of its Player's Buildings as the base being attacked", () => {
+    const match = createMatch(openMap(40, 30), 1);
+    addTestBuilding(match, 0, "turret", { x: 10, y: 14 });
+    addTestUnit(match, 1, "harvester", { x: 10, y: 11 });
+    addTestBuilding(match, 1, "refinery", { x: 12, y: 9 });
+    const seen = watch(match, 1);
+    seen.run(1);
+    expect(seen.of("underAttack")).toEqual([{ kind: "underAttack", hit: "unit", at: { x: 10.5, y: 11.5 }, inBase: true }]);
+  });
+
+  it("does not count a Unit hit far from every Building of its Player", () => {
+    const match = createMatch(openMap(40, 30), 1);
+    addTestBuilding(match, 0, "turret", { x: 10, y: 14 });
+    addTestUnit(match, 1, "harvester", { x: 10, y: 11 });
+    addTestBuilding(match, 1, "refinery", { x: 30, y: 9 });
+    const seen = watch(match, 1);
+    seen.run(1);
+    expect(seen.of("underAttack")).toMatchObject([{ hit: "unit", inBase: false }]);
+  });
+
+  it("tells of the Building when a Building and a far-off Unit are hit in the same Tick", () => {
+    const match = createMatch(openMap(40, 30), 1);
+    // Far from the base, Player 1's Harvester is shot by a Turret...
+    addTestBuilding(match, 0, "turret", { x: 10, y: 14 });
+    addTestUnit(match, 1, "harvester", { x: 10, y: 11 });
+    // ...while a Raider shoots Player 1's Barracks.
+    addTestBuilding(match, 1, "barracks", { x: 32, y: 14 });
+    addTestUnit(match, 0, "raider", { x: 30, y: 15 });
+    const seen = watch(match, 1);
+    seen.run(1);
+    expect(seen.of("underAttack")).toEqual([{ kind: "underAttack", hit: "building", at: { x: 33, y: 15 }, inBase: true }]);
+  });
+});
+
 describe("a shot", () => {
   it("shows a muzzle flash at the shooter, a tracer to the target and an impact there", () => {
     const match = createMatch(openMap(30, 30), 1);
@@ -195,6 +231,15 @@ describe("a shot", () => {
     ]);
     // The impact shows as the tracer gets there, not before.
     expect(seen.state.effects[2]!.start).toBe(seen.state.effects[1]!.end);
+  });
+
+  it("says in its event that it lands where the Player can see, so the impact is heard as well as shown", () => {
+    const match = createMatch(openMap(30, 30), 1);
+    addTestUnit(match, 0, "raider", { x: 10, y: 15 });
+    addTestUnit(match, 1, "harvester", { x: 13, y: 15 });
+    const seen = watch(match);
+    seen.run(1);
+    expect(seen.of("shotFired")).toMatchObject([{ weapon: "raiderGun", to: { x: 13.5, y: 15.5 }, landsInSight: true }]);
   });
 
   it("has all three for the Rifleman's rifle and the Turret's cannon too", () => {
@@ -237,6 +282,45 @@ describe("a shot", () => {
     const longest = Math.max(EFFECT_SECONDS.muzzle, EFFECT_SECONDS.tracer + EFFECT_SECONDS.impact);
     seen.run(Math.ceil(longest * TICKS_PER_SECOND));
     expect(seen.state.effects).toEqual([]);
+  });
+});
+
+describe("an effect under the Fog of War of the moment it is drawn", () => {
+  /** A Raider's shot at a Harvester three Cells east of it, and the Map it was fired on. */
+  function shot() {
+    const match = createMatch(openMap(30, 30), 1);
+    addTestUnit(match, 0, "raider", { x: 10, y: 15 });
+    addTestUnit(match, 1, "harvester", { x: 13, y: 15 });
+    const seen = watch(match);
+    seen.run(1);
+    const [muzzle, tracer, impact] = seen.state.effects;
+    const { map } = getPlayerView(match, 0);
+    /** The same Map with every Cell from column `x` eastward no longer Visible. */
+    const foggedFrom = (x: number) => ({
+      ...map,
+      visibility: map.visibility.map((v, i) => (i % map.width >= x ? ("fogged" as const) : v)),
+    });
+    return { muzzle: muzzle!, tracer: tracer!, impact: impact!, map, foggedFrom };
+  }
+
+  it("shows whole while everything it covers is Visible", () => {
+    const { muzzle, tracer, impact, map } = shot();
+    expect([muzzle, tracer, impact].map((e) => effectInSight(e, map))).toEqual([1, 1, 1]);
+  });
+
+  it("is hidden once its Cell is no longer Visible, though it was when the effect began", () => {
+    const { muzzle, impact, foggedFrom } = shot();
+    // The target's Cell (column 13) has gone into fog; the shooter's (column 10) has not.
+    expect(effectInSight(impact, foggedFrom(13))).toBe(0);
+    expect(effectInSight(muzzle, foggedFrom(13))).toBe(1);
+    expect(effectInSight(muzzle, foggedFrom(10))).toBe(0);
+  });
+
+  it("cuts a tracer off at the first Cell that is not Visible", () => {
+    const { tracer, foggedFrom } = shot();
+    // It flies from x 10.5 to 13.5; with fog from column 12 on, only the first 1.5 of its 3 Cells show.
+    expect(effectInSight(tracer, foggedFrom(12))).toBeCloseTo(0.5, 1);
+    expect(effectInSight(tracer, foggedFrom(10))).toBe(0);
   });
 });
 

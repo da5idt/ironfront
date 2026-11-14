@@ -10,8 +10,14 @@ describe("the alert a presentation event raises", () => {
     expect(alertForEvent({ kind: "unitTrained", unit: "raider" }, 0)).toEqual({ kind: "unitReady" });
   });
 
-  it("tells the person when their base is under attack", () => {
-    expect(alertForEvent({ kind: "underAttack", at }, 0)).toEqual({ kind: "baseUnderAttack" });
+  it("tells the person when their base is under attack: a Building hit, or a Unit among their Buildings", () => {
+    expect(alertForEvent({ kind: "underAttack", hit: "building", at, inBase: true }, 0)).toEqual({ kind: "baseUnderAttack" });
+    expect(alertForEvent({ kind: "underAttack", hit: "unit", at, inBase: true }, 0)).toEqual({ kind: "baseUnderAttack" });
+  });
+
+  it("does not call it the base when a Unit is hit somewhere out on the Map", () => {
+    // Spec #16: the alert is "Base under attack"; a skirmish at the far end of the Map is not that.
+    expect(alertForEvent({ kind: "underAttack", hit: "unit", at, inBase: false }, 0)).toBeNull();
   });
 
   it("tells the person of their own losses, and not of the other Player's", () => {
@@ -28,7 +34,7 @@ describe("the alert a presentation event raises", () => {
 
   it("says nothing for shots, impacts and Buildings going down", () => {
     const quiet: PresentationEvent[] = [
-      { kind: "shotFired", weapon: "rifle", shooter: 1, from: at, to: at },
+      { kind: "shotFired", weapon: "rifle", shooter: 1, from: at, to: at, landsInSight: true },
       { kind: "impact", at },
       { kind: "buildingPlaced", building: "barracks", owner: 0, at },
     ];
@@ -39,7 +45,7 @@ describe("the alert a presentation event raises", () => {
 describe("the sound effect a presentation event makes", () => {
   it("is the event itself for everything that has a sound", () => {
     const loud: PresentationEvent[] = [
-      { kind: "shotFired", weapon: "turretCannon", shooter: null, from: at, to: at },
+      { kind: "shotFired", weapon: "turretCannon", shooter: null, from: at, to: at, landsInSight: false },
       { kind: "impact", at },
       { kind: "unitDied", unit: "harvester", vehicle: true, owner: 1, at },
       { kind: "buildingDestroyed", building: "hq", owner: 0, at },
@@ -51,6 +57,6 @@ describe("the sound effect a presentation event makes", () => {
   });
 
   it("is none for under attack, which is an alert and not an effect", () => {
-    expect(soundEventFor({ kind: "underAttack", at })).toBeNull();
+    expect(soundEventFor({ kind: "underAttack", hit: "building", at, inBase: true })).toBeNull();
   });
 });

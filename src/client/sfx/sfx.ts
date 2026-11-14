@@ -1,4 +1,4 @@
-import { type SoundEvent, soundForEvent } from "./eventSounds";
+import { type SoundEvent, soundsForEvent } from "./eventSounds";
 import { hear, type Listener, type MapPos } from "./hearing";
 import {
   applyMixerAction,
@@ -36,7 +36,7 @@ export interface Sfx {
    * interface sound, heard in full.
    */
   play(name: SoundName, at?: MapPos): void;
-  /** Plays the sound of a presentation event. */
+  /** Plays the sounds of a presentation event. */
   playEvent(event: SoundEvent): void;
 }
 
@@ -72,8 +72,7 @@ export function createSfx(output: SoundOutput, storage: SettingsStorage | null):
       playing.set(name, ends);
     },
     playEvent(event) {
-      const cue = soundForEvent(event);
-      sfx.play(cue.name, cue.at);
+      for (const cue of soundsForEvent(event)) sfx.play(cue.name, cue.at);
     },
   };
   return sfx;

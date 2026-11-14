@@ -20,7 +20,7 @@ import {
   PANEL_BG,
   PANEL_EDGE,
 } from "./palette";
-import { buildingRise, type Presentation, turretFacing } from "./presentation";
+import { buildingRise, effectInSight, type Presentation, turretFacing } from "./presentation";
 import { drawRallyPoint } from "./selectedBuildingPainter";
 import type { Selection } from "./selection";
 import type { MixerSettings } from "./sfx/mixer";
@@ -112,10 +112,11 @@ export class Renderer {
     if (selectedBuilding) drawRallyPoint(ctx, selectedBuilding, cam);
     if (overlay.moveMarker) this.drawMoveMarker(overlay.moveMarker.cell, overlay.moveMarker.age, cam);
     // The pixel world's layer over the fog: Units are only ever listed where the Player can see, and
-    // the presentation only makes effects for what the view showed. Effects go over the Units they hit.
+    // effects are checked against the fog as it is now, since they outlive the Tick that made them.
+    // Effects go over the Units they hit.
     this.world.drawAboveFog(ctx, cam, viewRect, (art) => {
       this.units.draw(art, view.units, alpha, time, (id) => shown?.units.get(id));
-      if (shown) this.effects.drawEffects(art, shown.effects, time);
+      if (shown) this.effects.drawEffects(art, shown.effects, time, (e) => effectInSight(e, view.map));
       this.drawMarkers(art, view, alpha, overlay);
       if (overlay.placement) this.buildings.drawPlacing(art, overlay.placement, view.playerId);
     });
