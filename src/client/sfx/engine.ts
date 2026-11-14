@@ -121,7 +121,7 @@ const SNAP_ATTACK_S = 0.002;
  */
 export function renderRecipe(
   context: BaseAudioContext,
-  recipe: Recipe,
+  recipe: Pick<Recipe, "layers">,
   destination: AudioNode,
   when: number,
   voice: { readonly gain: number; readonly pan: number; readonly pitch: number } = { gain: 1, pan: 0, pitch: 1 },

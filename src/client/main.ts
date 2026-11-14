@@ -46,6 +46,8 @@ import { matchEndAlert } from "./sfx/alertQueue";
 import { createAlerts } from "./sfx/alerts";
 import { createAlertVoice } from "./sfx/alertVoice";
 import { createSoundEngine } from "./sfx/engine";
+import { createMusic } from "./sfx/musicPlayer";
+import { moodFor } from "./sfx/musicTimeline";
 import { listenerFor } from "./sfx/hearing";
 import { channelGain } from "./sfx/mixer";
 import { createSfx } from "./sfx/sfx";
@@ -136,6 +138,7 @@ const alerts = createAlerts({
 });
 /** Seconds of play: stops while paused, so alert cooldowns and waits do not run under the Paused screen. */
 let playSeconds = 0;
+const music = createMusic(soundEngine, newSeed());
 // Browsers only let sound start from a click or key press. Captured on the window, so this runs
 // before the game's own handlers and the very first click already makes its sound.
 window.addEventListener("pointerdown", () => soundEngine.unlock(), { capture: true });
@@ -391,6 +394,7 @@ if (import.meta.env.DEV) {
       soundEngine,
       alerts,
       playSeconds: () => playSeconds,
+      music,
     },
   });
 }
@@ -422,6 +426,7 @@ function frame(now: number): void {
   camera = scrollCamera(camera, scrollDirection(keys, edgeScroll(layout, mouse)), cameraSeconds, viewSize, mapSize);
   // A paused game is quiet; the audio clock stops with it, so sounds and music carry on from where they were.
   soundEngine.setPaused(paused);
+  music.setMood(moodFor(getMatchStatus(match), HUMAN));
   sfx.setListener(listenerFor(camera, viewSize));
   if (!paused) playSeconds += frameMs / 1000;
   alerts.update(playSeconds, paused);
