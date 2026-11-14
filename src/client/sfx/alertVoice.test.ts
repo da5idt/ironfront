@@ -37,7 +37,7 @@ describe("picking the voice for alerts", () => {
 
   it("has no voice when no local one speaks English, even one in the browser's own language", () => {
     expect(pickLocalVoice([voice("DE", "de-DE", true)], "fr-FR")).toBeNull();
-    // A German voice would read "Base under attack" as German: better the chime and the words on screen.
+    // A German voice would read "Your buildings are taking fire" as German: better the chime and the words on screen.
     expect(pickLocalVoice([voice("DE", "de-DE", true, true)], "de-DE")).toBeNull();
     expect(pickLocalVoice([voice("DE", "de-DE", true), voice("Cloud UK", "en-GB", false)], "de-DE")).toBeNull();
   });

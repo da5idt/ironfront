@@ -20,13 +20,14 @@ export type AlertKind = (typeof ALERT_KINDS)[number];
 /** Something the person should hear about. Extra fields on a wider event are ignored. */
 export type AlertEvent = { readonly [K in AlertKind]: { readonly kind: K } }[AlertKind];
 
+/** Worded by us on purpose, so that no line is one a person knows from another game (ADR 0003). */
 const ALERT_WORDS: Record<AlertKind, string> = {
-  buildingReady: "Building ready",
-  unitReady: "Unit ready",
+  buildingReady: "Building finished",
+  unitReady: "Unit trained",
   creditsShort: "Not enough Credits",
-  buildingsUnderAttack: "Base under attack",
-  unitLost: "Unit lost",
-  buildingLost: "Building lost",
+  buildingsUnderAttack: "Your buildings are taking fire",
+  unitLost: "A unit has fallen",
+  buildingLost: "A building was destroyed",
   victory: "Victory",
   defeat: "Defeat",
 };

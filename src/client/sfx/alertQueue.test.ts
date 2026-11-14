@@ -48,15 +48,15 @@ function takeAll(queue: AlertQueue, now: number): AlertKind[] {
 }
 
 describe("alert wording", () => {
-  it("has the spec's words for each event", () => {
-    // Spec #16, user story 38.
+  it("has our own words for each of the spec's moments", () => {
+    // The moments are spec #16's (user story 38); the wording is deliberately our own (ADR 0003).
     expect(ALERT_KINDS.map((kind) => alertText({ kind }))).toEqual([
-      "Building ready",
-      "Unit ready",
+      "Building finished",
+      "Unit trained",
       "Not enough Credits",
-      "Base under attack",
-      "Unit lost",
-      "Building lost",
+      "Your buildings are taking fire",
+      "A unit has fallen",
+      "A building was destroyed",
       "Victory",
       "Defeat",
     ]);
@@ -89,8 +89,8 @@ describe("raising an alert", () => {
 });
 
 describe("alert cooldowns", () => {
-  it("says Base under attack at most once every 20 seconds", () => {
-    // Spec #16: "Base under attack at most once every 20 seconds".
+  it("says Your buildings are taking fire at most once every 20 seconds", () => {
+    // Spec #16: the under-attack alert at most once every 20 seconds.
     const said = (again: number) =>
       play(["raise", "buildingsUnderAttack", 0], ["take", 0], ["raise", "buildingsUnderAttack", again], ["take", again]).said;
     expect(said(1)).toEqual(["buildingsUnderAttack"]);
@@ -131,7 +131,7 @@ describe("alert cooldowns", () => {
   });
 
   it("is not started by an alert that was dropped unsaid", () => {
-    // "Unit lost" went stale waiting and nobody heard it, so the next loss is said: its cooldown never began.
+    // "A unit has fallen" went stale waiting and nobody heard it, so the next loss is said: its cooldown never began.
     const { said } = play(["raise", "unitLost", 0], ["take", 6], ["raise", "unitLost", 7], ["take", 7]);
     expect(said).toEqual(["unitLost"]);
   });
@@ -154,7 +154,7 @@ describe("the alert queue", () => {
 
   it("drops a battle alert that has waited too long instead of saying it late", () => {
     const queue = raised(["unitLost", 0], ["buildingLost", 4]);
-    // By 6 s "Unit lost" is old news; "Building lost" is not.
+    // By 6 s "A unit has fallen" is old news; "A building was destroyed" is not.
     expect(takeAll(queue, 6)).toEqual(["buildingLost"]);
   });
 

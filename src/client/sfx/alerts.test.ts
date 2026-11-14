@@ -76,7 +76,7 @@ describe("speaking alerts", () => {
     const { alerts, said } = setup();
     alerts.raise({ kind: "buildingReady" }, 1);
     alerts.update(1, false);
-    expect(said).toEqual([{ text: "Building ready", volume: 0.64 }]);
+    expect(said).toEqual([{ text: "Building finished", volume: 0.64 }]);
   });
 
   it("shows no banner for an alert that is spoken", () => {
@@ -93,10 +93,10 @@ describe("speaking alerts", () => {
     alerts.raise({ kind: "unitReady" }, 1);
     alerts.update(1, false);
     alerts.update(1.5, false);
-    expect(said.map((s) => s.text)).toEqual(["Building ready"]);
+    expect(said.map((s) => s.text)).toEqual(["Building finished"]);
     finish(true);
     alerts.update(2, false);
-    expect(said.map((s) => s.text)).toEqual(["Building ready", "Unit ready"]);
+    expect(said.map((s) => s.text)).toEqual(["Building finished", "Unit trained"]);
   });
 
   it("says nothing while the channel is muted, and shows the text instead", () => {
@@ -105,7 +105,7 @@ describe("speaking alerts", () => {
     alerts.raise({ kind: "unitLost" }, 1);
     alerts.update(1, false);
     expect(said).toEqual([]);
-    expect(alerts.banner(1)).toBe("Unit lost");
+    expect(alerts.banner(1)).toBe("A unit has fallen");
   });
 
   it("cuts the alert off when the channel is muted halfway through", () => {
@@ -140,7 +140,7 @@ describe("speaking alerts", () => {
     alerts.raise({ kind: "unitReady" }, 9);
     alerts.update(9, false);
     alerts.update(9.1, false);
-    expect(said.map((s) => s.text)).toEqual(["Building ready", "Unit ready"]);
+    expect(said.map((s) => s.text)).toEqual(["Building finished", "Unit trained"]);
   });
 
   it("falls back to the chime and the text when the browser refuses to speak", () => {
@@ -162,7 +162,7 @@ describe("alerts before the first click or key press", () => {
     alerts.raise({ kind: "buildingReady" }, 1);
     alerts.update(1, false);
     expect(said).toEqual([]);
-    expect(alerts.banner(1)).toBe("Building ready");
+    expect(alerts.banner(1)).toBe("Building finished");
   });
 
   it("speaks the alerts raised once the person has clicked or pressed a key", () => {
@@ -173,7 +173,7 @@ describe("alerts before the first click or key press", () => {
     person.hasActed = true;
     alerts.raise({ kind: "unitReady" }, 4);
     alerts.update(4, false);
-    expect(said.map((s) => s.text)).toEqual(["Unit ready"]);
+    expect(said.map((s) => s.text)).toEqual(["Unit trained"]);
   });
 });
 
@@ -184,17 +184,17 @@ describe("an alert cut off while another is waiting", () => {
     alerts.raise({ kind: "unitReady" }, 1);
     alerts.raise({ kind: "creditsShort" }, 1);
     alerts.update(1, false);
-    // Paused and at once carried on: "Building ready" is cut off and "Unit ready" starts...
+    // Paused and at once carried on: "Building finished" is cut off and "Unit trained" starts...
     alerts.update(1.1, true);
     alerts.update(1.2, false);
-    expect(said.map((s) => s.text)).toEqual(["Building ready", "Unit ready"]);
+    expect(said.map((s) => s.text)).toEqual(["Building finished", "Unit trained"]);
     // ...and only now does the browser report the first one's end.
     deliver();
     alerts.update(1.3, false);
-    expect(said.map((s) => s.text)).toEqual(["Building ready", "Unit ready"]);
+    expect(said.map((s) => s.text)).toEqual(["Building finished", "Unit trained"]);
     finish(true);
     alerts.update(1.4, false);
-    expect(said.map((s) => s.text)).toEqual(["Building ready", "Unit ready", "Not enough Credits"]);
+    expect(said.map((s) => s.text)).toEqual(["Building finished", "Unit trained", "Not enough Credits"]);
   });
 });
 
@@ -208,7 +208,7 @@ describe("starting a new Match", () => {
     expect(cancels()).toBe(1);
     deliver();
     alerts.update(1.5, false);
-    expect(said.map((s) => s.text)).toEqual(["Building ready"]);
+    expect(said.map((s) => s.text)).toEqual(["Building finished"]);
   });
 
   it("takes the old Match's text off the screen", () => {
@@ -228,7 +228,7 @@ describe("starting a new Match", () => {
     alerts.reset();
     alerts.raise({ kind: "buildingsUnderAttack" }, 3);
     alerts.update(3, false);
-    expect(said.map((s) => s.text)).toEqual(["Base under attack", "Base under attack"]);
+    expect(said.map((s) => s.text)).toEqual(["Your buildings are taking fire", "Your buildings are taking fire"]);
   });
 
   it("does not hold the first alert back for an unspoken one from the old Match", () => {
@@ -238,7 +238,7 @@ describe("starting a new Match", () => {
     alerts.reset();
     alerts.raise({ kind: "buildingReady" }, 10.2);
     alerts.update(10.2, false);
-    expect(alerts.banner(10.2)).toBe("Building ready");
+    expect(alerts.banner(10.2)).toBe("Building finished");
   });
 });
 
@@ -260,10 +260,10 @@ describe("alerts without a local voice", () => {
     alerts.raise({ kind: "unitReady" }, 0);
     alerts.update(0, false);
     alerts.update(0.5, false);
-    expect(alerts.banner(0.5)).toBe("Building ready");
+    expect(alerts.banner(0.5)).toBe("Building finished");
     expect(chimes()).toBe(1);
     alerts.update(1.5, false);
-    expect(alerts.banner(1.5)).toBe("Unit ready");
+    expect(alerts.banner(1.5)).toBe("Unit trained");
     expect(chimes()).toBe(2);
   });
 });
@@ -277,8 +277,8 @@ describe("alerts while the game is paused", () => {
     alerts.update(1.2, true);
     expect(cancels()).toBe(1);
     alerts.update(1.2, true);
-    expect(said.map((s) => s.text)).toEqual(["Building ready"]);
+    expect(said.map((s) => s.text)).toEqual(["Building finished"]);
     alerts.update(1.3, false);
-    expect(said.map((s) => s.text)).toEqual(["Building ready", "Unit ready"]);
+    expect(said.map((s) => s.text)).toEqual(["Building finished", "Unit trained"]);
   });
 });

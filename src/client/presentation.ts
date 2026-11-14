@@ -54,7 +54,7 @@ export const TURRET_TURN_PER_TICK = 1;
  * footprint, to count as among them. About a Turret's range: Units this
  * close are defending or working among the Buildings, and whoever shoots
  * them can shoot the Buildings next. Farther out it is a fight on the Map,
- * and calling that "Base under attack" would be a false alarm.
+ * and saying the Buildings are taking fire would be a false alarm.
  */
 export const NEAR_BUILDINGS_CELLS = 5;
 

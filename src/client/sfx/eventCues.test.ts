@@ -74,7 +74,7 @@ describe("the alert a presentation event raises", () => {
   });
 
   it("does not raise it when a Unit is hit somewhere out on the Map", () => {
-    // Spec #16: the alert is "Base under attack"; a skirmish at the far end of the Map is not that.
+    // The alert is "Your buildings are taking fire"; a skirmish at the far end of the Map is not that.
     expect(alertForEvent({ kind: "underAttack", hit: "unit", at, nearOwnBuildings: false }, 0)).toBeNull();
   });
 
