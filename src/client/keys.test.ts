@@ -56,6 +56,18 @@ describe("Control Group keys", () => {
   });
 });
 
+describe("Command keys", () => {
+  it("A arms an Attack-move and S stops the selected Units", () => {
+    expect(keyAction(press("KeyA"))).toEqual({ type: "attackMove" });
+    expect(keyAction(press("KeyS"))).toEqual({ type: "stop" });
+  });
+
+  it("do nothing under a Victory, defeat or Paused screen", () => {
+    expect(worksUnderScreen({ type: "attackMove" })).toBe(false);
+    expect(worksUnderScreen({ type: "stop" })).toBe(false);
+  });
+});
+
 describe("pause, mute and Escape", () => {
   it("P pauses, M mutes and Escape goes back", () => {
     expect(keyAction(press("KeyP"))).toEqual({ type: "togglePause" });
@@ -63,9 +75,10 @@ describe("pause, mute and Escape", () => {
     expect(keyAction(press("Escape"))).toEqual({ type: "back" });
   });
 
-  it("Escape leaves placement mode when placing, and toggles pause otherwise", () => {
-    expect(backAction(true)).toBe("cancelPlacement");
-    expect(backAction(false)).toBe("togglePause");
+  it("Escape leaves placement mode when placing, cancels an armed Attack-move, and toggles pause otherwise", () => {
+    expect(backAction(true, false)).toBe("cancelPlacement");
+    expect(backAction(false, true)).toBe("cancelAttackMove");
+    expect(backAction(false, false)).toBe("togglePause");
   });
 });
 
@@ -94,8 +107,8 @@ describe("under a Victory, defeat or Paused screen", () => {
 });
 
 describe("keys with no job", () => {
-  it("W, A, S, D and unknown keys do nothing", () => {
-    for (const code of ["KeyW", "KeyA", "KeyS", "KeyD", "KeyQ", "Digit0", "Tab"]) {
+  it("W, D and unknown keys do nothing", () => {
+    for (const code of ["KeyW", "KeyD", "KeyQ", "Digit0", "Tab"]) {
       expect(keyAction(press(code))).toBeNull();
     }
   });

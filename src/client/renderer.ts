@@ -12,6 +12,7 @@ import { MinimapPainter } from "./minimapPainter";
 import type { ScreenOverlay } from "./screenOverlay";
 import { drawScreenOverlay } from "./screenOverlayPainter";
 import {
+  ATTACK_MOVE_MARKER,
   DRAG_BOX_FILL,
   DRAG_BOX_LINE,
   HUD_BG,
@@ -42,8 +43,10 @@ export interface Overlay {
   readonly groupNumbers: ReadonlyMap<EntityId, number>;
   /** Corners of the box being dragged, in Map-view pixels, if any. */
   readonly dragBox: { readonly a: { x: number; y: number }; readonly b: { x: number; y: number } } | null;
-  /** The Cell of the last move Command, and how far its fade-out has got (0..1). */
-  readonly moveMarker: { readonly cell: CellPos; readonly age: number } | null;
+  /** The Cell of the last move or Attack-move Command, and how far its fade-out has got (0..1). */
+  readonly moveMarker: { readonly cell: CellPos; readonly age: number; readonly kind: "move" | "attackMove" } | null;
+  /** What the next click will do, said at the bottom of the Map view while a mode such as Attack-move waits for it; null for none. */
+  readonly hint: string | null;
   /** The footprint preview while placing a finished Building. */
   readonly placement: { readonly kind: BuildingKind; readonly at: CellPos; readonly valid: boolean } | null;
   /** The finished Building the person is placing, wherever the mouse is; its button shows it. */
@@ -112,7 +115,7 @@ export class Renderer {
     this.world.drawFog(ctx, view, cam, viewRect);
     const selectedBuilding = view.buildings.find((b) => b.id === overlay.selectedBuilding);
     if (selectedBuilding) drawRallyPoint(ctx, selectedBuilding, cam);
-    if (overlay.moveMarker) this.drawMoveMarker(overlay.moveMarker.cell, overlay.moveMarker.age, cam);
+    if (overlay.moveMarker) this.drawMoveMarker(overlay.moveMarker, cam);
     // The pixel world's layer over the fog: Units are only ever listed where the Player can see, and
     // effects are checked against the fog as it is now, since they outlive the Tick that made them.
     // Effects go over the Units they hit.
@@ -124,6 +127,7 @@ export class Renderer {
     });
     if (overlay.dragBox) this.drawDragBox(overlay.dragBox.a, overlay.dragBox.b);
     this.drawHud(view, mapView);
+    if (overlay.hint) this.drawHint(overlay.hint, mapView);
     ctx.restore();
 
     this.drawPanel(layout.panel);
@@ -176,16 +180,44 @@ export class Renderer {
     ctx.fillRect(panel.x + panel.width - 1, panel.y, 1, panel.height);
   }
 
-  private drawMoveMarker(cell: CellPos, age: number, cam: Camera): void {
+  /** A ring that grows and fades where the Command pointed; an Attack-move's is another colour with cross-hair ticks, so the two are told apart at a glance. */
+  private drawMoveMarker(marker: NonNullable<Overlay["moveMarker"]>, cam: Camera): void {
     const { ctx } = this;
+    const { cell, age } = marker;
+    const attack = marker.kind === "attackMove";
     const p = mapToScreen(cam, cell.x + 0.5, cell.y + 0.5);
+    const radius = CELL_PX * (0.15 + 0.3 * age);
     ctx.globalAlpha = 1 - age;
-    ctx.strokeStyle = MOVE_MARKER;
+    ctx.strokeStyle = attack ? ATTACK_MOVE_MARKER : MOVE_MARKER;
     ctx.lineWidth = 2;
     ctx.beginPath();
-    ctx.arc(p.x, p.y, CELL_PX * (0.15 + 0.3 * age), 0, Math.PI * 2);
+    ctx.arc(p.x, p.y, radius, 0, Math.PI * 2);
+    if (attack) {
+      const tick = CELL_PX * 0.25;
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
+        ctx.moveTo(p.x + dx * radius, p.y + dy * radius);
+        ctx.lineTo(p.x + dx * (radius + tick), p.y + dy * (radius + tick));
+      }
+    }
     ctx.stroke();
     ctx.globalAlpha = 1;
+  }
+
+  /** A line of text in a dark box at the bottom middle of the Map view. */
+  private drawHint(text: string, mapView: Size): void {
+    const { ctx } = this;
+    ctx.font = "bold 14px system-ui, sans-serif";
+    const w = Math.min(mapView.width - 16, ctx.measureText(text).width + 24);
+    const x = Math.round((mapView.width - w) / 2);
+    const y = mapView.height - 44;
+    ctx.fillStyle = HUD_BG;
+    ctx.fillRect(x, y, w, 30);
+    ctx.fillStyle = ATTACK_MOVE_MARKER;
+    ctx.fillRect(x, y, 3, 30);
+    ctx.fillStyle = HUD_TEXT;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(text, mapView.width / 2, y + 15, w - 16);
   }
 
   private drawDragBox(a: { x: number; y: number }, b: { x: number; y: number }): void {

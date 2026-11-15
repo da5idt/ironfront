@@ -12,6 +12,10 @@ export type KeyAction =
   | { readonly type: "menuButton"; readonly index: number }
   /** A Control Group's key: with Shift it saves the selection as the group, without it selects the group. */
   | { readonly type: "controlGroup"; readonly group: number; readonly save: boolean }
+  /** Arms an Attack-move: the next left-click on the Map or minimap says where. */
+  | { readonly type: "attackMove" }
+  /** Stops the selected Units. */
+  | { readonly type: "stop" }
   | { readonly type: "togglePause" }
   /** Escape: backs out of whatever is in progress; see backAction. */
   | { readonly type: "back" }
@@ -40,6 +44,8 @@ const KEYS: Readonly<Record<string, KeyAction>> = {
   KeyX: { type: "menuButton", index: 1 },
   KeyC: { type: "menuButton", index: 2 },
   KeyV: { type: "menuButton", index: 3 },
+  KeyA: { type: "attackMove" },
+  KeyS: { type: "stop" },
   KeyP: { type: "togglePause" },
   Escape: { type: "back" },
   KeyM: { type: "muteAll" },
@@ -100,7 +106,11 @@ export function heldScroll(held: ReadonlySet<string>): { dx: number; dy: number 
   return { dx: Math.sign(dx), dy: Math.sign(dy) };
 }
 
-/** Escape first backs out of placing a Building, so it only pauses when there is nothing to back out of. */
-export function backAction(placing: boolean): "cancelPlacement" | "togglePause" {
-  return placing ? "cancelPlacement" : "togglePause";
+/** Escape first backs out of placing a Building or an armed Attack-move, so it only pauses when there is nothing to back out of. */
+export function backAction(
+  placing: boolean,
+  attackMoveArmed: boolean,
+): "cancelPlacement" | "cancelAttackMove" | "togglePause" {
+  if (placing) return "cancelPlacement";
+  return attackMoveArmed ? "cancelAttackMove" : "togglePause";
 }
