@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { RIVERFORD } from "../game/maps/riverford";
 import {
   advanceTick,
+  type Command,
   createMatch,
   getMatchStatus,
   getPlayerView,
@@ -13,7 +14,7 @@ import {
   TICKS_PER_SECOND,
 } from "../sim";
 import { openMap, testMap } from "../sim/testing/maps";
-import { addTestUnit, setTestBuildingHp, setTestOre } from "../sim/testing/setup";
+import { addTestBuilding, addTestUnit, setTestBuildingHp, setTestOre } from "../sim/testing/setup";
 import { createOpponent, type Opponent, THINK_EVERY_TICKS } from "./opponent";
 
 interface Seat {
@@ -174,6 +175,70 @@ describe("Computer Opponent defending against an unseen attacker", () => {
     );
     expect(defend).toBeDefined();
     for (const command of commands) expect(issueCommand(match, 1, command), JSON.stringify(command)).toEqual({ ok: true });
+  });
+});
+
+describe("Computer Opponent attack waves", () => {
+  /** Plays Player 1 as the Opponent against a passive Player 0 and keeps every Command it gave. */
+  function playRecording(match: Match, ticks: number, onTick?: (tick: number) => void): Command[] {
+    const opponent = createOpponent(1, 7);
+    const given: Command[] = [];
+    const recording: Opponent = {
+      think: (view) => {
+        const commands = opponent.think(view);
+        given.push(...commands);
+        return commands;
+      },
+    };
+    play(match, [{ player: 1, opponent: recording }], ticks, onTick);
+    return given;
+  }
+
+  it("sends a wave by Attack-move, to its gathering point and then onto the other Player's Buildings", () => {
+    const match = createMatch(RIVERFORD, 7);
+    const given = playRecording(match, 8 * MINUTES);
+    const attackMoves = given.filter((c) => c.type === "attackMove");
+    // A wave is several Units; the only other Unit sent out alone is the scout, on a plain move.
+    const SEVERAL = 3;
+    expect(attackMoves.some((c) => c.unitIds.length >= SEVERAL)).toBe(true);
+    // Player 0's base is the top-left corner: HQ at (4,4), Refinery at (9,4).
+    expect(attackMoves.some((c) => Math.hypot(c.target.x - 7, c.target.y - 6) < 6)).toBe(true);
+  });
+
+  // openMap(40, 40): Player 0's HQ covers (0..2, 0..2) and its Refinery (4..6, 0..1); Player 1's HQ
+  // covers (37..39, 37..39). Eight Raiders more than a first wave needs, so one leaves as soon as waves may.
+  function stagedWave(stage: (match: Match) => void): Match {
+    const match = createMatch(openMap(40, 40), 7);
+    for (let i = 0; i < 8; i++) addTestUnit(match, 1, "raider", { x: 28 + i, y: 34 });
+    stage(match);
+    return match;
+  }
+  const WAVE_HAS_STRUCK = 7 * MINUTES;
+
+  it("kills a Rifleman it meets on the way to its gathering point, far from either base", () => {
+    let sentry = 0;
+    const match = stagedWave((m) => {
+      // On the straight line between the bases, more than twenty Cells from each.
+      sentry = addTestUnit(m, 0, "rifleman", { x: 20, y: 20 });
+    });
+    playRecording(match, WAVE_HAS_STRUCK);
+    expect(getPlayerView(match, 0).units.some((u) => u.id === sentry)).toBe(false);
+  });
+
+  it("turns on a Turret that covers the Building it came for, before that Building falls", () => {
+    const match = stagedWave((m) => {
+      // Five Cells from the Cell below the Refinery, where the wave arrives: inside the
+      // Turret's range of 5.5 and outside a Raider's 4 and a Rifleman's 3.5.
+      addTestBuilding(m, 0, "turret", { x: 1, y: 6 });
+    });
+    let refineryStoodWhenTurretFell: boolean | null = null;
+    playRecording(match, WAVE_HAS_STRUCK, () => {
+      if (refineryStoodWhenTurretFell !== null) return;
+      const own = getPlayerView(match, 0).buildings.filter((b) => b.owner === 0);
+      if (own.some((b) => b.kind === "turret")) return;
+      refineryStoodWhenTurretFell = own.some((b) => b.kind === "refinery");
+    });
+    expect(refineryStoodWhenTurretFell).toBe(true);
   });
 });
 

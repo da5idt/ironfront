@@ -1,7 +1,7 @@
-import { type BuildingView, type EntityId, OPPONENT, type PlayerView, UNIT_STATS, type UnitView, type Vec } from "../sim";
+import { type BuildingView, OPPONENT, type UnitView, type Vec } from "../sim";
 
 // The Computer Opponent's fighting decisions that are worth testing on their own:
-// how big an attack wave must be, and what a Unit should shoot.
+// how big an attack wave must be, and which of several candidates is nearest.
 
 /** Idle army Units the Opponent waits for before sending wave `wave` (counting from 0). */
 export function waveThreshold(wave: number): number {
@@ -23,28 +23,6 @@ export function waveReady(s: WaveState): boolean {
   if (s.tick < OPPONENT.firstWaveTick) return false;
   if (s.lastWaveTick !== null && s.tick - s.lastWaveTick < OPPONENT.waveIntervalTicks) return false;
   return s.army >= waveThreshold(s.wave);
-}
-
-/** How far from a Unit an enemy counts as in its way and worth turning on. */
-export const REACH = 8;
-
-/**
- * What a Unit at `from` should attack, or null when no enemy is known. In reach,
- * the order is: armed Units (they shoot back), other Units, Turrets (they shoot
- * back too), then any Building. Out of reach, the nearest known enemy Building,
- * remembered ones included, since the Opponent attacks what it last saw.
- */
-export function chooseTarget(view: PlayerView, from: Vec): EntityId | null {
-  const enemyUnits = view.units.filter((u) => u.owner !== view.playerId);
-  const enemyBuildings = view.buildings.filter((b) => b.owner !== view.playerId);
-  const armed = enemyUnits.filter((u) => UNIT_STATS[u.kind].damage > 0);
-  const turrets = enemyBuildings.filter((b) => b.kind === "turret");
-  const pick =
-    nearest(armed, from, REACH) ??
-    nearest(enemyUnits, from, REACH) ??
-    nearest(turrets, from, REACH) ??
-    nearest(enemyBuildings, from, Infinity);
-  return pick?.id ?? null;
 }
 
 /** From `from` to a Unit's position, or to the nearest point of a Building's footprint. */
