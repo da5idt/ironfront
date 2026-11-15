@@ -17,7 +17,7 @@ npm ci
 npm run dev        # opens the game at http://localhost:5173
 ```
 
-Scroll with the arrow keys, WASD, or by moving the mouse to the screen edge.
+Scroll with the arrow keys or by moving the mouse to the screen edge.
 
 ## Develop
 
