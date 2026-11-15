@@ -17,7 +17,7 @@ describe("sound recipes", () => {
         "buildingPlaced",
         "buildingReady",
         "unitTrained",
-        "orderAck",
+        "commandAck",
         "menuClick",
         "cantBuild",
       ].sort(),
@@ -58,7 +58,7 @@ describe("sound recipes", () => {
   });
 
   it("keeps interface sounds brief so they never trail behind the click", () => {
-    for (const name of ["menuClick", "orderAck", "cantBuild"] as const) {
+    for (const name of ["menuClick", "commandAck", "cantBuild"] as const) {
       expect(recipeDuration(RECIPES[name])).toBeLessThanOrEqual(0.3);
     }
   });

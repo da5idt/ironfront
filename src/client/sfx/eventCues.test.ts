@@ -63,7 +63,7 @@ describe("sounds for presentation events", () => {
 });
 
 describe("the alert a presentation event raises", () => {
-  it("tells the person their Building is ready and their Unit is ready", () => {
+  it("tells the person their Building is ready and their Unit is trained", () => {
     expect(alertForEvent({ kind: "buildingReady" }, 0)).toEqual({ kind: "buildingReady" });
     expect(alertForEvent({ kind: "unitTrained", unit: "raider" }, 0)).toEqual({ kind: "unitTrained" });
   });

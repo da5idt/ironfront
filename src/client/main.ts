@@ -66,7 +66,7 @@ const canvas = document.querySelector<HTMLCanvasElement>("#game")!;
 const renderer = new Renderer(canvas);
 /** A fresh seed for every Match, so a restart is not a replay. */
 const newSeed = (): number => (Date.now() ^ (performance.now() * 1000)) >>> 0;
-let match: Match = createMatch(RIVERFORD, newSeed());
+let match: Match = createMatch(RIVERFORD, newSeed(), { starts: "random" });
 let opponent: Opponent = createOpponent(COMPUTER, newSeed());
 /** Ticks run in this Match, counted here so the Opponent's cadence costs no PlayerView on the Ticks between. */
 let ticksRun = 0;
@@ -190,7 +190,7 @@ function orderTo(cell: CellPos): void {
   const others = ids.filter((id) => !harvesters.includes(id));
   if (harvesters.length > 0) issue({ type: "harvest", unitIds: harvesters, target: cell });
   if (others.length > 0) issue({ type: "move", unitIds: others, target: cell });
-  sfx.play("orderAck");
+  sfx.play("commandAck");
 }
 
 /** The finished Building being placed, while the person picks a spot; null otherwise. */
@@ -294,7 +294,7 @@ canvas.addEventListener("mousedown", (e) => {
     if (issueCommand(match, HUMAN, { type: "setRallyPoint", buildingId: selectedBuilding, target: cell }).ok) {
       view = getPlayerView(match, HUMAN);
       moveMarker = { cell, at: performance.now() };
-      sfx.play("orderAck");
+      sfx.play("commandAck");
     }
   } else if (e.button === 2 && selection.size > 0) {
     const cell = screenToCell(camera, inView.x, inView.y);
@@ -304,7 +304,7 @@ canvas.addEventListener("mousedown", (e) => {
     const enemy = enemyUnitAt(view.units, point, HUMAN) ?? enemyBuildingAt(view.buildings, point, HUMAN);
     if (enemy) {
       issue({ type: "attack", unitIds: [...selection], targetId: enemy.id });
-      sfx.play("orderAck");
+      sfx.play("commandAck");
       return;
     }
     orderTo(cell);
@@ -344,7 +344,7 @@ function currentScreenOverlay(): ScreenOverlay | null {
 
 /** Throws away the Match and everything the client kept about it, and starts a fresh one. */
 function restart(): void {
-  match = createMatch(RIVERFORD, newSeed());
+  match = createMatch(RIVERFORD, newSeed(), { starts: "random" });
   // The old Opponent's notes name Units of the old Match.
   opponent = createOpponent(COMPUTER, newSeed());
   ticksRun = 0;

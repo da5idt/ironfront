@@ -4,7 +4,7 @@ import { COMMAND_HANDLERS, type CommandHandler } from "./handlers";
 import { createFog, updateFog } from "./fog";
 import type { MapDef } from "./mapdef";
 import { parseMap } from "./mapdef";
-import { createRng } from "./rng";
+import { createRng, nextInt } from "./rng";
 import type { MatchState, MatchStatus, PlayerState } from "./state";
 import { addBuilding, isWalkable, spawnUnit } from "./state";
 import { SYSTEMS } from "./systems";
@@ -26,8 +26,28 @@ function state(match: Match): MatchState {
   return match as unknown as MatchState;
 }
 
-export function createMatch(map: MapDef, seed: number): Match {
+/**
+ * Which of the Map's two starting positions each Player gets. "listed" gives
+ * Player 0 the first one; "random" lets the seed decide, so the person playing
+ * does not open every Match from the same corner.
+ */
+export type StartOrder = "listed" | "swapped" | "random";
+
+export interface MatchOptions {
+  readonly starts?: StartOrder;
+}
+
+// Drawn from its own generator: taking it from the Match's would shift every
+// later random choice depending on whether the option was used.
+function startsSwapped(order: StartOrder, seed: number): boolean {
+  if (order === "random") return nextInt(createRng(seed ^ 0x51a27), 2) === 1;
+  return order === "swapped";
+}
+
+export function createMatch(map: MapDef, seed: number, options: MatchOptions = {}): Match {
   const parsed = parseMap(map);
+  const swapped = startsSwapped(options.starts ?? "listed", seed);
+  const startOf = (player: PlayerId): MapDef["starts"][number] => map.starts[swapped ? (player === 0 ? 1 : 0) : player];
   const cells = parsed.width * parsed.height;
   const players: [PlayerState, PlayerState] = [
     { id: 0, credits: ECONOMY.startingCredits, production: null },
@@ -50,13 +70,13 @@ export function createMatch(map: MapDef, seed: number): Match {
     shots: [],
   };
   for (const player of PLAYER_IDS) {
-    const start = map.starts[player];
+    const start = startOf(player);
     placeStartingBuilding(m, map, player, "hq", start.hq);
     placeStartingBuilding(m, map, player, "refinery", start.refinery);
   }
   // Units after all Buildings, so a Unit inside either Player's base is caught.
   for (const player of PLAYER_IDS) {
-    const start = map.starts[player];
+    const start = startOf(player);
     placeStartingUnit(m, map, player, "harvester", start.harvester);
     for (const cell of start.riflemen) placeStartingUnit(m, map, player, "rifleman", cell);
   }
