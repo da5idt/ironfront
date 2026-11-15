@@ -1,5 +1,5 @@
 import type { Vec } from "../../sim";
-import { type Camera, CELL_PX, type Size } from "../camera";
+import type { Camera, Size } from "../camera";
 
 // How loud a sound on the Map is from where the person playing is looking: loudest at
 // the centre of the Map view, quieter with distance, and skipped altogether
@@ -21,11 +21,11 @@ export const SKIP_BEYOND_REACHES = 1.75;
 const PAN_MAX = 0.8;
 
 export function listenerFor(camera: Camera, viewSize: Size): Listener {
-  const halfWidth = viewSize.width / 2 / CELL_PX;
-  const halfHeight = viewSize.height / 2 / CELL_PX;
+  const halfWidth = viewSize.width / 2 / camera.cellPx;
+  const halfHeight = viewSize.height / 2 / camera.cellPx;
   return {
-    x: camera.x / CELL_PX + halfWidth,
-    y: camera.y / CELL_PX + halfHeight,
+    x: camera.x / camera.cellPx + halfWidth,
+    y: camera.y / camera.cellPx + halfHeight,
     reach: Math.hypot(halfWidth, halfHeight),
   };
 }

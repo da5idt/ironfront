@@ -6,7 +6,7 @@ import { PixelWorld } from "./art/pixelWorld";
 import { ART_CELL_PX } from "./art/terrainArt";
 import { UnitPainter } from "./art/unitPainter";
 import { drawBuildPanel } from "./buildPanelPainter";
-import { type Camera, CELL_PX, mapToScreen, type Size } from "./camera";
+import { type Camera, mapToScreen, type Size } from "./camera";
 import type { Layout, Rect } from "./layout";
 import { MinimapPainter } from "./minimapPainter";
 import type { ScreenOverlay } from "./screenOverlay";
@@ -186,14 +186,14 @@ export class Renderer {
     const { cell, age } = marker;
     const attack = marker.kind === "attackMove";
     const p = mapToScreen(cam, cell.x + 0.5, cell.y + 0.5);
-    const radius = CELL_PX * (0.15 + 0.3 * age);
+    const radius = cam.cellPx * (0.15 + 0.3 * age);
     ctx.globalAlpha = 1 - age;
     ctx.strokeStyle = attack ? ATTACK_MOVE_MARKER : MOVE_MARKER;
     ctx.lineWidth = 2;
     ctx.beginPath();
     ctx.arc(p.x, p.y, radius, 0, Math.PI * 2);
     if (attack) {
-      const tick = CELL_PX * 0.25;
+      const tick = cam.cellPx * 0.25;
       for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
         ctx.moveTo(p.x + dx * radius, p.y + dy * radius);
         ctx.lineTo(p.x + dx * (radius + tick), p.y + dy * (radius + tick));

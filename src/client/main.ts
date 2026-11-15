@@ -18,11 +18,14 @@ import {
   type Camera,
   centreCamera,
   clampCamera,
+  DEFAULT_CELL_PX,
   screenToCell,
   screenToMap,
   scrollCamera,
   scrollDirection,
   type Size,
+  wheelZoomStep,
+  zoomCamera,
 } from "./camera";
 import {
   type ControlGroups,
@@ -114,7 +117,8 @@ const mapSize = { width: view.map.width, height: view.map.height };
 
 function cameraOnHq(): Camera {
   const hq = view.buildings.find((b) => b.owner === HUMAN && b.kind === "hq");
-  return centreCamera({ x: (hq?.x ?? 0) + 1.5, y: (hq?.y ?? 0) + 1.5 }, viewSize, mapSize);
+  // Every Match starts at the same zoom, whatever the last one ended at.
+  return centreCamera({ x: (hq?.x ?? 0) + 1.5, y: (hq?.y ?? 0) + 1.5 }, DEFAULT_CELL_PX, viewSize, mapSize);
 }
 let camera: Camera = cameraOnHq();
 /** While paused the Simulation gets no Ticks; drawing and the camera carry on. */
@@ -174,6 +178,10 @@ window.addEventListener("keydown", (e) => {
       else paused = !paused;
       return;
     }
+    case "zoom":
+      // No cursor to hold still, so the middle of the Map view stays put.
+      camera = zoomCamera(camera, action.steps, { x: viewSize.width / 2, y: viewSize.height / 2 }, viewSize, mapSize);
+      return;
     case "attackMove":
       if (canArmAttackMove(selection, placing !== null)) attackMoveArmed = true;
       return;
@@ -233,7 +241,7 @@ function pressGroupKey(group: number, save: boolean): void {
   const press = groupPress(lastGroupPress, group, performance.now());
   lastGroupPress = press.last;
   const centre = press.centre ? groupCentre(groups, group, view.units) : null;
-  if (centre) camera = centreCamera(centre, viewSize, mapSize);
+  if (centre) camera = centreCamera(centre, camera.cellPx, viewSize, mapSize);
 }
 
 /** The last click that landed on an own Unit, to tell when the next one makes a double-click. */
@@ -257,7 +265,7 @@ function onAttackMoveOutcome(outcome: AttackMoveOutcome): void {
 let minimapDrag = false;
 
 function moveCameraToMinimap(at: { x: number; y: number }): void {
-  camera = cameraOnMinimapPoint(layout.minimap, mapSize, viewSize, at.x, at.y);
+  camera = cameraOnMinimapPoint(layout.minimap, mapSize, viewSize, camera.cellPx, at.x, at.y);
 }
 
 function issue(command: Command): CommandResult {
@@ -416,6 +424,24 @@ canvas.addEventListener("mousedown", (e) => {
     moveMarker = { cell, at: performance.now(), kind: "move" };
   }
 });
+let lastWheelStepAt: number | null = null;
+canvas.addEventListener(
+  "wheel",
+  (e) => {
+    // Ctrl or Cmd with the wheel is the browser's own zoom, and stays so.
+    if (e.ctrlKey || e.metaKey) return;
+    // The page never scrolls: the game fills the window.
+    e.preventDefault();
+    const at = { x: e.clientX, y: e.clientY };
+    // Only over the Map: the wheel over the side panel and its minimap does nothing.
+    if (currentScreenOverlay() || !contains(layout.mapView, at.x, at.y)) return;
+    const step = wheelZoomStep(e.deltaY, lastWheelStepAt, performance.now());
+    if (step === 0) return;
+    lastWheelStepAt = performance.now();
+    camera = zoomCamera(camera, step, toMapView(layout, at), viewSize, mapSize);
+  },
+  { passive: false },
+);
 window.addEventListener("mousemove", (e) => {
   if (minimapDrag) moveCameraToMinimap({ x: e.clientX, y: e.clientY });
   if (drag) drag.now = { x: e.clientX, y: e.clientY };
@@ -527,7 +553,7 @@ if (import.meta.env.DEV) {
       groups: () => groups,
       /** Centres the camera on a Cell. */
       lookAt: (x: number, y: number) => {
-        camera = centreCamera({ x: x + 0.5, y: y + 0.5 }, viewSize, mapSize);
+        camera = centreCamera({ x: x + 0.5, y: y + 0.5 }, camera.cellPx, viewSize, mapSize);
       },
       /** Draws another Player's view (the Opponent's base under its own eyes); null goes back to the person's. */
       peek: (player: PlayerId | null) => (peekPlayer = player),

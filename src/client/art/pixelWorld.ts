@@ -11,13 +11,16 @@ import { eachWaterGlint } from "./waterArt";
 
 // The pixel world (ADR 0003): ground, Ore and whatever stands on the ground
 // are drawn into a low-resolution canvas at 12 art pixels per Cell, then
-// copied to the screen at 2x with smoothing off, so a Cell stays 24 screen
-// pixels (camera CELL_PX) and all camera and click maths is unchanged. Fog of
-// War is kept at the same art resolution and scaled the same way, and a second
-// low-resolution layer goes over the fog for what is never dimmed by it.
+// copied to the screen with smoothing off at the whole-number scale the
+// camera's zoom asks for (1x, 2x or 3x), so the art is crisp at every zoom and
+// only this copy knows about zoom. Fog of War is kept at the same art
+// resolution and scaled the same way, and a second low-resolution layer goes
+// over the fog for what is never dimmed by it.
 
-/** Screen pixels per art pixel. */
-export const ART_SCALE = 2;
+/** Screen pixels per art pixel at the camera's zoom. */
+export function artScale(cam: Camera): number {
+  return cam.cellPx / ART_CELL_PX;
+}
 
 export function toCanvas(buf: PixelBuffer): HTMLCanvasElement {
   const canvas = document.createElement("canvas");
@@ -68,17 +71,18 @@ export class PixelWorld {
 
   /** Sizes a low-resolution canvas to cover `dest`; returns the art pixel of the Map at its top-left corner. */
   private fit(canvas: HTMLCanvasElement, cam: Camera, dest: Rect): { ox: number; oy: number } {
-    const lw = Math.ceil(dest.width / ART_SCALE) + 1;
-    const lh = Math.ceil(dest.height / ART_SCALE) + 1;
+    const scale = artScale(cam);
+    const lw = Math.ceil(dest.width / scale) + 1;
+    const lh = Math.ceil(dest.height / scale) + 1;
     if (canvas.width !== lw || canvas.height !== lh) {
       canvas.width = lw;
       canvas.height = lh;
     }
     // Whole art pixels for the low-res canvas; the leftover screen pixel goes into the copy to the screen.
-    return { ox: Math.floor(cam.x / ART_SCALE), oy: Math.floor(cam.y / ART_SCALE) };
+    return { ox: Math.floor(cam.x / scale), oy: Math.floor(cam.y / scale) };
   }
 
-  /** Copies a low-resolution canvas to the screen at 2x, crisp. */
+  /** Copies a low-resolution canvas to the screen at the zoom's scale, crisp. */
   private present(
     ctx: CanvasRenderingContext2D,
     canvas: HTMLCanvasElement,
@@ -86,13 +90,14 @@ export class PixelWorld {
     dest: Rect,
     origin: { ox: number; oy: number },
   ): void {
+    const scale = artScale(cam);
     ctx.imageSmoothingEnabled = false;
     ctx.drawImage(
       canvas,
-      dest.x - (cam.x - origin.ox * ART_SCALE),
-      dest.y - (cam.y - origin.oy * ART_SCALE),
-      canvas.width * ART_SCALE,
-      canvas.height * ART_SCALE,
+      dest.x - (cam.x - origin.ox * scale),
+      dest.y - (cam.y - origin.oy * scale),
+      canvas.width * scale,
+      canvas.height * scale,
     );
     ctx.imageSmoothingEnabled = true;
   }
@@ -173,7 +178,7 @@ export class PixelWorld {
     this.updateFog(view);
     const { width, height } = view.map;
     ctx.imageSmoothingEnabled = false;
-    ctx.drawImage(this.fog, dest.x - cam.x, dest.y - cam.y, width * ART_CELL_PX * ART_SCALE, height * ART_CELL_PX * ART_SCALE);
+    ctx.drawImage(this.fog, dest.x - cam.x, dest.y - cam.y, width * cam.cellPx, height * cam.cellPx);
     ctx.imageSmoothingEnabled = true;
   }
 

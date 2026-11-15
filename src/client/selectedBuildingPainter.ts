@@ -1,5 +1,5 @@
 import type { BuildingView, CellPos } from "../sim";
-import { type Camera, CELL_PX, mapToScreen } from "./camera";
+import { type Camera, mapToScreen } from "./camera";
 import { RALLY_FLAG, RALLY_LINE, SELECTION_MARKER } from "./palette";
 
 // The selected Barracks or Vehicle Factory's rally point: a dashed line from
@@ -24,7 +24,7 @@ function drawRally(ctx: CanvasRenderingContext2D, from: { x: number; y: number }
   ctx.stroke();
   ctx.setLineDash([]);
   // A pole with a small pennant, drawn in code.
-  const top = foot.y - CELL_PX * 0.7;
+  const top = foot.y - cam.cellPx * 0.7;
   ctx.strokeStyle = SELECTION_MARKER;
   ctx.lineWidth = 2;
   ctx.beginPath();
@@ -34,8 +34,8 @@ function drawRally(ctx: CanvasRenderingContext2D, from: { x: number; y: number }
   ctx.fillStyle = RALLY_FLAG;
   ctx.beginPath();
   ctx.moveTo(foot.x, top);
-  ctx.lineTo(foot.x + CELL_PX * 0.4, top + CELL_PX * 0.15);
-  ctx.lineTo(foot.x, top + CELL_PX * 0.3);
+  ctx.lineTo(foot.x + cam.cellPx * 0.4, top + cam.cellPx * 0.15);
+  ctx.lineTo(foot.x, top + cam.cellPx * 0.3);
   ctx.closePath();
   ctx.fill();
 }
