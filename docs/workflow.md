@@ -54,7 +54,7 @@ flowchart TD
 - **Two-way (auto-merge):** new gameplay features, units, buildings and AI behavior; balance and parameter tweaks; bug fixes, tests and refactors inside the game code; docs other than the rules files.
 - **One-way (da5idt merges):** CI and GitHub Actions; door rules and `tools/`; `CLAUDE.md`, `CODING_STANDARDS.md`, `docs/agents/`, this file and the vendored skills; deleting any file that exists on `main`; dependency and lockfile changes; build and deploy config; save-game and map file formats; anything that sends data off the player's machine (network, analytics, telemetry); `LICENSE`, `README.md` and third-party assets (art, sound, fonts).
 
-The path and content rules behind this table live in `.github/aihero.yaml`, and `tests/test_door_gate.py` checks them in CI. A PR that touches `docs/retros/` together with a rules file is one-way because of the rules file; a retro file on its own is a doc.
+The path and content rules behind this table live in `.github/aihero.yaml`, and `tests/test_door_gate.py` checks them in CI.
 
 ## CI
 The `checks` job runs actionlint, compiles the door scripts, runs `tools/check_house_rules.py` (ADR 0002: no clock, DOM or real randomness in `src/sim`, `src/opponent` or `src/game`) and the tests for the scripts in `tools/`. Then it runs the game's own checks on Node 22: `npm run typecheck`, `npm test` and `npm run build`. There is no linter yet (ADR 0001 keeps dependencies few).

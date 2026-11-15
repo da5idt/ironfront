@@ -8,6 +8,9 @@ permissions:
 jobs:
   checks:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash  # explicit bash turns pipefail on, so a step piped to tee fails when its script fails
     steps:
       - uses: actions/checkout@v5
       - name: actionlint (workflow bugs review would otherwise catch by hand)

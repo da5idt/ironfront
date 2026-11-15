@@ -16,6 +16,8 @@ def check(root):
 class HouseRules(unittest.TestCase):
     def tree(self, files):
         d = pathlib.Path(tempfile.mkdtemp())
+        for folder in ("src/sim", "src/opponent", "src/game"):
+            (d / folder).mkdir(parents=True)
         for name, text in files.items():
             (d / name).parent.mkdir(parents=True, exist_ok=True)
             (d / name).write_text(text)
@@ -38,6 +40,11 @@ class HouseRules(unittest.TestCase):
     def test_the_dom_in_a_map_fails(self):
         r = check(self.tree({"src/game/maps/a.ts": "window.alert('x');\n"}))
         self.assertEqual(r.returncode, 1)
+
+    def test_a_missing_folder_fails(self):
+        r = check(tempfile.mkdtemp())
+        self.assertEqual(r.returncode, 1)
+        self.assertIn("src/sim", r.stdout)
 
     def test_naming_a_rule_in_a_comment_passes(self):
         r = check(self.tree({"src/sim/rng.ts": "// never call Math.random\n/* nor\n Date.now() */\nexport const x = 1;\n"}))

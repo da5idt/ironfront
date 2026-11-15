@@ -5,6 +5,9 @@ ADR 0002: the Simulation and everything that decides a Match (the Computer
 Opponent, the Maps) may not read the clock, real randomness or the DOM, or the
 same Map, seed and Commands stop giving the same Match.
 
+Comments are blanked by pattern, not by parsing: code after `//` inside a string
+on the same line, or after `/*` inside a template literal, is not checked.
+
 Usage: check_house_rules.py [repo-root]. Exits 1 and prints ::error lines on a breach.
 """
 import pathlib
@@ -30,6 +33,9 @@ def code_lines(text):
 def breaches(root):
     found = []
     for d in DETERMINISTIC_DIRS:
+        if not (root / d).is_dir():  # a renamed folder or wrong root must not pass silently
+            found.append((pathlib.PurePath(d), 0, "nothing: the folder is missing"))
+            continue
         for path in sorted((root / d).rglob("*.ts")):
             if path.name.endswith(".test.ts"):
                 continue
@@ -44,6 +50,6 @@ if __name__ == "__main__":
     root = pathlib.Path(sys.argv[1] if len(sys.argv) > 1 else ".")
     found = breaches(root)
     for path, n, what in found:
-        print(f"::error file={path},line={n}::{path}:{n} reads {what}; ADR 0002 keeps it out of {path.parts[1]}")
+        print(f"::error file={path},line={n}::{path}:{n} reads {what}; ADR 0002 keeps the clock, the DOM and real randomness out of {'/'.join(path.parts[:2])}")
     print(f"house rules: {len(found)} breach(es)")
     sys.exit(1 if found else 0)
