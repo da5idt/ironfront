@@ -50,7 +50,7 @@ const arrived = (match: Match, id: number, goal = GOAL) => () => {
   return u !== undefined && u.x === goal.x + 0.5 && u.y === goal.y + 0.5;
 };
 
-describe("the attack-move Command", () => {
+describe("the Attack-move Command", () => {
   it("walks to the target Cell when nothing is in the way, and stays there", () => {
     const match = stage();
     const raider = addTestUnit(match, 0, "raider", START);
@@ -216,6 +216,33 @@ describe("the attack-move Command", () => {
     runUntil(match, arrived(match, raider));
     expect(getPlayerView(match, 0).units.some((u) => u.id === hidden)).toBe(false);
     expect(find(match, hidden)!.hp).toBe(UNIT_STATS.harvester.maxHp);
+  });
+
+  it("gives each Unit of a group a place of its own while they fire, instead of stacking where range begins", () => {
+    const match = stage();
+    const raiders: number[] = [];
+    for (let y = ROW - 1; y <= ROW + 1; y++) {
+      for (let x = 12; x <= 14; x++) raiders.push(addTestUnit(match, 0, "raider", { x, y }));
+    }
+    const hqAt = { x: 30, y: ROW - 1 };
+    addTestBuilding(match, 1, "hq", hqAt);
+    const hq = buildingAt(match, 1, hqAt)!;
+    attackMove(match, raiders, { x: 45, y: ROW });
+    runUntil(match, () => buildingAt(match, 1, hqAt)!.hp < hq.maxHp);
+    run(match, 60);
+    const standing = raiders.map((id) => find(match, id)!);
+    for (const a of standing) {
+      for (const b of standing) {
+        if (a.id < b.id) expect(Math.hypot(a.x - b.x, a.y - b.y), `${a.id} and ${b.id}`).toBeGreaterThanOrEqual(1);
+      }
+    }
+    // They stepped aside, not away: all are still firing, so the HQ keeps losing health to all nine.
+    const before = buildingAt(match, 1, hqAt)!.hp;
+    run(match, UNIT_STATS.raider.reloadTicks);
+    expect(before - buildingAt(match, 1, hqAt)!.hp).toBe(9 * UNIT_STATS.raider.damage);
+    // And the group still finishes the trip once the HQ is gone.
+    setTestBuildingHp(match, hq.id, 1);
+    runUntil(match, () => raiders.every((id) => Math.hypot(find(match, id)!.x - 45.5, find(match, id)!.y - (ROW + 0.5)) < 3));
   });
 
   it("is rejected, changing nothing, for another Player's Units, unknown Units and Cells off the Map or between Cells", () => {

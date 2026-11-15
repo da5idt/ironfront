@@ -138,6 +138,8 @@ export const PLACEMENT = {
 } as const;
 
 export const MOVEMENT = {
+  /** How many of the nearest free Cells a Unit on an Attack-move looks through for a spot of its own in range, when it stopped on top of another. */
+  spotSearchCells: 24,
   /** Speed on rough ground as a share of speed on open ground. */
   roughSpeedMultiplier: 0.5,
 } as const;

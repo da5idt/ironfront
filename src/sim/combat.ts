@@ -2,10 +2,10 @@ import type { CommandResult } from "./commands";
 import { OK, reject } from "./commands";
 import { type BuildingSighting, isFootprintVisible, isVisible } from "./fog";
 import type { CommandHandler } from "./handlers";
-import { claimedCells, freeCellNear, groupMoveGoals, orderMoveTo, planMove, stepAlong, unitCell, walkingTo } from "./movement";
+import { claimedCells, freeCellNear, freeCellsNear, groupMoveGoals, orderMoveTo, planMove, stepAlong, unitCell, walkingTo } from "./movement";
 import type { BuildingState, MatchState, UnitState } from "./state";
 import { cellIndex, ownUnits, removeBuilding } from "./state";
-import { BUILDING_STATS, UNIT_STATS, type WeaponStats } from "./tuning";
+import { BUILDING_STATS, MOVEMENT, UNIT_STATS, type WeaponStats } from "./tuning";
 import type { CellPos, EntityId, PlayerId, Vec } from "./types";
 
 // Units shooting at Units and Buildings. Rules:
@@ -25,6 +25,8 @@ import type { CellPos, EntityId, PlayerId, Vec } from "./types";
 //   nothing is. Enemies that can shoot back (armed Units and Turrets) come
 //   first, then other Units, then other Buildings. It never leaves its route
 //   to chase, so a group sent together arrives together. On arrival it is idle.
+//   A group reaches range at the same point of the route, so one that stops on
+//   top of another steps aside to a free Cell still in range, as attackers do.
 // - Turrets fire by themselves at the nearest Visible enemy Unit in range,
 //   never at Buildings: they defend a base, they don't besiege one.
 // - All shots in a Tick land before the dead are removed, so two Units that
@@ -207,7 +209,9 @@ export const handleAttackMove: CommandHandler<"attackMove"> = (m, player, comman
   const goals = groupMoveGoals(m, player, command.unitIds, command.target);
   if (!(goals instanceof Map)) return goals;
   for (const [u, goal] of goals) {
-    if (canFight(u)) u.order = { type: "attackMove", plan: planMove(m, u, goal), firing: false };
+    if (canFight(u)) {
+      u.order = { type: "attackMove", plan: planMove(m, u, goal), firing: false, spot: null, settled: false };
+    }
     else orderMoveTo(m, u, goal);
   }
   return OK;
@@ -216,12 +220,30 @@ export const handleAttackMove: CommandHandler<"attackMove"> = (m, player, comman
 /** One Tick of an Attack-move: fire if anything is in range, otherwise walk on. */
 function advanceAttackMove(m: MatchState, u: UnitState, order: Extract<UnitState["order"], { type: "attackMove" }>): void {
   const target = attackMoveTarget(m, u);
-  order.firing = target !== undefined;
-  if (target) {
-    fire(m, u, u, UNIT_STATS[u.kind], target);
+  if (!target) {
+    order.firing = false;
+    order.spot = null;
+    order.settled = false;
+    if (stepAlong(m, u, order.plan) === "arrived") u.order = { type: "idle" };
     return;
   }
-  if (stepAlong(m, u, order.plan) === "arrived") u.order = { type: "idle" };
+  fire(m, u, u, UNIT_STATS[u.kind], target);
+  if (!order.spot && !order.settled && crowdsStanding(m, u)) {
+    // Stopped on top of another own Unit: take the nearest free Cell, if that is still in range of the target.
+    // That is a step aside, not a chase. With no such Cell it shares the spot rather than walk out of range.
+    // It stopped where range begins, so most Cells round it are out of range: look through the nearest few.
+    const free = freeCellsNear(m, unitCell(u), MOVEMENT.spotSearchCells, claimedCells(m, u.owner, [u])).find((cell) =>
+      inRange({ ...u, x: cell.x + 0.5, y: cell.y + 0.5 }, target),
+    );
+    if (free) order.spot = planMove(m, u, free);
+    else order.settled = true;
+  }
+  if (order.spot && stepAlong(m, u, order.spot) === "arrived") {
+    order.spot = null;
+    order.settled = true;
+  }
+  // While it walks to its spot it is not standing: others keep off the spot, not off where it is passing.
+  order.firing = order.spot === null;
 }
 
 function pursue(m: MatchState, u: UnitState, order: Extract<UnitState["order"], { type: "attack" }>): void {

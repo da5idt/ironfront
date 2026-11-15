@@ -587,7 +587,8 @@ function frame(now: number): void {
     dragBox:
       drag && isDrag(drag.start, drag.now) ? { a: toMapView(layout, drag.start), b: toMapView(layout, drag.now) } : null,
     moveMarker: moveMarker ? { cell: moveMarker.cell, age: Math.max(0, markerAge), kind: moveMarker.kind } : null,
-    hint: attackMoveArmed ? ATTACK_MOVE_HINT : null,
+    // Not under a Victory, defeat or Paused screen, where no click reaches the Map.
+    hint: attackMoveArmed && !currentScreenOverlay() ? ATTACK_MOVE_HINT : null,
     placement: placementPreview(),
     placing,
     selectedBuilding,

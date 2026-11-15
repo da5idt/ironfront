@@ -5,7 +5,7 @@ import { findPath, type Grid, nearbyCells } from "./pathfinding";
 import type { MatchState, UnitState } from "./state";
 import { cellIndex, inBounds, isWalkable, ownUnits, terrainAt } from "./state";
 import { MOVEMENT, TICKS_PER_SECOND, UNIT_STATS } from "./tuning";
-import type { CellPos, PlayerId } from "./types";
+import type { CellPos, EntityId, PlayerId } from "./types";
 
 // Getting Units from one Cell to another. `orderMoveTo` and `stepAlong` are the
 // building blocks later orders (harvest, attack, Attack-move) reuse to walk somewhere.
@@ -112,7 +112,8 @@ export function groupGoals(m: MatchState, units: readonly UnitState[], target: C
 export function walkingTo(u: UnitState): CellPos | null {
   if (u.order.type === "move") return u.order.plan.goal;
   // An Attack-move that has stopped to fire is standing, so others keep off the Cell it is on, not the one it will go to.
-  if (u.order.type === "attackMove") return u.order.firing ? null : u.order.plan.goal;
+  // One stepping aside to a spot of its own is walking there, not to the end of its route.
+  if (u.order.type === "attackMove") return u.order.firing ? null : (u.order.spot?.goal ?? u.order.plan.goal);
   if (u.order.type === "attack") return u.order.chase?.goal ?? null;
   return null;
 }
@@ -143,7 +144,7 @@ export function claimedCells(m: MatchState, player: PlayerId, except: readonly U
 }
 
 /** Up to `count` walkable Cells nearest `target` that are not in `taken`, nearest first. */
-function freeCellsNear(m: MatchState, target: CellPos, count: number, taken: ReadonlySet<number>): CellPos[] {
+export function freeCellsNear(m: MatchState, target: CellPos, count: number, taken: ReadonlySet<number>): CellPos[] {
   const grid = matchGrid(m);
   const free = { ...grid, walkable: (x: number, y: number) => grid.walkable(x, y) && !taken.has(cellIndex(m, x, y)) };
   return nearbyCells(free, target, count);
@@ -161,7 +162,7 @@ export function freeCellNear(m: MatchState, target: CellPos, taken: ReadonlySet<
 export function groupMoveGoals(
   m: MatchState,
   player: PlayerId,
-  unitIds: readonly number[],
+  unitIds: readonly EntityId[],
   target: CellPos,
 ): Map<UnitState, CellPos> | CommandResult {
   const units = ownUnits(m, player, unitIds);
