@@ -95,3 +95,9 @@ _Avoid_: Buggy, jeep, light tank
 **Harvester**:
 The Unit that collects Ore from Ore Fields and carries it to a Refinery.
 _Avoid_: Collector, miner, worker
+
+## Controls
+
+**Control Group**:
+A selection of Units the person playing has saved under a number from 1 to 9, to get back with one key. It belongs to the person's controls, not to the Match: the Computer Opponent has none and no rule depends on it.
+_Avoid_: Squad, team, hotkey group

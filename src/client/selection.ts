@@ -17,6 +17,10 @@ export const UNIT_HIT_RADIUS = 0.5;
 /** Mouse travel below this, in screen pixels, is a click rather than a drag. */
 export const DRAG_THRESHOLD_PX = 5;
 
+/** Two clicks on the same Unit no further apart than this, in milliseconds and screen pixels, are a double-click. */
+export const DOUBLE_CLICK_MS = 350;
+export const DOUBLE_CLICK_PX = 6;
+
 /** The player's own Unit nearest to the point within hit range, or null. */
 export function unitAt(units: readonly UnitView[], p: Point, player: PlayerId): UnitView | null {
   return nearestHit(units, p, (u) => u.owner === player);
@@ -96,4 +100,41 @@ export function pruneSelection(sel: Selection, units: readonly UnitView[]): Sele
 
 export function isDrag(from: Point, to: Point): boolean {
   return Math.hypot(to.x - from.x, to.y - from.y) >= DRAG_THRESHOLD_PX;
+}
+
+/** A click that landed on an own Unit: which one, when (milliseconds) and where on screen. */
+export interface UnitClick {
+  readonly unitId: EntityId;
+  readonly atMs: number;
+  readonly x: number;
+  readonly y: number;
+}
+
+/**
+ * True when `click` is the second of two quick clicks on the same Unit.
+ * Decided on the second click, so the first one never waits to see if another follows.
+ */
+export function isDoubleClick(prev: UnitClick | null, click: UnitClick): boolean {
+  return (
+    prev !== null &&
+    prev.unitId === click.unitId &&
+    click.atMs - prev.atMs <= DOUBLE_CLICK_MS &&
+    Math.hypot(click.x - prev.x, click.y - prev.y) <= DOUBLE_CLICK_PX
+  );
+}
+
+/** Ids of the player's own Units of the same kind as `like` in the box spanned by two corners: what a double-click selects when the box is the Map view. */
+export function sameKindInBox(
+  units: readonly UnitView[],
+  like: UnitView,
+  a: Point,
+  b: Point,
+  player: PlayerId,
+): EntityId[] {
+  return unitsInBox(
+    units.filter((u) => u.kind === like.kind),
+    a,
+    b,
+    player,
+  );
 }

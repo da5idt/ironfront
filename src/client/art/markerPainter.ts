@@ -41,3 +41,33 @@ export function drawHealthBar(art: CanvasRenderingContext2D, x: number, y: numbe
   art.fillStyle = s > 0.5 ? marker.healthGood : s > 0.25 ? ART.lamp.amberOn : marker.healthLow;
   art.fillRect(x + 1, y + 1, filled, HEALTH_BAR_PX - 2);
 }
+
+/** The digits 1 to 9 as 3 by 5 art pixels, one string per row, drawn for this game. */
+const DIGITS: Readonly<Record<number, readonly string[]>> = {
+  1: [".#.", "##.", ".#.", ".#.", "###"],
+  2: ["##.", "..#", ".#.", "#..", "###"],
+  3: ["##.", "..#", ".#.", "..#", "##."],
+  4: ["#.#", "#.#", "###", "..#", "..#"],
+  5: ["###", "#..", "##.", "..#", "##."],
+  6: [".##", "#..", "##.", "#.#", ".#."],
+  7: ["###", "..#", ".#.", ".#.", ".#."],
+  8: [".#.", "#.#", ".#.", "#.#", ".#."],
+  9: [".#.", "#.#", ".##", "..#", "##."],
+};
+
+/** Size of a Control Group number's dark plate: the digit with one art pixel of edge all round. */
+export const GROUP_NUMBER_PX = { width: 5, height: 7 } as const;
+
+/** A Unit's Control Group number on a dark plate with its top-left at x, y, so it reads on any ground. */
+export function drawGroupNumber(art: CanvasRenderingContext2D, x: number, y: number, group: number): void {
+  const rows = DIGITS[group];
+  if (!rows) return;
+  art.fillStyle = marker.healthBack;
+  art.fillRect(x, y, GROUP_NUMBER_PX.width, GROUP_NUMBER_PX.height);
+  art.fillStyle = marker.selection;
+  rows.forEach((row, dy) => {
+    for (let dx = 0; dx < row.length; dx++) {
+      if (row[dx] === "#") art.fillRect(x + 1 + dx, y + 1 + dy, 1, 1);
+    }
+  });
+}

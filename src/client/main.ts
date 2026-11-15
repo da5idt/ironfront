@@ -15,7 +15,7 @@ import {
 import { createOpponent, type Opponent, THINK_EVERY_TICKS } from "../opponent/opponent";
 import {
   type Camera,
-  CELL_PX,
+  centreCamera,
   clampCamera,
   screenToCell,
   screenToMap,
@@ -23,23 +23,38 @@ import {
   scrollDirection,
   type Size,
 } from "./camera";
+import {
+  type ControlGroups,
+  groupCentre,
+  type GroupKeyPress,
+  groupNumbers,
+  groupPress,
+  NO_GROUPS,
+  pruneGroups,
+  saveGroup,
+  selectGroup,
+} from "./controlGroups";
 import { computeLayout, contains, edgeScroll, type Layout, toMapView } from "./layout";
 import { type Clock, interpolationAlpha, stepClock } from "./loop";
 import { cameraOnMinimapPoint } from "./minimap";
 import { type PlacingOutcome, placingMapClick, placingPreview } from "./placing";
 import { present, type Presentation } from "./presentation";
 import { type Overlay, Renderer } from "./renderer";
-import { keyAction, type ScreenOverlay, screenOverlay } from "./screenOverlay";
+import { backAction, keyAction, worksUnderScreen } from "./keys";
+import { type ScreenOverlay, screenOverlay } from "./screenOverlay";
 import {
   boxSelect,
   clickSelect,
   enemyBuildingAt,
   enemyUnitAt,
+  isDoubleClick,
   isDrag,
   ownBuildingAt,
   pruneSelection,
+  sameKindInBox,
   type Selection,
   unitAt,
+  type UnitClick,
   unitsInBox,
 } from "./selection";
 import { createAlertChime } from "./sfx/alertChime";
@@ -54,7 +69,7 @@ import { listenerFor } from "./sfx/hearing";
 import { channelGain, storageOrNull } from "./sfx/mixer";
 import { createSfx } from "./sfx/sfx";
 import { soundStripAction } from "./sfx/soundStrip";
-import { type ButtonTarget, creditsShortPress, keyButtonIndex, sidePanelPress } from "./sidePanel";
+import { type ButtonTarget, creditsShortPress, sidePanelPress } from "./sidePanel";
 
 // Wires the browser to the Simulation: a fixed-Tick clock, the camera, input
 // (selection stays here; Commands go to the Simulation) and drawing.
@@ -97,14 +112,7 @@ const mapSize = { width: view.map.width, height: view.map.height };
 
 function cameraOnHq(): Camera {
   const hq = view.buildings.find((b) => b.owner === HUMAN && b.kind === "hq");
-  return clampCamera(
-    {
-      x: ((hq?.x ?? 0) + 1.5) * CELL_PX - viewSize.width / 2,
-      y: ((hq?.y ?? 0) + 1.5) * CELL_PX - viewSize.height / 2,
-    },
-    viewSize,
-    mapSize,
-  );
+  return centreCamera({ x: (hq?.x ?? 0) + 1.5, y: (hq?.y ?? 0) + 1.5 }, viewSize, mapSize);
 }
 let camera: Camera = cameraOnHq();
 /** While paused the Simulation gets no Ticks; drawing and the camera carry on. */
@@ -144,17 +152,32 @@ window.addEventListener("keydown", () => soundEngine.unlock(), { capture: true }
 const keys = new Set<string>();
 let mouse: { x: number; y: number } | null = null;
 window.addEventListener("keydown", (e) => {
-  keys.add(e.code);
+  const action = keyAction(e);
+  if (!action) return;
+  // Only keys that scroll are remembered as held, so Alt+Left (the browser's Back) does not also scroll the Map.
+  if (action.type === "scroll") keys.add(e.code);
   if (e.repeat) return;
-  const action = keyAction(e.code, placing !== null);
-  if (action === "cancelPlacement") placing = null;
-  else if (action === "togglePause") paused = !paused;
-  // Works under the Paused screen too: silencing the game is never blocked.
-  if (e.code === "KeyM" && !e.ctrlKey && !e.metaKey && !e.altKey) sfx.apply({ type: "muteAll" });
-  // Ctrl/Cmd/Alt+number belongs to the browser (held-key repeats were already dropped above).
-  const index = e.ctrlKey || e.metaKey || e.altKey ? null : keyButtonIndex(e.code);
-  // Like a click, a key presses nothing under a Victory, defeat or Paused screen.
-  if (index !== null && !currentScreenOverlay()) pressSidePanel({ index }, "left");
+  // Like a click, a key selects and commands nothing under a Victory, defeat or Paused screen.
+  if (currentScreenOverlay() && !worksUnderScreen(action)) return;
+  switch (action.type) {
+    case "togglePause":
+      paused = !paused;
+      return;
+    case "back":
+      if (backAction(placing !== null) === "cancelPlacement") placing = null;
+      else paused = !paused;
+      return;
+    case "muteAll":
+      // Works under the Paused screen too: silencing the game is never blocked.
+      sfx.apply({ type: "muteAll" });
+      return;
+    case "controlGroup":
+      pressGroupKey(action.group, action.save);
+      return;
+    case "menuButton":
+      pressSidePanel({ index: action.index }, "left");
+      return;
+  }
 });
 window.addEventListener("keyup", (e) => keys.delete(e.code));
 window.addEventListener("blur", () => keys.clear());
@@ -167,6 +190,38 @@ const MOVE_MARKER_MS = 600;
 let selection: Selection = new Set();
 /** The selected own Building. Selecting Units clears it, and selecting it clears the Units. */
 let selectedBuilding: EntityId | null = null;
+/** The person's Control Groups: saved selections, client state like the selection. */
+let groups: ControlGroups = NO_GROUPS;
+/** Each grouped Unit's number for the renderer, rebuilt only when the groups change rather than every frame. */
+let groupNumberOf = groupNumbers(groups);
+function setGroups(next: ControlGroups): void {
+  if (next === groups) return;
+  groups = next;
+  groupNumberOf = groupNumbers(groups);
+}
+let lastGroupPress: GroupKeyPress | null = null;
+
+/** A Control Group's key: saves the selection as the group, or selects it and, on a quick second press, looks at it. */
+function pressGroupKey(group: number, save: boolean): void {
+  if (save) {
+    setGroups(saveGroup(groups, group, selection));
+    // A press of the number right after saving is a first press, not the second of a pair.
+    lastGroupPress = null;
+    return;
+  }
+  const units = selectGroup(groups, group, view.units);
+  // A group with nobody left does nothing, so the selection is not lost to a stray key.
+  if (!units) return;
+  selection = units;
+  selectedBuilding = null;
+  const press = groupPress(lastGroupPress, group, performance.now());
+  lastGroupPress = press.last;
+  const centre = press.centre ? groupCentre(groups, group, view.units) : null;
+  if (centre) camera = centreCamera(centre, viewSize, mapSize);
+}
+
+/** The last click that landed on an own Unit, to tell when the next one makes a double-click. */
+let lastUnitClick: UnitClick | null = null;
 let drag: { start: { x: number; y: number }; now: { x: number; y: number } } | null = null;
 let moveMarker: { cell: CellPos; at: number } | null = null;
 /** True while the left button, pressed on the minimap, is held: the camera follows the mouse there. */
@@ -196,7 +251,7 @@ function orderTo(cell: CellPos): void {
 /** The finished Building being placed, while the person picks a spot; null otherwise. */
 let placing: BuildingKind | null = null;
 
-/** A click on, or the number key of, a side panel button: the build menu's or the selected trainer's. */
+/** A click on, or the menu key of, a side panel button: the build menu's or the selected trainer's. */
 function pressSidePanel(target: ButtonTarget, button: "left" | "right"): void {
   const action = sidePanelPress(view, selectedBuilding, layout.buttons, target, button);
   if (!action) {
@@ -287,6 +342,7 @@ canvas.addEventListener("mousedown", (e) => {
     }
     return;
   }
+  if (e.button !== 0) lastUnitClick = null;
   if (e.button === 0) {
     drag = { start: at, now: at };
   } else if (e.button === 2 && selection.size === 0 && selectedBuilding !== null) {
@@ -326,14 +382,28 @@ window.addEventListener("mouseup", (e) => {
     const b = screenToMap(camera, stop.x, stop.y);
     selection = boxSelect(selection, unitsInBox(view.units, a, b, HUMAN), e.shiftKey);
     selectedBuilding = null;
+    // Only two clicks with nothing between them make a double-click.
+    lastUnitClick = null;
   } else {
     const stop = toMapView(layout, end);
     const point = screenToMap(camera, stop.x, stop.y);
     const hit = unitAt(view.units, point, HUMAN);
-    // A Unit wins over the Building behind it; a plain click on an own Building selects just that.
-    const building = !hit && !e.shiftKey ? ownBuildingAt(view.buildings, point, HUMAN) : null;
-    selection = building ? new Set() : clickSelect(selection, hit?.id ?? null, e.shiftKey);
-    selectedBuilding = building?.id ?? null;
+    const click = hit ? { unitId: hit.id, atMs: performance.now(), x: end.x, y: end.y } : null;
+    if (hit && click && isDoubleClick(lastUnitClick, click)) {
+      // The first click already selected the Unit at once; the second widens that to its kind, on screen only.
+      const corner = screenToMap(camera, viewSize.width, viewSize.height);
+      const sameKind = sameKindInBox(view.units, hit, screenToMap(camera, 0, 0), corner, HUMAN);
+      selection = boxSelect(selection, sameKind, e.shiftKey);
+      selectedBuilding = null;
+      // A third quick click starts again as a single click.
+      lastUnitClick = null;
+    } else {
+      // A Unit wins over the Building behind it; a plain click on an own Building selects just that.
+      const building = !hit && !e.shiftKey ? ownBuildingAt(view.buildings, point, HUMAN) : null;
+      selection = building ? new Set() : clickSelect(selection, hit?.id ?? null, e.shiftKey);
+      selectedBuilding = building?.id ?? null;
+      lastUnitClick = click;
+    }
   }
   drag = null;
 });
@@ -352,8 +422,11 @@ function restart(): void {
   presentation = present(null, view).state;
   camera = cameraOnHq();
   selection = new Set();
-  // Ids start again from 1 in the new Match, so a kept id could name a different Building.
+  // Ids start again from 1 in the new Match, so a kept id could name a different Building or Unit.
   selectedBuilding = null;
+  setGroups(NO_GROUPS);
+  lastGroupPress = null;
+  lastUnitClick = null;
   drag = null;
   moveMarker = null;
   placing = null;
@@ -399,13 +472,11 @@ if (import.meta.env.DEV) {
       view: () => view,
       presentation: () => presentation,
       camera: () => camera,
+      selection: () => selection,
+      groups: () => groups,
       /** Centres the camera on a Cell. */
       lookAt: (x: number, y: number) => {
-        camera = clampCamera(
-          { x: (x + 0.5) * CELL_PX - viewSize.width / 2, y: (y + 0.5) * CELL_PX - viewSize.height / 2 },
-          viewSize,
-          mapSize,
-        );
+        camera = centreCamera({ x: x + 0.5, y: y + 0.5 }, viewSize, mapSize);
       },
       /** Draws another Player's view (the Opponent's base under its own eyes); null goes back to the person's. */
       peek: (player: PlayerId | null) => (peekPlayer = player),
@@ -439,6 +510,7 @@ function frame(now: number): void {
   }
   if (stepped.ticks > 0) {
     selection = pruneSelection(selection, view.units);
+    setGroups(pruneGroups(groups, view.units));
     if (!view.buildings.some((b) => b.id === selectedBuilding)) selectedBuilding = null;
   }
   // Nothing left to place (cancelled, or the Match ended): leave placement mode.
@@ -457,6 +529,7 @@ function frame(now: number): void {
   const drawn = peekPlayer === null ? view : getPlayerView(match, peekPlayer);
   renderer.draw(drawn, camera, screen, layout, interpolationAlpha(clock), {
     selection,
+    groupNumbers: groupNumberOf,
     dragBox:
       drag && isDrag(drag.start, drag.now) ? { a: toMapView(layout, drag.start), b: toMapView(layout, drag.now) } : null,
     moveMarker: moveMarker ? { cell: moveMarker.cell, age: Math.max(0, markerAge) } : null,

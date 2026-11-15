@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { contains } from "./layout";
-import { keyAction, restartButton, screenOverlay } from "./screenOverlay";
+import { restartButton, screenOverlay } from "./screenOverlay";
 
 const SCREEN = { width: 1000, height: 600 };
 
@@ -32,21 +32,5 @@ describe("the Restart button", () => {
     expect(r.y).toBeGreaterThan(300);
     expect(contains(r, 500, r.y + 1)).toBe(true);
     expect(contains(r, 500, r.y - 1)).toBe(false);
-  });
-});
-
-describe("keys", () => {
-  it("P always toggles pause", () => {
-    expect(keyAction("KeyP", false)).toBe("togglePause");
-    expect(keyAction("KeyP", true)).toBe("togglePause");
-  });
-
-  it("Escape leaves placement mode when placing, and toggles pause otherwise", () => {
-    expect(keyAction("Escape", true)).toBe("cancelPlacement");
-    expect(keyAction("Escape", false)).toBe("togglePause");
-  });
-
-  it("other keys do nothing here", () => {
-    expect(keyAction("KeyW", false)).toBeNull();
   });
 });

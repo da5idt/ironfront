@@ -1,4 +1,5 @@
 import type { CellPos } from "../sim";
+import { heldScroll } from "./keys";
 
 // Camera maths, kept pure so it can be unit tested without a browser.
 
@@ -31,35 +32,21 @@ export function clampCamera(cam: Camera, screen: Size, mapCells: Size): Camera {
   };
 }
 
-const KEY_DIRECTIONS: Record<string, readonly [number, number]> = {
-  ArrowLeft: [-1, 0],
-  ArrowRight: [1, 0],
-  ArrowUp: [0, -1],
-  ArrowDown: [0, 1],
-  KeyA: [-1, 0],
-  KeyD: [1, 0],
-  KeyW: [0, -1],
-  KeyS: [0, 1],
-};
+/** The camera with a Map position (in Cell units) in the middle of the screen, or as near as the Map's edge allows. */
+export function centreCamera(at: { readonly x: number; readonly y: number }, screen: Size, mapCells: Size): Camera {
+  return clampCamera({ x: at.x * CELL_PX - screen.width / 2, y: at.y * CELL_PX - screen.height / 2 }, screen, mapCells);
+}
 
 /**
- * Which way to scroll, each axis -1, 0 or 1, from held keys (KeyboardEvent.code)
+ * Which way to scroll, each axis -1, 0 or 1, from held keys (KeyboardEvent.code; the key table in keys.ts says which scroll)
  * and the mouse's edge-scroll (see edgeScroll in layout.ts, which knows where the panel is).
  */
 export function scrollDirection(
   keys: ReadonlySet<string>,
   edge: { readonly dx: number; readonly dy: number },
 ): { dx: number; dy: number } {
-  let dx = edge.dx;
-  let dy = edge.dy;
-  for (const key of keys) {
-    const dir = KEY_DIRECTIONS[key];
-    if (dir) {
-      dx += dir[0];
-      dy += dir[1];
-    }
-  }
-  return { dx: Math.sign(dx), dy: Math.sign(dy) };
+  const held = heldScroll(keys);
+  return { dx: Math.sign(edge.dx + held.dx), dy: Math.sign(edge.dy + held.dy) };
 }
 
 export function scrollCamera(

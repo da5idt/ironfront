@@ -5,17 +5,14 @@ import { trainButtonAt, trainButtons, trainButtonState, trainClick, trainerOf } 
 
 // The side panel as one set of buttons, whichever menu it shows: the HQ's
 // build buttons, or the selected Barracks' or Vehicle Factory's train buttons.
-// A number key and a click both go through sidePanelPress, so a key starts,
+// A menu key (keys.ts) and a click both go through sidePanelPress, so a key starts,
 // places and trains exactly as a left-click on its button does. The one
 // difference is on purpose: a key never cancels (cancelling is a right-click).
-
-/** Number keys 1 to 4 press the panel's buttons from the top; there are never more than four. */
-const KEY_LABELS = ["1", "2", "3", "4"] as const;
 
 /** What the side panel reads from a PlayerView. */
 export type SidePanelView = Pick<PlayerView, "credits" | "production" | "buildings">;
 
-/** Which button: the one under a point on screen, or the one at an index from the top (0 is the top button), as a number key names it. */
+/** Which button: the one under a point on screen, or the one at an index from the top (0 is the top button), as a menu key names it. */
 export type ButtonTarget = { readonly point: { readonly x: number; readonly y: number } } | { readonly index: number };
 
 /**
@@ -29,19 +26,6 @@ function targeted<B extends { readonly kind: unknown }>(
 ): B["kind"] | null {
   if ("index" in target) return buttons[target.index]?.kind ?? null;
   return under(buttons, target.point.x, target.point.y);
-}
-
-/** The button a key presses, 0 for the top one, or null for a key that presses none. */
-export function keyButtonIndex(code: string): number | null {
-  const match = /^(?:Digit|Numpad)(\d)$/.exec(code);
-  if (!match) return null;
-  const index = KEY_LABELS.indexOf(match[1] as (typeof KEY_LABELS)[number]);
-  return index >= 0 ? index : null;
-}
-
-/** The key number a button shows, or null for a button no key reaches. */
-export function buttonKeyLabel(index: number): string | null {
-  return KEY_LABELS[index] ?? null;
 }
 
 /** What pressing a button means; null when there is no such button or it is greyed out. */
