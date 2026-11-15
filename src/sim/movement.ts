@@ -8,7 +8,7 @@ import { MOVEMENT, TICKS_PER_SECOND, UNIT_STATS } from "./tuning";
 import type { CellPos, PlayerId } from "./types";
 
 // Getting Units from one Cell to another. `orderMoveTo` and `stepAlong` are the
-// building blocks later orders (harvest, attack) reuse to walk somewhere.
+// building blocks later orders (harvest, attack, Attack-move) reuse to walk somewhere.
 
 /** Where a Unit is walking and the Cells still to step into, goal last. */
 export interface MovePlan {
@@ -110,7 +110,9 @@ export function groupGoals(m: MatchState, units: readonly UnitState[], target: C
 
 /** Where the Unit is walking to, or null when it is standing. */
 export function walkingTo(u: UnitState): CellPos | null {
-  if (u.order.type === "move" || u.order.type === "attackMove") return u.order.plan.goal;
+  if (u.order.type === "move") return u.order.plan.goal;
+  // An Attack-move that has stopped to fire is standing, so others keep off the Cell it is on, not the one it will go to.
+  if (u.order.type === "attackMove") return u.order.firing ? null : u.order.plan.goal;
   if (u.order.type === "attack") return u.order.chase?.goal ?? null;
   return null;
 }
@@ -152,12 +154,26 @@ export function freeCellNear(m: MatchState, target: CellPos, taken: ReadonlySet<
   return freeCellsNear(m, target, 1, taken)[0] ?? null;
 }
 
-export const handleMove: CommandHandler<"move"> = (m, player, command): CommandResult => {
-  const units = ownUnits(m, player, command.unitIds);
+/**
+ * Checks a Command that sends a Player's Units to a Cell (move, Attack-move)
+ * and gives each Unit its goal, or the reason the Command is rejected.
+ */
+export function groupMoveGoals(
+  m: MatchState,
+  player: PlayerId,
+  unitIds: readonly number[],
+  target: CellPos,
+): Map<UnitState, CellPos> | CommandResult {
+  const units = ownUnits(m, player, unitIds);
   if (units.length === 0) return reject("no own Units selected");
-  if (!inBounds(m, command.target.x, command.target.y)) return reject("target is off the Map");
-  const goals = groupGoals(m, units, command.target);
-  if (goals.size === 0) return reject("nowhere to stand near the target");
+  if (!inBounds(m, target.x, target.y)) return reject("target is off the Map");
+  const goals = groupGoals(m, units, target);
+  return goals.size === 0 ? reject("nowhere to stand near the target") : goals;
+}
+
+export const handleMove: CommandHandler<"move"> = (m, player, command): CommandResult => {
+  const goals = groupMoveGoals(m, player, command.unitIds, command.target);
+  if (!(goals instanceof Map)) return goals;
   for (const [u, goal] of goals) orderMoveTo(m, u, goal);
   return OK;
 };

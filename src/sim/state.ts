@@ -15,8 +15,8 @@ export type UnitOrder =
   | { readonly type: "idle" }
   | { readonly type: "move"; readonly plan: MovePlan }
   | { readonly type: "attack"; readonly targetId: EntityId; chase: MovePlan | null }
-  /** On an attack-move: walking the plan, standing to fire whenever an enemy is in range. */
-  | { readonly type: "attackMove"; readonly plan: MovePlan }
+  /** On an Attack-move: walking the plan, and standing (`firing`) whenever an enemy is in range. */
+  | { readonly type: "attackMove"; readonly plan: MovePlan; firing: boolean }
   | HarvestOrder;
 
 /** A shot fired during a Tick, kept so drawing can show a tracer. Positions in Cell units. */

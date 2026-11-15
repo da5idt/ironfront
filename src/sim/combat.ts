@@ -2,9 +2,9 @@ import type { CommandResult } from "./commands";
 import { OK, reject } from "./commands";
 import { type BuildingSighting, isFootprintVisible, isVisible } from "./fog";
 import type { CommandHandler } from "./handlers";
-import { claimedCells, freeCellNear, groupGoals, orderMoveTo, planMove, stepAlong, unitCell, walkingTo } from "./movement";
+import { claimedCells, freeCellNear, groupMoveGoals, orderMoveTo, planMove, stepAlong, unitCell, walkingTo } from "./movement";
 import type { BuildingState, MatchState, UnitState } from "./state";
-import { cellIndex, inBounds, ownUnits, removeBuilding } from "./state";
+import { cellIndex, ownUnits, removeBuilding } from "./state";
 import { BUILDING_STATS, UNIT_STATS, type WeaponStats } from "./tuning";
 import type { CellPos, EntityId, PlayerId, Vec } from "./types";
 
@@ -20,7 +20,7 @@ import type { CellPos, EntityId, PlayerId, Vec } from "./types";
 //   range, so they return fire; only with no enemy Unit in range do they fire
 //   at an enemy Building. Units on a move order do not fire until they arrive:
 //   a move is how the person pulls Units out of a fight.
-// - A Unit on an attack-move walks its route like a move, but whenever an enemy
+// - A Unit on an Attack-move walks its route like a move, but whenever an enemy
 //   it can see is in weapon range it stands and fires, and walks on when
 //   nothing is. Enemies that can shoot back (armed Units and Turrets) come
 //   first, then other Units, then other Buildings. It never leaves its route
@@ -194,7 +194,7 @@ function* armedEnemies(m: MatchState, player: PlayerId): Iterable<Target> {
   for (const b of visibleEnemyBuildings(m, player)) if (canFire(b)) yield b;
 }
 
-/** What a Unit on an attack-move fires at: the nearest enemy that can shoot back, or failing that what an idle Unit would pick. */
+/** What a Unit on an Attack-move fires at: the nearest enemy that can shoot back, or failing that what an idle Unit would pick. */
 function attackMoveTarget(m: MatchState, u: UnitState): Target | undefined {
   return nearest(armedEnemies(m, u.owner), u, UNIT_STATS[u.kind].range) ?? idleTarget(m, u);
 }
@@ -204,21 +204,19 @@ function attackMoveTarget(m: MatchState, u: UnitState): Target | undefined {
  * Unarmed Units have nothing to fight with, so for them it is a plain move.
  */
 export const handleAttackMove: CommandHandler<"attackMove"> = (m, player, command): CommandResult => {
-  const units = ownUnits(m, player, command.unitIds);
-  if (units.length === 0) return reject("no own Units selected");
-  if (!inBounds(m, command.target.x, command.target.y)) return reject("target is off the Map");
-  const goals = groupGoals(m, units, command.target);
-  if (goals.size === 0) return reject("nowhere to stand near the target");
+  const goals = groupMoveGoals(m, player, command.unitIds, command.target);
+  if (!(goals instanceof Map)) return goals;
   for (const [u, goal] of goals) {
-    if (canFight(u)) u.order = { type: "attackMove", plan: planMove(m, u, goal) };
+    if (canFight(u)) u.order = { type: "attackMove", plan: planMove(m, u, goal), firing: false };
     else orderMoveTo(m, u, goal);
   }
   return OK;
 };
 
-/** One Tick of an attack-move: fire if anything is in range, otherwise walk on. */
+/** One Tick of an Attack-move: fire if anything is in range, otherwise walk on. */
 function advanceAttackMove(m: MatchState, u: UnitState, order: Extract<UnitState["order"], { type: "attackMove" }>): void {
   const target = attackMoveTarget(m, u);
+  order.firing = target !== undefined;
   if (target) {
     fire(m, u, u, UNIT_STATS[u.kind], target);
     return;
@@ -255,7 +253,7 @@ function pursue(m: MatchState, u: UnitState, order: Extract<UnitState["order"], 
   if (stepAlong(m, u, order.chase) === "arrived" && !inRange(u, target)) u.order = { type: "idle" };
 }
 
-/** Per-Tick system: reloads, chases, walks attack-moves and fires. */
+/** Per-Tick system: reloads, chases, walks Attack-moves and fires. */
 export function fight(m: MatchState): void {
   m.shots = [];
   for (const u of m.units.values()) {

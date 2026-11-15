@@ -4,6 +4,7 @@ import {
   type BuildingKind,
   type CellPos,
   type Command,
+  type CommandResult,
   createMatch,
   type EntityId,
   getMatchStatus,
@@ -153,13 +154,13 @@ window.addEventListener("keydown", () => soundEngine.unlock(), { capture: true }
 const keys = new Set<string>();
 let mouse: { x: number; y: number } | null = null;
 window.addEventListener("keydown", (e) => {
-  // Only two clicks with nothing between them make a double-click.
-  lastUnitClick = null;
   const action = keyAction(e);
   if (!action) return;
   // Only keys that scroll are remembered as held, so Alt+Left (the browser's Back) does not also scroll the Map.
   if (action.type === "scroll") keys.add(e.code);
   if (e.repeat) return;
+  // Only two clicks with no key press of the game's between them make a double-click (Shift alone is not one).
+  if (action.type !== "scroll") lastUnitClick = null;
   // Like a click, a key selects and commands nothing under a Victory, defeat or Paused screen.
   if (currentScreenOverlay() && !worksUnderScreen(action)) return;
   switch (action.type) {
@@ -177,8 +178,7 @@ window.addEventListener("keydown", (e) => {
       if (canArmAttackMove(selection, placing !== null)) attackMoveArmed = true;
       return;
     case "stop":
-      if (selection.size > 0) {
-        issue({ type: "stop", unitIds: [...selection] });
+      if (selection.size > 0 && issue({ type: "stop", unitIds: [...selection] }).ok) {
         attackMoveArmed = false;
         sfx.play("commandAck");
       }
@@ -200,7 +200,7 @@ window.addEventListener("blur", () => keys.clear());
 window.addEventListener("mousemove", (e) => (mouse = { x: e.clientX, y: e.clientY }));
 document.addEventListener("mouseleave", () => (mouse = null));
 
-/** How long the move marker stays on the ground after a right-click. */
+/** How long the marker of a move, Attack-move or rally point stays on the ground. */
 const MOVE_MARKER_MS = 600;
 
 let selection: Selection = new Set();
@@ -248,7 +248,8 @@ function onAttackMoveOutcome(outcome: AttackMoveOutcome): void {
   if (outcome.type === "stay") return;
   attackMoveArmed = false;
   if (outcome.type === "cancel") return;
-  issue(outcome.command);
+  // The Simulation can still refuse (nowhere to stand near the Cell): then nothing is marked or acknowledged.
+  if (!issue(outcome.command).ok) return;
   moveMarker = { cell: outcome.command.target, at: performance.now(), kind: "attackMove" };
   sfx.play("commandAck");
 }
@@ -259,8 +260,8 @@ function moveCameraToMinimap(at: { x: number; y: number }): void {
   camera = cameraOnMinimapPoint(layout.minimap, mapSize, viewSize, at.x, at.y);
 }
 
-function issue(command: Command): void {
-  issueCommand(match, HUMAN, command);
+function issue(command: Command): CommandResult {
+  return issueCommand(match, HUMAN, command);
 }
 
 /** Right-click: on Ore, selected Harvesters harvest it and everything else walks there. */
@@ -342,10 +343,13 @@ canvas.addEventListener("mousedown", (e) => {
     return;
   }
   if (attackMoveArmed && (e.button === 0 || e.button === 2)) {
-    // An armed Attack-move takes the next click on the Map or the minimap; the panel's buttons still work under it.
+    // An armed Attack-move takes the next click on the Map or the minimap. The panel still works under it:
+    // a left-click there leaves it armed, and a right-click cancels it and still reaches the button.
     const onMinimap = contains(layout.minimap, at.x, at.y);
     const onMap = contains(layout.mapView, at.x, at.y);
-    if (onMinimap || onMap || e.button === 2) {
+    if (!onMinimap && !onMap) {
+      if (e.button === 2) attackMoveArmed = false;
+    } else {
       const inMapView = toMapView(layout, at);
       const cell = onMinimap
         ? minimapToCell(layout.minimap, mapSize, at.x, at.y)
@@ -562,7 +566,7 @@ function frame(now: number): void {
   }
   // Everyone it was for has gone: nothing is left to send.
   if (attackMoveArmed && selection.size === 0) attackMoveArmed = false;
-  canvas.style.cursor = attackMoveArmed ? "crosshair" : "";
+  canvas.style.cursor = attackMoveArmed && !currentScreenOverlay() ? "crosshair" : "";
   // Nothing left to place (cancelled, or the Match ended): leave placement mode.
   if (placing && !view.production?.ready) placing = null;
 

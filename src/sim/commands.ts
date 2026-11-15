@@ -6,7 +6,7 @@ import type { BuildingKind, CellPos, EntityId, UnitKind } from "./types";
  */
 export type Command =
   | { readonly type: "move"; readonly unitIds: readonly EntityId[]; readonly target: CellPos }
-  /** Walk to the Cell and fight any enemy that comes into weapon range on the way. */
+  /** Attack-move: walk to the Cell and fight any enemy that comes into weapon range on the way. */
   | { readonly type: "attackMove"; readonly unitIds: readonly EntityId[]; readonly target: CellPos }
   | { readonly type: "attack"; readonly unitIds: readonly EntityId[]; readonly targetId: EntityId }
   | { readonly type: "harvest"; readonly unitIds: readonly EntityId[]; readonly target: CellPos }

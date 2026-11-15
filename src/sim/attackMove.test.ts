@@ -91,16 +91,17 @@ describe("the attack-move Command", () => {
     runUntil(match, arrived(match, raider));
   });
 
-  it("picks an enemy Unit that can shoot back over a nearer harmless one", () => {
+  it("picks an enemy Unit that can shoot back over a harmless one when both are in range", () => {
     const match = stage();
     const raider = addTestUnit(match, 0, "raider", START);
-    // Both come into range on the same Tick or the Harvester first: it is the nearer along the route.
-    const harvester = addTestUnit(match, 1, "harvester", { x: 24, y: ROW });
-    const rifleman = addTestUnit(match, 1, "rifleman", { x: 24, y: ROW + 1 });
+    // One Cell either side of the route, so both come into range on the same Tick, equally near.
+    // The Harvester has the lower id, so it would win the tie if weapons did not count.
+    const harvester = addTestUnit(match, 1, "harvester", { x: 24, y: ROW + 1 });
+    const rifleman = addTestUnit(match, 1, "rifleman", { x: 24, y: ROW - 1 });
     attackMove(match, [raider]);
     runUntil(match, () => find(match, rifleman) === undefined);
     // Only with the Rifleman dead does the Harvester get shot.
-    expect(find(match, harvester)!.hp).toBeGreaterThanOrEqual(UNIT_STATS.harvester.maxHp - UNIT_STATS.raider.damage);
+    expect(find(match, harvester)!.hp).toBe(UNIT_STATS.harvester.maxHp);
     runUntil(match, () => find(match, harvester) === undefined);
     runUntil(match, arrived(match, raider));
   });
@@ -167,6 +168,32 @@ describe("the attack-move Command", () => {
     expect(find(match, enemy)!.hp).toBe(UNIT_STATS.harvester.maxHp);
   });
 
+  it("is replaced by a later attack Command: the Unit leaves its route to chase that target", () => {
+    const match = stage();
+    const raider = addTestUnit(match, 0, "raider", START);
+    const enemy = addTestUnit(match, 1, "harvester", { x: 18, y: ROW + 5 });
+    attackMove(match, [raider]);
+    run(match, 5);
+    expect(issueCommand(match, 0, { type: "attack", unitIds: [raider], targetId: enemy })).toEqual({ ok: true });
+    runUntil(match, () => find(match, enemy) === undefined);
+    run(match, 200);
+    expect(find(match, raider)!.x).toBeLessThan(GOAL.x - 10);
+  });
+
+  it("keeps other Units off the Cell where it stands firing", () => {
+    const match = stage();
+    const raider = addTestUnit(match, 0, "raider", START);
+    addTestBuilding(match, 1, "refinery", { x: 26, y: ROW + 2 });
+    attackMove(match, [raider]);
+    runUntil(match, () => buildingAt(match, 1, { x: 26, y: ROW + 2 })!.hp < BUILDING_STATS.refinery.maxHp);
+    const firing = find(match, raider)!;
+    const other = addTestUnit(match, 0, "harvester", START);
+    issueCommand(match, 0, { type: "move", unitIds: [other], target: { x: Math.floor(firing.x), y: Math.floor(firing.y) } });
+    run(match, 300);
+    const o = find(match, other)!;
+    expect(Math.hypot(o.x - firing.x, o.y - firing.y)).toBeGreaterThanOrEqual(1);
+  });
+
   it("is ended by stop", () => {
     const match = stage();
     const raider = addTestUnit(match, 0, "raider", START);
@@ -179,7 +206,9 @@ describe("the attack-move Command", () => {
     expect(at.x).toBeLessThan(GOAL.x);
   });
 
-  it("leaves alone an enemy out of sight, so nothing under Fog of War is a target", () => {
+  // Weapon range is inside sight for every Unit, so a hidden enemy in range cannot be staged through the
+  // seam; the rule itself is that targets come only from what the Player's Fog of War shows as Visible.
+  it("walks past an enemy it cannot see without turning aside or firing", () => {
     const match = stage();
     const raider = addTestUnit(match, 0, "raider", START);
     const hidden = addTestUnit(match, 1, "harvester", { x: 27, y: ROW + UNIT_STATS.raider.sight + 2 });
