@@ -5,9 +5,10 @@ import {
   clampCamera,
   DEFAULT_CELL_PX,
   screenToMap,
-  WHEEL_STEP_GAP_MS,
+  WHEEL_GESTURE_GAP_MS,
   wheelZoomStep,
   ZOOM_STEPS_PX,
+  type ZoomStepPx,
   zoomCamera,
   mapToScreen, screenToCell, scrollCamera, scrollDirection } from "./camera";
 
@@ -69,7 +70,7 @@ describe("zoom", () => {
   const bigMap = { width: 200, height: 200 };
   const mouse = { x: 500, y: 250 };
   /** A camera at a zoom step, well inside a big Map so nothing is clamped. */
-  const inside = (cellPx: number): Camera => ({ x: 60 * cellPx, y: 70 * cellPx, cellPx });
+  const inside = (cellPx: ZoomStepPx): Camera => ({ x: 60 * cellPx, y: 70 * cellPx, cellPx });
 
   it("has three steps, each a whole multiple of the 12-pixel art, and starts in the middle", () => {
     expect(ZOOM_STEPS_PX).toEqual([12, 24, 36]);
@@ -137,13 +138,27 @@ describe("zoom", () => {
 
 describe("the mouse wheel", () => {
   it("zooms in when rolled up and out when rolled down", () => {
-    expect(wheelZoomStep(-100, null, 1000)).toBe(1);
-    expect(wheelZoomStep(100, null, 1000)).toBe(-1);
-    expect(wheelZoomStep(0, null, 1000)).toBe(0);
+    expect(wheelZoomStep(-100, null, 1000).step).toBe(1);
+    expect(wheelZoomStep(100, null, 1000).step).toBe(-1);
+    expect(wheelZoomStep(0, null, 1000).step).toBe(0);
   });
 
-  it("gives one step for a burst of scroll events, and another once the burst is over", () => {
-    expect(wheelZoomStep(-4, 1000, 1000 + WHEEL_STEP_GAP_MS - 1)).toBe(0);
-    expect(wheelZoomStep(-4, 1000, 1000 + WHEEL_STEP_GAP_MS)).toBe(1);
+  it("gives one step for a long stream of scroll events, however long the swipe lasts", () => {
+    let last = wheelZoomStep(-4, null, 1000).last;
+    let steps = 1;
+    // A touchpad swipe with its glide: an event every 16 ms for a second.
+    for (let t = 1016; t < 2000; t += 16) {
+      const next = wheelZoomStep(-4, last, t);
+      steps += Math.abs(next.step);
+      last = next.last;
+    }
+    expect(steps).toBe(1);
+    // After a pause the next roll steps again.
+    expect(wheelZoomStep(-4, last, 2000 + WHEEL_GESTURE_GAP_MS).step).toBe(1);
+  });
+
+  it("steps at once when the wheel is turned the other way", () => {
+    const up = wheelZoomStep(-100, null, 1000);
+    expect(wheelZoomStep(100, up.last, 1050).step).toBe(-1);
   });
 });

@@ -97,7 +97,7 @@ export class Renderer {
     const viewRect = { x: 0, y: 0, width: mapView.width, height: mapView.height };
     // Game time, so idle animation and smoke stop while paused.
     const time = view.tick + alpha;
-    // The pixel world (ADR 0003): ground, then Buildings on it, at half resolution.
+    // The pixel world (ADR 0003): ground, then Buildings on it, at the art's own resolution.
     const shown = overlay.presentation;
     this.world.drawGround(ctx, view, cam, viewRect, alpha, (art) => {
       // Wrecks and rubble lie on the ground: under the Buildings (a new one may go up on old rubble) and under the fog.

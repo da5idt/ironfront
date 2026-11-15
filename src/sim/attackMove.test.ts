@@ -245,6 +245,34 @@ describe("the Attack-move Command", () => {
     runUntil(match, () => raiders.every((id) => Math.hypot(find(match, id)!.x - 45.5, find(match, id)!.y - (ROW + 0.5)) < 3));
   });
 
+  it("walks round Buildings when it goes back to its route from a spot it stepped aside to", () => {
+    const match = stage();
+    const raiders: number[] = [];
+    for (let y = 5; y <= 11; y++) {
+      for (let x = 8; x <= 13; x++) raiders.push(addTestUnit(match, 0, "raider", { x, y }));
+    }
+    const hqAt = { x: 30, y: ROW - 1 };
+    addTestBuilding(match, 1, "hq", hqAt);
+    // Own Turrets among the places the group spreads out to, none on the middle row.
+    const turrets: { x: number; y: number }[] = [];
+    for (let y = 3; y <= 14; y++) {
+      for (let x = 22; x <= 28; x++) {
+        if (y !== ROW && (x * 7 + y * 13) % 5 === 0) turrets.push({ x, y });
+      }
+    }
+    for (const at of turrets) addTestBuilding(match, 0, "turret", at);
+    const onATurret = (u: UnitView) => turrets.some((t) => Math.floor(u.x) === t.x && Math.floor(u.y) === t.y);
+    attackMove(match, raiders, { x: 45, y: ROW });
+    let ticksInsideABuilding = 0;
+    for (let t = 0; t < 400; t++) {
+      advanceTick(match);
+      for (const id of raiders) if (onATurret(find(match, id)!)) ticksInsideABuilding++;
+    }
+    // The stand is over: the HQ fell to the group, and everyone went back to the route.
+    expect(buildingAt(match, 1, hqAt)).toBeUndefined();
+    expect(ticksInsideABuilding).toBe(0);
+  });
+
   it("is rejected, changing nothing, for another Player's Units, unknown Units and Cells off the Map or between Cells", () => {
     const match = stage();
     const mine = addTestUnit(match, 0, "raider", START);

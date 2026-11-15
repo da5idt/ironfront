@@ -221,6 +221,9 @@ export const handleAttackMove: CommandHandler<"attackMove"> = (m, player, comman
 function advanceAttackMove(m: MatchState, u: UnitState, order: Extract<UnitState["order"], { type: "attackMove" }>): void {
   const target = attackMoveTarget(m, u);
   if (!target) {
+    // After a stand it may be off its route (it stepped aside), and a straight line back could cross
+    // a Building or water, so the route is planned again from where it stands.
+    if (order.spot || order.settled) order.plan.path = planMove(m, u, order.plan.goal).path;
     order.firing = false;
     order.spot = null;
     order.settled = false;

@@ -24,6 +24,7 @@ import {
   scrollCamera,
   scrollDirection,
   type Size,
+  type WheelEvent,
   wheelZoomStep,
   zoomCamera,
 } from "./camera";
@@ -179,8 +180,7 @@ window.addEventListener("keydown", (e) => {
       return;
     }
     case "zoom":
-      // No cursor to hold still, so the middle of the Map view stays put.
-      camera = zoomCamera(camera, action.steps, { x: viewSize.width / 2, y: viewSize.height / 2 }, viewSize, mapSize);
+      camera = zoomCamera(camera, action.steps, zoomAnchor(mouse), viewSize, mapSize);
       return;
     case "attackMove":
       if (canArmAttackMove(selection, placing !== null)) attackMoveArmed = true;
@@ -424,7 +424,14 @@ canvas.addEventListener("mousedown", (e) => {
     moveMarker = { cell, at: performance.now(), kind: "move" };
   }
 });
-let lastWheelStepAt: number | null = null;
+/** What stays put through a zoom: the point under the mouse when it is over the Map, otherwise the middle of the Map view. */
+function zoomAnchor(at: { x: number; y: number } | null): { x: number; y: number } {
+  return at && contains(layout.mapView, at.x, at.y)
+    ? toMapView(layout, at)
+    : { x: viewSize.width / 2, y: viewSize.height / 2 };
+}
+
+let lastWheel: WheelEvent | null = null;
 canvas.addEventListener(
   "wheel",
   (e) => {
@@ -435,10 +442,9 @@ canvas.addEventListener(
     const at = { x: e.clientX, y: e.clientY };
     // Only over the Map: the wheel over the side panel and its minimap does nothing.
     if (currentScreenOverlay() || !contains(layout.mapView, at.x, at.y)) return;
-    const step = wheelZoomStep(e.deltaY, lastWheelStepAt, performance.now());
-    if (step === 0) return;
-    lastWheelStepAt = performance.now();
-    camera = zoomCamera(camera, step, toMapView(layout, at), viewSize, mapSize);
+    const wheel = wheelZoomStep(e.deltaY, lastWheel, performance.now());
+    lastWheel = wheel.last;
+    if (wheel.step !== 0) camera = zoomCamera(camera, wheel.step, zoomAnchor(at), viewSize, mapSize);
   },
   { passive: false },
 );

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { ZOOM_STEPS_PX } from "./camera";
 import { cameraFrame, cameraOnMinimapPoint, minimapToCell, minimapToMap } from "./minimap";
 
 const box = { x: 1000, y: 10, width: 200, height: 200 };
@@ -60,7 +61,7 @@ describe("camera frame at each zoom step", () => {
   const bigMap = { width: 200, height: 200 };
   const view = { width: 960, height: 720 };
 
-  for (const cellPx of [12, 24, 36]) {
+  for (const cellPx of ZOOM_STEPS_PX) {
     it(`covers the Cells on screen at ${cellPx} pixels per Cell`, () => {
       // The view starts at Cell (50, 40); the minimap shows 200 Cells in 200px, one pixel per Cell.
       const frame = cameraFrame(box, bigMap, { x: 50 * cellPx, y: 40 * cellPx, cellPx }, view);

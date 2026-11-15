@@ -1,5 +1,5 @@
 import type { CellPos } from "../sim";
-import { type Camera, centreCamera, type Size } from "./camera";
+import { type Camera, centreCamera, type Size, type ZoomStepPx } from "./camera";
 import type { Rect } from "./layout";
 
 // Minimap <-> Map maths, kept pure so it can be unit tested without a browser.
@@ -48,7 +48,7 @@ export function cameraOnMinimapPoint(
   box: Rect,
   mapCells: Size,
   view: Size,
-  cellPx: number,
+  cellPx: ZoomStepPx,
   sx: number,
   sy: number,
 ): Camera {
