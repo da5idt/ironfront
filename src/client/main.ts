@@ -47,11 +47,14 @@ import {
   clickSelect,
   enemyBuildingAt,
   enemyUnitAt,
+  isDoubleClick,
   isDrag,
   ownBuildingAt,
   pruneSelection,
+  sameKindInBox,
   type Selection,
   unitAt,
+  type UnitClick,
   unitsInBox,
 } from "./selection";
 import { createAlertChime } from "./sfx/alertChime";
@@ -212,6 +215,8 @@ function pressGroupKey(group: number, save: boolean): void {
   if (centre) camera = centreCamera(centre, viewSize, mapSize);
 }
 
+/** The last click that landed on an own Unit, to tell when the next one makes a double-click. */
+let lastUnitClick: UnitClick | null = null;
 let drag: { start: { x: number; y: number }; now: { x: number; y: number } } | null = null;
 let moveMarker: { cell: CellPos; at: number } | null = null;
 /** True while the left button, pressed on the minimap, is held: the camera follows the mouse there. */
@@ -375,10 +380,22 @@ window.addEventListener("mouseup", (e) => {
     const stop = toMapView(layout, end);
     const point = screenToMap(camera, stop.x, stop.y);
     const hit = unitAt(view.units, point, HUMAN);
-    // A Unit wins over the Building behind it; a plain click on an own Building selects just that.
-    const building = !hit && !e.shiftKey ? ownBuildingAt(view.buildings, point, HUMAN) : null;
-    selection = building ? new Set() : clickSelect(selection, hit?.id ?? null, e.shiftKey);
-    selectedBuilding = building?.id ?? null;
+    const click = hit ? { unitId: hit.id, atMs: performance.now(), x: end.x, y: end.y } : null;
+    if (hit && click && isDoubleClick(lastUnitClick, click)) {
+      // The first click already selected the Unit at once; the second widens that to its kind, on screen only.
+      const corner = screenToMap(camera, viewSize.width, viewSize.height);
+      const sameKind = sameKindInBox(view.units, hit, screenToMap(camera, 0, 0), corner, HUMAN);
+      selection = boxSelect(selection, sameKind, e.shiftKey);
+      selectedBuilding = null;
+      // A third quick click starts again as a single click.
+      lastUnitClick = null;
+    } else {
+      // A Unit wins over the Building behind it; a plain click on an own Building selects just that.
+      const building = !hit && !e.shiftKey ? ownBuildingAt(view.buildings, point, HUMAN) : null;
+      selection = building ? new Set() : clickSelect(selection, hit?.id ?? null, e.shiftKey);
+      selectedBuilding = building?.id ?? null;
+      lastUnitClick = click;
+    }
   }
   drag = null;
 });
@@ -400,6 +417,7 @@ function restart(): void {
   // Ids start again from 1 too, so an old group would name the new Match's Units.
   setGroups(NO_GROUPS);
   lastGroupPress = null;
+  lastUnitClick = null;
   // Ids start again from 1 in the new Match, so a kept id could name a different Building.
   selectedBuilding = null;
   drag = null;
@@ -447,6 +465,8 @@ if (import.meta.env.DEV) {
       view: () => view,
       presentation: () => presentation,
       camera: () => camera,
+      selection: () => selection,
+      groups: () => groups,
       /** Centres the camera on a Cell. */
       lookAt: (x: number, y: number) => {
         camera = centreCamera({ x: x + 0.5, y: y + 0.5 }, viewSize, mapSize);

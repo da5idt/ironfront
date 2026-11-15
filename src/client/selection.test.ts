@@ -3,11 +3,15 @@ import type { BuildingView, UnitView } from "../sim";
 import {
   boxSelect,
   clickSelect,
+  DOUBLE_CLICK_MS,
+  DOUBLE_CLICK_PX,
   enemyBuildingAt,
   enemyUnitAt,
+  isDoubleClick,
   isDrag,
   ownBuildingAt,
   pruneSelection,
+  sameKindInBox,
   unitAt,
   unitsInBox,
 } from "./selection";
@@ -147,5 +151,47 @@ describe("ownBuildingAt", () => {
     expect(ownBuildingAt(buildings, { x: 6.0, y: 4.5 }, 0)).toBeNull();
     expect(ownBuildingAt(buildings, { x: 3.9, y: 4.5 }, 0)).toBeNull();
     expect(ownBuildingAt(buildings, { x: 10.5, y: 4.5 }, 0)).toBeNull();
+  });
+});
+
+describe("double-click", () => {
+  const first = { unitId: 1, atMs: 1000, x: 300, y: 200 };
+
+  it("is two clicks on the same Unit within a short time and distance", () => {
+    expect(isDoubleClick(first, { unitId: 1, atMs: 1000 + DOUBLE_CLICK_MS, x: 300 + DOUBLE_CLICK_PX, y: 200 })).toBe(true);
+  });
+
+  it("is not a first click", () => {
+    expect(isDoubleClick(null, first)).toBe(false);
+  });
+
+  it("is not two slow clicks, two clicks far apart, or clicks on two Units", () => {
+    expect(isDoubleClick(first, { unitId: 1, atMs: 1001 + DOUBLE_CLICK_MS, x: 300, y: 200 })).toBe(false);
+    expect(isDoubleClick(first, { unitId: 1, atMs: 1100, x: 301 + DOUBLE_CLICK_PX, y: 200 })).toBe(false);
+    expect(isDoubleClick(first, { unitId: 2, atMs: 1100, x: 300, y: 200 })).toBe(false);
+  });
+});
+
+describe("sameKindInBox", () => {
+  const raider = (id: number, owner: 0 | 1, x: number, y: number): UnitView => ({ ...u(id, owner, x, y), kind: "raider" });
+  const mixed = [u(1, 0, 2.5, 2.5), u(2, 0, 3.5, 2.5), raider(3, 0, 4.5, 2.5), u(4, 1, 5.5, 2.5), u(5, 0, 30.5, 30.5)];
+  const viewA = { x: 0, y: 0 };
+  const viewB = { x: 20, y: 15 };
+
+  it("gives every own Unit of the clicked Unit's kind inside the view", () => {
+    expect(sameKindInBox(mixed, mixed[0]!, viewA, viewB, 0).sort()).toEqual([1, 2]);
+    expect(sameKindInBox(mixed, mixed[2]!, viewA, viewB, 0)).toEqual([3]);
+  });
+
+  it("leaves out Units of that kind outside the view, and the other Player's", () => {
+    const ids = sameKindInBox(mixed, mixed[0]!, viewA, viewB, 0);
+    expect(ids).not.toContain(5);
+    expect(ids).not.toContain(4);
+  });
+
+  it("with Shift the Units are added to the selection; without, they replace it", () => {
+    const ids = sameKindInBox(mixed, mixed[0]!, viewA, viewB, 0);
+    expect(boxSelect(new Set([3]), ids, true)).toEqual(new Set([1, 2, 3]));
+    expect(boxSelect(new Set([3]), ids, false)).toEqual(new Set([1, 2]));
   });
 });
