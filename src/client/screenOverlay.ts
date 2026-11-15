@@ -36,11 +36,3 @@ export function restartButton(screen: Size): Rect {
   };
 }
 
-export type KeyAction = "togglePause" | "cancelPlacement";
-
-/** Escape first backs out of placing a Building, so it only pauses when there is nothing to back out of. */
-export function keyAction(code: string, placing: boolean): KeyAction | null {
-  if (code === "KeyP") return "togglePause";
-  if (code === "Escape") return placing ? "cancelPlacement" : "togglePause";
-  return null;
-}

@@ -21,10 +21,11 @@ describe("camera", () => {
     });
   });
 
-  it("scrolls with arrow keys and WASD", () => {
+  it("scrolls with the arrow keys, and not with W, A, S and D", () => {
     expect(scrollDirection(new Set(["ArrowRight"]), still)).toEqual({ dx: 1, dy: 0 });
-    expect(scrollDirection(new Set(["KeyW", "KeyA"]), still)).toEqual({ dx: -1, dy: -1 });
-    expect(scrollDirection(new Set(["KeyA", "KeyD"]), still)).toEqual({ dx: 0, dy: 0 });
+    expect(scrollDirection(new Set(["ArrowUp", "ArrowLeft"]), still)).toEqual({ dx: -1, dy: -1 });
+    expect(scrollDirection(new Set(["ArrowLeft", "ArrowRight"]), still)).toEqual({ dx: 0, dy: 0 });
+    expect(scrollDirection(new Set(["KeyW", "KeyA"]), still)).toEqual({ dx: 0, dy: 0 });
   });
 
   it("adds the mouse's edge-scroll to the keys, never faster than one step per axis", () => {

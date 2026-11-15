@@ -29,7 +29,8 @@ import { cameraOnMinimapPoint } from "./minimap";
 import { type PlacingOutcome, placingMapClick, placingPreview } from "./placing";
 import { present, type Presentation } from "./presentation";
 import { type Overlay, Renderer } from "./renderer";
-import { keyAction, type ScreenOverlay, screenOverlay } from "./screenOverlay";
+import { backAction, keyAction } from "./keys";
+import { type ScreenOverlay, screenOverlay } from "./screenOverlay";
 import {
   boxSelect,
   clickSelect,
@@ -54,7 +55,7 @@ import { listenerFor } from "./sfx/hearing";
 import { channelGain, storageOrNull } from "./sfx/mixer";
 import { createSfx } from "./sfx/sfx";
 import { soundStripAction } from "./sfx/soundStrip";
-import { type ButtonTarget, creditsShortPress, keyButtonIndex, sidePanelPress } from "./sidePanel";
+import { type ButtonTarget, creditsShortPress, sidePanelPress } from "./sidePanel";
 
 // Wires the browser to the Simulation: a fixed-Tick clock, the camera, input
 // (selection stays here; Commands go to the Simulation) and drawing.
@@ -146,15 +147,24 @@ let mouse: { x: number; y: number } | null = null;
 window.addEventListener("keydown", (e) => {
   keys.add(e.code);
   if (e.repeat) return;
-  const action = keyAction(e.code, placing !== null);
-  if (action === "cancelPlacement") placing = null;
-  else if (action === "togglePause") paused = !paused;
-  // Works under the Paused screen too: silencing the game is never blocked.
-  if (e.code === "KeyM" && !e.ctrlKey && !e.metaKey && !e.altKey) sfx.apply({ type: "muteAll" });
-  // Ctrl/Cmd/Alt+number belongs to the browser (held-key repeats were already dropped above).
-  const index = e.ctrlKey || e.metaKey || e.altKey ? null : keyButtonIndex(e.code);
-  // Like a click, a key presses nothing under a Victory, defeat or Paused screen.
-  if (index !== null && !currentScreenOverlay()) pressSidePanel({ index }, "left");
+  const action = keyAction(e);
+  switch (action?.type) {
+    case "togglePause":
+      paused = !paused;
+      return;
+    case "back":
+      if (backAction(placing !== null) === "cancelPlacement") placing = null;
+      else paused = !paused;
+      return;
+    case "muteAll":
+      // Works under the Paused screen too: silencing the game is never blocked.
+      sfx.apply({ type: "muteAll" });
+      return;
+    case "menuButton":
+      // Like a click, a key presses nothing under a Victory, defeat or Paused screen.
+      if (!currentScreenOverlay()) pressSidePanel({ index: action.index }, "left");
+      return;
+  }
 });
 window.addEventListener("keyup", (e) => keys.delete(e.code));
 window.addEventListener("blur", () => keys.clear());
@@ -196,7 +206,7 @@ function orderTo(cell: CellPos): void {
 /** The finished Building being placed, while the person picks a spot; null otherwise. */
 let placing: BuildingKind | null = null;
 
-/** A click on, or the number key of, a side panel button: the build menu's or the selected trainer's. */
+/** A click on, or the menu key of, a side panel button: the build menu's or the selected trainer's. */
 function pressSidePanel(target: ButtonTarget, button: "left" | "right"): void {
   const action = sidePanelPress(view, selectedBuilding, layout.buttons, target, button);
   if (!action) {

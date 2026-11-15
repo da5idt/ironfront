@@ -1,10 +1,10 @@
 import { type BuildingKind, canPlaceBuilding, type CellPos, type Command, type PlayerView } from "../sim";
 import { footprintAt } from "./buildPanel";
 
-// Placing a finished Building: one click on its button (or its number key)
+// Placing a finished Building: one click on its button (or its menu key)
 // puts it on the cursor, one click on the Map places it, so no mouse button is
 // ever held. Pure, so main.ts only feeds it the Cell under the mouse and acts
-// on the outcome. Escape is decided with the other keys in screenOverlay.keyAction.
+// on the outcome. Escape is decided with the other keys in keys.ts.
 
 export interface PlacingPreview {
   readonly kind: BuildingKind;

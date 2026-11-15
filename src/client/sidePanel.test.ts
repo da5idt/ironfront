@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { BUILDING_STATS, type BuildingView, type ProductionView, TRAINING, type TrainingView, UNIT_STATS } from "../sim";
-import { buttonKeyLabel, creditsShortPress, keyButtonIndex, type SidePanelView, sidePanelPress } from "./sidePanel";
+import { creditsShortPress, type SidePanelView, sidePanelPress } from "./sidePanel";
 import { buildButtons } from "./buildPanel";
 import { trainButtons } from "./trainPanel";
 
@@ -23,28 +23,8 @@ function panelView(credits: number, production: ProductionView | null = null): S
   return { credits, production, buildings: BUILDINGS };
 }
 
-describe("number keys", () => {
-  it("map 1 to 4, on the top row or the number pad, to the buttons from the top", () => {
-    expect(keyButtonIndex("Digit1")).toBe(0);
-    expect(keyButtonIndex("Digit4")).toBe(3);
-    expect(keyButtonIndex("Numpad2")).toBe(1);
-  });
-
-  it("leave every other key alone", () => {
-    expect(keyButtonIndex("Digit0")).toBeNull();
-    expect(keyButtonIndex("Digit5")).toBeNull();
-    expect(keyButtonIndex("KeyA")).toBeNull();
-    expect(keyButtonIndex("Escape")).toBeNull();
-  });
-
-  it("are shown on the first four buttons only", () => {
-    expect([0, 1, 2, 3].map(buttonKeyLabel)).toEqual(["1", "2", "3", "4"]);
-    expect(buttonKeyLabel(4)).toBeNull();
-  });
-});
-
 describe("pressing a side panel button by key", () => {
-  it("in the HQ build menu starts Refinery, Barracks, Vehicle Factory and Turret for keys 1 to 4", () => {
+  it("in the HQ build menu starts Refinery, Barracks, Vehicle Factory and Turret for the four menu keys", () => {
     const kinds = [0, 1, 2, 3].map((i) => {
       const action = sidePanelPress(panelView(10_000), null, AREA, { index: i }, "left");
       return action?.type === "command" && action.command.type === "startBuilding" ? action.command.kind : null;
@@ -57,7 +37,7 @@ describe("pressing a side panel button by key", () => {
     expect(sidePanelPress(ready, null, AREA, { index: 3 }, "left")).toEqual({ type: "place", kind: "turret" });
   });
 
-  it("with a Barracks selected, trains a Rifleman on 1 and does nothing on 2 to 4", () => {
+  it("with a Barracks selected, trains a Rifleman on the first key and does nothing on the other three", () => {
     const view = panelView(10_000);
     expect(sidePanelPress(view, 2, AREA, { index: 0 }, "left")).toEqual({
       type: "command",
@@ -66,7 +46,7 @@ describe("pressing a side panel button by key", () => {
     for (const index of [1, 2, 3]) expect(sidePanelPress(view, 2, AREA, { index }, "left")).toBeNull();
   });
 
-  it("with a Vehicle Factory selected, trains a Raider on 1 and a Harvester on 2, and nothing on 3", () => {
+  it("with a Vehicle Factory selected, trains a Raider on the first key and a Harvester on the second, and nothing on the third", () => {
     const view = panelView(10_000);
     expect(sidePanelPress(view, 3, AREA, { index: 0 }, "left")).toEqual({
       type: "command",

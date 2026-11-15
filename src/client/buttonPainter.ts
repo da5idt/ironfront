@@ -8,7 +8,7 @@ import {
   BUTTON_WELL,
   HUD_TEXT,
 } from "./palette";
-import { buttonKeyLabel } from "./sidePanel";
+import { menuKeyLabel } from "./keys";
 
 // What the side panel's painters share: the build menu, the train menu and
 // the sound strip all show a key in the same small badge, and both menus lay
@@ -165,8 +165,8 @@ export function drawMenuButton(ctx: CanvasRenderingContext2D, rect: Rect, button
   ctx.font = "bold 12px system-ui, sans-serif";
   ctx.textAlign = "left";
   ctx.fillText(button.name, textX, rect.y + parts.nameY, textW);
-  // The key number sits beside the cost: the name needs the whole line next to the picture.
-  const key = parts.keyY === null ? null : buttonKeyLabel(button.index);
+  // The key letter sits beside the cost: the name needs the whole line next to the picture.
+  const key = parts.keyY === null ? null : menuKeyLabel(button.index);
   if (key !== null && parts.keyY !== null) drawKeyBadgeAt(ctx, key, textX, rect.y + parts.keyY);
   if (parts.costY !== null) {
     ctx.fillStyle = greyed ? BUTTON_DISABLED_TEXT : BUTTON_COST;
