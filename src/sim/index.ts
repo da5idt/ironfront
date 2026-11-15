@@ -3,6 +3,7 @@
 // pure helper module with real logic of its own (pathfinding): its tests may
 // import it directly, since it has no Match to drive.
 export { createMatch, issueCommand, advanceTick, getPlayerView, getMatchStatus } from "./match";
+export type { MatchOptions, StartOrder } from "./match";
 export type { Match } from "./match";
 export type { Command, CommandResult } from "./commands";
 export type { MapDef, StartDef } from "./mapdef";

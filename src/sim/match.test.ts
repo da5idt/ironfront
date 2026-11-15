@@ -28,6 +28,35 @@ describe("starting a Match", () => {
     }
   });
 
+  const hqOf = (match: ReturnType<typeof createMatch>, player: PlayerId): CellPos => {
+    const hq = getPlayerView(match, player).buildings.find((b) => b.owner === player && b.kind === "hq");
+    if (!hq) throw new Error("no HQ");
+    return { x: hq.x, y: hq.y };
+  };
+
+  it("gives Player 0 the Map's first starting position unless asked otherwise", () => {
+    for (const seed of [1, 2, 3, 4]) {
+      expect(hqOf(createMatch(RIVERFORD, seed), 0)).toEqual(RIVERFORD.starts[0].hq);
+    }
+    const swapped = createMatch(RIVERFORD, 1, { starts: "swapped" });
+    expect(hqOf(swapped, 0)).toEqual(RIVERFORD.starts[1].hq);
+    expect(hqOf(swapped, 1)).toEqual(RIVERFORD.starts[0].hq);
+  });
+
+  it("lets the seed pick the starting positions when asked, the same way every time", () => {
+    const corners = new Set<number>();
+    for (let seed = 1; seed <= 40; seed++) {
+      const at = hqOf(createMatch(RIVERFORD, seed, { starts: "random" }), 0);
+      const again = hqOf(createMatch(RIVERFORD, seed, { starts: "random" }), 0);
+      expect(again).toEqual(at);
+      const other = hqOf(createMatch(RIVERFORD, seed, { starts: "random" }), 1);
+      expect([at, other]).toContainEqual(RIVERFORD.starts[0].hq);
+      expect([at, other]).toContainEqual(RIVERFORD.starts[1].hq);
+      corners.add(at.x);
+    }
+    expect(corners.size).toBe(2);
+  });
+
   it("starts running at Tick 0 and counts Ticks", () => {
     const match = createMatch(openMap(20, 20), 1);
     expect(getMatchStatus(match)).toEqual({ state: "running" });

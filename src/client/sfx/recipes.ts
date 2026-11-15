@@ -49,7 +49,7 @@ export const SOUND_NAMES = [
   "buildingPlaced",
   "buildingReady",
   "unitTrained",
-  "orderAck",
+  "commandAck",
   "menuClick",
   "cantBuild",
 ] as const;
@@ -143,8 +143,8 @@ export const RECIPES: Record<SoundName, Recipe> = {
       { kind: "tone", wave: "sine", start: 0.16, duration: 0.18, gain: 0.35, from: 784, to: 784, attack: 0.005 },
     ],
   },
-  // A short upward chirp: the order was heard. Quiet, since it plays on every right-click.
-  orderAck: {
+  // A short upward chirp: the Command was heard. Quiet, since it plays on every right-click.
+  commandAck: {
     cap: 1,
     layers: [{ kind: "tone", wave: "square", start: 0, duration: 0.07, gain: 0.18, from: 820, to: 1150, attack: 0.004 }],
   },
