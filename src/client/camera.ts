@@ -32,6 +32,11 @@ export function clampCamera(cam: Camera, screen: Size, mapCells: Size): Camera {
   };
 }
 
+/** The camera with a Map position (in Cell units) in the middle of the screen, or as near as the Map's edge allows. */
+export function centreCamera(at: { readonly x: number; readonly y: number }, screen: Size, mapCells: Size): Camera {
+  return clampCamera({ x: at.x * CELL_PX - screen.width / 2, y: at.y * CELL_PX - screen.height / 2 }, screen, mapCells);
+}
+
 /**
  * Which way to scroll, each axis -1, 0 or 1, from held keys (KeyboardEvent.code; the key table in keys.ts says which scroll)
  * and the mouse's edge-scroll (see edgeScroll in layout.ts, which knows where the panel is).

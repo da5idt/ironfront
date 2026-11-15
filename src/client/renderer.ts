@@ -1,7 +1,7 @@
 import type { BuildingKind, CellPos, EntityId, PlayerView } from "../sim";
 import { BuildingPainter } from "./art/buildingPainter";
 import { EffectPainter } from "./art/effectPainter";
-import { drawBrackets, drawHealthBar, HEALTH_BAR_PX } from "./art/markerPainter";
+import { drawBrackets, drawGroupNumber, drawHealthBar, HEALTH_BAR_PX } from "./art/markerPainter";
 import { PixelWorld } from "./art/pixelWorld";
 import { ART_CELL_PX } from "./art/terrainArt";
 import { UnitPainter } from "./art/unitPainter";
@@ -38,6 +38,8 @@ const UNIT_HEALTH_PX = 12;
 /** Client-only things to draw on top of the Match. */
 export interface Overlay {
   readonly selection: Selection;
+  /** Each grouped Unit's Control Group number, drawn beside it. */
+  readonly groupNumbers: ReadonlyMap<EntityId, number>;
   /** Corners of the box being dragged, in Map-view pixels, if any. */
   readonly dragBox: { readonly a: { x: number; y: number }; readonly b: { x: number; y: number } } | null;
   /** The Cell of the last move Command, and how far its fade-out has got (0..1). */
@@ -149,11 +151,15 @@ export class Renderer {
     }
     for (const u of view.units) {
       const selected = overlay.selection.has(u.id);
-      if (!selected && u.hp >= u.maxHp) continue;
+      const group = overlay.groupNumbers.get(u.id);
+      if (!selected && group === undefined && u.hp >= u.maxHp) continue;
       const cx = Math.round((u.prevX + (u.x - u.prevX) * alpha) * U);
       const cy = Math.round((u.prevY + (u.y - u.prevY) * alpha) * U);
       const half = UNIT_BRACKET_PX / 2;
       if (selected) drawBrackets(art, cx - half, cy - half, UNIT_BRACKET_PX, UNIT_BRACKET_PX, 3);
+      // Under the bottom-left bracket corner: clear of the brackets, the health bar above and the Unit itself.
+      if (group !== undefined) drawGroupNumber(art, cx - half, cy + half, group);
+      if (!selected && u.hp >= u.maxHp) continue;
       // Damaged Units always show their health, so a fight reads without selecting anything.
       drawHealthBar(art, cx - UNIT_HEALTH_PX / 2, cy - half - HEALTH_BAR_PX + 1, UNIT_HEALTH_PX, u.hp / u.maxHp);
     }

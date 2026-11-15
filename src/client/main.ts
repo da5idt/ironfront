@@ -15,7 +15,7 @@ import {
 import { createOpponent, type Opponent, THINK_EVERY_TICKS } from "../opponent/opponent";
 import {
   type Camera,
-  CELL_PX,
+  centreCamera,
   clampCamera,
   screenToCell,
   screenToMap,
@@ -23,6 +23,17 @@ import {
   scrollDirection,
   type Size,
 } from "./camera";
+import {
+  type ControlGroups,
+  groupCentre,
+  type GroupKeyPress,
+  groupNumbers,
+  groupPress,
+  NO_GROUPS,
+  pruneGroups,
+  saveGroup,
+  selectGroup,
+} from "./controlGroups";
 import { computeLayout, contains, edgeScroll, type Layout, toMapView } from "./layout";
 import { type Clock, interpolationAlpha, stepClock } from "./loop";
 import { cameraOnMinimapPoint } from "./minimap";
@@ -98,14 +109,7 @@ const mapSize = { width: view.map.width, height: view.map.height };
 
 function cameraOnHq(): Camera {
   const hq = view.buildings.find((b) => b.owner === HUMAN && b.kind === "hq");
-  return clampCamera(
-    {
-      x: ((hq?.x ?? 0) + 1.5) * CELL_PX - viewSize.width / 2,
-      y: ((hq?.y ?? 0) + 1.5) * CELL_PX - viewSize.height / 2,
-    },
-    viewSize,
-    mapSize,
-  );
+  return centreCamera({ x: (hq?.x ?? 0) + 1.5, y: (hq?.y ?? 0) + 1.5 }, viewSize, mapSize);
 }
 let camera: Camera = cameraOnHq();
 /** While paused the Simulation gets no Ticks; drawing and the camera carry on. */
@@ -160,6 +164,9 @@ window.addEventListener("keydown", (e) => {
       // Works under the Paused screen too: silencing the game is never blocked.
       sfx.apply({ type: "muteAll" });
       return;
+    case "controlGroup":
+      if (!currentScreenOverlay()) pressGroupKey(action.group, action.save);
+      return;
     case "menuButton":
       // Like a click, a key presses nothing under a Victory, defeat or Paused screen.
       if (!currentScreenOverlay()) pressSidePanel({ index: action.index }, "left");
@@ -177,6 +184,34 @@ const MOVE_MARKER_MS = 600;
 let selection: Selection = new Set();
 /** The selected own Building. Selecting Units clears it, and selecting it clears the Units. */
 let selectedBuilding: EntityId | null = null;
+/** The person's Control Groups: saved selections, client state like the selection. */
+let groups: ControlGroups = NO_GROUPS;
+/** Each grouped Unit's number for the renderer, rebuilt only when the groups change rather than every frame. */
+let groupNumberOf = groupNumbers(groups);
+function setGroups(next: ControlGroups): void {
+  if (next === groups) return;
+  groups = next;
+  groupNumberOf = groupNumbers(groups);
+}
+let lastGroupPress: GroupKeyPress | null = null;
+
+/** A Control Group's key: saves the selection as the group, or selects it and, on a quick second press, looks at it. */
+function pressGroupKey(group: number, save: boolean): void {
+  if (save) {
+    setGroups(saveGroup(groups, group, selection));
+    return;
+  }
+  const units = selectGroup(groups, group, view.units);
+  // A group with nobody left does nothing, so the selection is not lost to a stray key.
+  if (!units) return;
+  selection = units;
+  selectedBuilding = null;
+  const press = groupPress(lastGroupPress, group, performance.now());
+  lastGroupPress = press.last;
+  const centre = press.centre ? groupCentre(groups, group, view.units) : null;
+  if (centre) camera = centreCamera(centre, viewSize, mapSize);
+}
+
 let drag: { start: { x: number; y: number }; now: { x: number; y: number } } | null = null;
 let moveMarker: { cell: CellPos; at: number } | null = null;
 /** True while the left button, pressed on the minimap, is held: the camera follows the mouse there. */
@@ -362,6 +397,9 @@ function restart(): void {
   presentation = present(null, view).state;
   camera = cameraOnHq();
   selection = new Set();
+  // Ids start again from 1 too, so an old group would name the new Match's Units.
+  setGroups(NO_GROUPS);
+  lastGroupPress = null;
   // Ids start again from 1 in the new Match, so a kept id could name a different Building.
   selectedBuilding = null;
   drag = null;
@@ -411,11 +449,7 @@ if (import.meta.env.DEV) {
       camera: () => camera,
       /** Centres the camera on a Cell. */
       lookAt: (x: number, y: number) => {
-        camera = clampCamera(
-          { x: (x + 0.5) * CELL_PX - viewSize.width / 2, y: (y + 0.5) * CELL_PX - viewSize.height / 2 },
-          viewSize,
-          mapSize,
-        );
+        camera = centreCamera({ x: x + 0.5, y: y + 0.5 }, viewSize, mapSize);
       },
       /** Draws another Player's view (the Opponent's base under its own eyes); null goes back to the person's. */
       peek: (player: PlayerId | null) => (peekPlayer = player),
@@ -449,6 +483,7 @@ function frame(now: number): void {
   }
   if (stepped.ticks > 0) {
     selection = pruneSelection(selection, view.units);
+    setGroups(pruneGroups(groups, view.units));
     if (!view.buildings.some((b) => b.id === selectedBuilding)) selectedBuilding = null;
   }
   // Nothing left to place (cancelled, or the Match ended): leave placement mode.
@@ -467,6 +502,7 @@ function frame(now: number): void {
   const drawn = peekPlayer === null ? view : getPlayerView(match, peekPlayer);
   renderer.draw(drawn, camera, screen, layout, interpolationAlpha(clock), {
     selection,
+    groupNumbers: groupNumberOf,
     dragBox:
       drag && isDrag(drag.start, drag.now) ? { a: toMapView(layout, drag.start), b: toMapView(layout, drag.now) } : null,
     moveMarker: moveMarker ? { cell: moveMarker.cell, age: Math.max(0, markerAge) } : null,

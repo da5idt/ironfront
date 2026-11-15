@@ -8,12 +8,24 @@ export type KeyAction =
   | { readonly type: "scroll"; readonly dx: number; readonly dy: number }
   /** Presses the side panel's button at this place from the top (0 is the top one). */
   | { readonly type: "menuButton"; readonly index: number }
+  /** A Control Group's key: with Shift it saves the selection as the group, without it selects the group. */
+  | { readonly type: "controlGroup"; readonly group: number; readonly save: boolean }
   | { readonly type: "togglePause" }
   /** Escape: backs out of whatever is in progress; see backAction. */
   | { readonly type: "back" }
   | { readonly type: "muteAll" };
 
+/** The nine Control Group keys, on the top row and on the number pad. */
+function groupKeys(): Record<string, KeyAction> {
+  const keys: Record<string, KeyAction> = {};
+  for (let group = 1; group <= 9; group++) {
+    keys[`Digit${group}`] = keys[`Numpad${group}`] = { type: "controlGroup", group, save: false };
+  }
+  return keys;
+}
+
 const KEYS: Readonly<Record<string, KeyAction>> = {
+  ...groupKeys(),
   ArrowLeft: { type: "scroll", dx: -1, dy: 0 },
   ArrowRight: { type: "scroll", dx: 1, dy: 0 },
   ArrowUp: { type: "scroll", dx: 0, dy: -1 },
@@ -33,16 +45,19 @@ export interface KeyPress {
   readonly ctrlKey: boolean;
   readonly metaKey: boolean;
   readonly altKey: boolean;
+  readonly shiftKey: boolean;
 }
 
 /**
  * What a key press does, or null for a key with no job. With Ctrl, Cmd or Alt
  * held the key belongs to the browser (a page cannot stop most of those
- * shortcuts), so the game does nothing as well.
+ * shortcuts), so the game does nothing as well. That is also why saving a
+ * Control Group is Shift and not Ctrl with the number.
  */
 export function keyAction(press: KeyPress): KeyAction | null {
   if (press.ctrlKey || press.metaKey || press.altKey) return null;
-  return KEYS[press.code] ?? null;
+  const action = KEYS[press.code] ?? null;
+  return action?.type === "controlGroup" ? { ...action, save: press.shiftKey } : action;
 }
 
 /** The letter a side panel button shows for its key, or null for a button no key reaches. */

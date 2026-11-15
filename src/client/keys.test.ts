@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { backAction, heldScroll, keyAction, type KeyPress, menuKeyLabel } from "./keys";
 
 function press(code: string, held: Partial<KeyPress> = {}): KeyPress {
-  return { code, ctrlKey: false, metaKey: false, altKey: false, ...held };
+  return { code, ctrlKey: false, metaKey: false, altKey: false, shiftKey: false, ...held };
 }
 
 describe("menu keys", () => {
@@ -27,6 +27,30 @@ describe("menu keys", () => {
   });
 });
 
+describe("Control Group keys", () => {
+  it("a number from 1 to 9 selects that group, on the top row or the number pad", () => {
+    expect(keyAction(press("Digit1"))).toEqual({ type: "controlGroup", group: 1, save: false });
+    expect(keyAction(press("Digit9"))).toEqual({ type: "controlGroup", group: 9, save: false });
+    expect(keyAction(press("Numpad5"))).toEqual({ type: "controlGroup", group: 5, save: false });
+  });
+
+  it("Shift with the number saves the group", () => {
+    expect(keyAction(press("Digit3", { shiftKey: true }))).toEqual({ type: "controlGroup", group: 3, save: true });
+  });
+
+  it("0 is not a group", () => {
+    expect(keyAction(press("Digit0"))).toBeNull();
+    expect(keyAction(press("Numpad0"))).toBeNull();
+  });
+
+  it("Ctrl, Cmd and Alt with a number are left to the browser, with or without Shift", () => {
+    for (const held of [{ ctrlKey: true }, { metaKey: true }, { altKey: true }]) {
+      expect(keyAction(press("Digit1", held))).toBeNull();
+      expect(keyAction(press("Digit1", { ...held, shiftKey: true }))).toBeNull();
+    }
+  });
+});
+
 describe("pause, mute and Escape", () => {
   it("P pauses, M mutes and Escape goes back", () => {
     expect(keyAction(press("KeyP"))).toEqual({ type: "togglePause" });
@@ -42,7 +66,7 @@ describe("pause, mute and Escape", () => {
 
 describe("keys the browser owns", () => {
   it("do nothing with Ctrl, Cmd or Alt held", () => {
-    for (const code of ["KeyZ", "KeyP", "KeyM", "Escape", "ArrowLeft"]) {
+    for (const code of ["KeyZ", "KeyP", "KeyM", "Escape", "ArrowLeft", "Digit2"]) {
       expect(keyAction(press(code, { ctrlKey: true }))).toBeNull();
       expect(keyAction(press(code, { metaKey: true }))).toBeNull();
       expect(keyAction(press(code, { altKey: true }))).toBeNull();

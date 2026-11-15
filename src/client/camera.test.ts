@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { CELL_PX, clampCamera, mapToScreen, screenToCell, scrollCamera, scrollDirection } from "./camera";
+import { CELL_PX, centreCamera, clampCamera, mapToScreen, screenToCell, scrollCamera, scrollDirection } from "./camera";
 
 const screen = { width: 800, height: 600 };
 const map = { width: 64, height: 64 };
@@ -19,6 +19,12 @@ describe("camera", () => {
       x: (10 * CELL_PX - 800) / 2,
       y: (10 * CELL_PX - 600) / 2,
     });
+  });
+
+  it("centres on a Map position, and stops at the Map's edge", () => {
+    const cam = centreCamera({ x: 32, y: 32 }, screen, map);
+    expect(mapToScreen(cam, 32, 32)).toEqual({ x: 400, y: 300 });
+    expect(centreCamera({ x: 1, y: 1 }, screen, map)).toEqual({ x: 0, y: 0 });
   });
 
   it("scrolls with the arrow keys, and not with W, A, S and D", () => {
