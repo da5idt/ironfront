@@ -24,7 +24,7 @@ Matt Pocock's skills are vendored in `.claude/skills/` (source and update steps 
 How it works, with a diagram: `docs/workflow.md`. Update it in any PR that changes the workflow.
 - Plan by size: /grill-me (small), /grill-with-docs (medium), /wayfinder (large); then /to-spec and /to-tickets. da5idt approves tickets with `ready-for-agent`.
 - Build with /implement-spec (caps in `.github/aihero.yaml`). /code-review the branch, fix, open the PR with /pr.
-- A fresh thread runs the final /code-review and comments `door-review: two-way` or `door-review: one-way`.
+- A fresh thread runs the final /code-review and comments `door-review: two-way` or `door-review: one-way`. Findings it defers are filed as `needs-triage` issues first.
 - Agents never merge. Two-way doors auto-merge at any hour; da5idt merges one-way doors.
 - /retro after each spec; retro PRs are always one-way.
 

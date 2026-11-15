@@ -44,7 +44,7 @@ flowchart TD
 5. **Branch review.** `/code-review` checks the branch against `CODING_STANDARDS.md` and the spec, and the agent fixes what it finds.
 6. **Pull request.** `/pr` writes the body. Its **Door** line says one-way or two-way, following the door table below.
 7. **Checks.** CI and `door-gate` run. `door-gate` labels the PR, and the strictest of the PR body, the final review and `tools/door_gate.py` wins.
-8. **Final review.** A fresh agent that never saw the build runs `/code-review` and comments `door-review: two-way` or `door-review: one-way`.
+8. **Final review.** A fresh agent that never saw the build runs `/code-review` and comments `door-review: two-way` or `door-review: one-way`. Before it comments, it files every finding it leaves for later (a note, a follow-up, a call for da5idt) as an issue labelled `needs-triage` that links the PR, and its comment links those issues. A finding that lives only in a PR comment is lost.
 9. **Merge.** da5idt merges one-way doors. Two-way doors auto-merge when every gate passes. Agents never merge.
 10. **Retro.** After a spec's last PR, `/retro` proposes fixes to the environment. A retro PR is always one-way.
 
