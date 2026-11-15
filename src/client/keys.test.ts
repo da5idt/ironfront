@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { backAction, heldScroll, keyAction, type KeyPress, menuKeyLabel } from "./keys";
+import { backAction, heldScroll, keyAction, type KeyPress, menuKeyLabel, worksUnderScreen } from "./keys";
 
+/** A key press as the browser reports it: the fields of a DOM KeyboardEvent that keys.ts reads (code and the modifier flags). */
 function press(code: string, held: Partial<KeyPress> = {}): KeyPress {
   return { code, ctrlKey: false, metaKey: false, altKey: false, shiftKey: false, ...held };
 }
@@ -28,10 +29,14 @@ describe("menu keys", () => {
 });
 
 describe("Control Group keys", () => {
-  it("a number from 1 to 9 selects that group, on the top row or the number pad", () => {
+  it("a number from 1 to 9 on the top row selects that group", () => {
     expect(keyAction(press("Digit1"))).toEqual({ type: "controlGroup", group: 1, save: false });
     expect(keyAction(press("Digit9"))).toEqual({ type: "controlGroup", group: 9, save: false });
-    expect(keyAction(press("Numpad5"))).toEqual({ type: "controlGroup", group: 5, save: false });
+  });
+
+  it("the number pad has no group keys, as Shift cannot be told from no Shift there", () => {
+    expect(keyAction(press("Numpad5"))).toBeNull();
+    expect(keyAction(press("Numpad5", { shiftKey: true }))).toBeNull();
   });
 
   it("Shift with the number saves the group", () => {
@@ -71,6 +76,20 @@ describe("keys the browser owns", () => {
       expect(keyAction(press(code, { metaKey: true }))).toBeNull();
       expect(keyAction(press(code, { altKey: true }))).toBeNull();
     }
+  });
+});
+
+describe("under a Victory, defeat or Paused screen", () => {
+  const actionOf = (code: string, held: Partial<KeyPress> = {}) => keyAction(press(code, held))!;
+
+  it("menu keys and Control Group keys do nothing", () => {
+    expect(worksUnderScreen(actionOf("KeyZ"))).toBe(false);
+    expect(worksUnderScreen(actionOf("Digit1"))).toBe(false);
+    expect(worksUnderScreen(actionOf("Digit1", { shiftKey: true }))).toBe(false);
+  });
+
+  it("pause, Escape, mute and scrolling still work", () => {
+    for (const code of ["KeyP", "Escape", "KeyM", "ArrowUp"]) expect(worksUnderScreen(actionOf(code))).toBe(true);
   });
 });
 

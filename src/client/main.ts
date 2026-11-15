@@ -40,7 +40,7 @@ import { cameraOnMinimapPoint } from "./minimap";
 import { type PlacingOutcome, placingMapClick, placingPreview } from "./placing";
 import { present, type Presentation } from "./presentation";
 import { type Overlay, Renderer } from "./renderer";
-import { backAction, keyAction } from "./keys";
+import { backAction, keyAction, worksUnderScreen } from "./keys";
 import { type ScreenOverlay, screenOverlay } from "./screenOverlay";
 import {
   boxSelect,
@@ -152,10 +152,14 @@ window.addEventListener("keydown", () => soundEngine.unlock(), { capture: true }
 const keys = new Set<string>();
 let mouse: { x: number; y: number } | null = null;
 window.addEventListener("keydown", (e) => {
-  keys.add(e.code);
-  if (e.repeat) return;
   const action = keyAction(e);
-  switch (action?.type) {
+  if (!action) return;
+  // Only keys that scroll are remembered as held, so Alt+Left (the browser's Back) does not also scroll the Map.
+  if (action.type === "scroll") keys.add(e.code);
+  if (e.repeat) return;
+  // Like a click, a key selects and commands nothing under a Victory, defeat or Paused screen.
+  if (currentScreenOverlay() && !worksUnderScreen(action)) return;
+  switch (action.type) {
     case "togglePause":
       paused = !paused;
       return;
@@ -168,11 +172,10 @@ window.addEventListener("keydown", (e) => {
       sfx.apply({ type: "muteAll" });
       return;
     case "controlGroup":
-      if (!currentScreenOverlay()) pressGroupKey(action.group, action.save);
+      pressGroupKey(action.group, action.save);
       return;
     case "menuButton":
-      // Like a click, a key presses nothing under a Victory, defeat or Paused screen.
-      if (!currentScreenOverlay()) pressSidePanel({ index: action.index }, "left");
+      pressSidePanel({ index: action.index }, "left");
       return;
   }
 });
@@ -202,6 +205,8 @@ let lastGroupPress: GroupKeyPress | null = null;
 function pressGroupKey(group: number, save: boolean): void {
   if (save) {
     setGroups(saveGroup(groups, group, selection));
+    // A press of the number right after saving is a first press, not the second of a pair.
+    lastGroupPress = null;
     return;
   }
   const units = selectGroup(groups, group, view.units);
@@ -337,6 +342,7 @@ canvas.addEventListener("mousedown", (e) => {
     }
     return;
   }
+  if (e.button !== 0) lastUnitClick = null;
   if (e.button === 0) {
     drag = { start: at, now: at };
   } else if (e.button === 2 && selection.size === 0 && selectedBuilding !== null) {
@@ -376,6 +382,8 @@ window.addEventListener("mouseup", (e) => {
     const b = screenToMap(camera, stop.x, stop.y);
     selection = boxSelect(selection, unitsInBox(view.units, a, b, HUMAN), e.shiftKey);
     selectedBuilding = null;
+    // Only two clicks with nothing between them make a double-click.
+    lastUnitClick = null;
   } else {
     const stop = toMapView(layout, end);
     const point = screenToMap(camera, stop.x, stop.y);
@@ -414,12 +422,11 @@ function restart(): void {
   presentation = present(null, view).state;
   camera = cameraOnHq();
   selection = new Set();
-  // Ids start again from 1 too, so an old group would name the new Match's Units.
+  // Ids start again from 1 in the new Match, so a kept id could name a different Building or Unit.
+  selectedBuilding = null;
   setGroups(NO_GROUPS);
   lastGroupPress = null;
   lastUnitClick = null;
-  // Ids start again from 1 in the new Match, so a kept id could name a different Building.
-  selectedBuilding = null;
   drag = null;
   moveMarker = null;
   placing = null;

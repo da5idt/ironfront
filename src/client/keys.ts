@@ -1,3 +1,5 @@
+import { FIRST_GROUP, LAST_GROUP } from "./controlGroups";
+
 // The one table of what each key does, so changing a key is one edit here.
 // Kept pure: the browser's key events are turned into KeyActions and main.ts
 // acts on them. Keys are named by KeyboardEvent.code, so they stay in the same
@@ -15,11 +17,15 @@ export type KeyAction =
   | { readonly type: "back" }
   | { readonly type: "muteAll" };
 
-/** The nine Control Group keys, on the top row and on the number pad. */
+/**
+ * The Control Group keys: the top row's numbers. Not the number pad's: with
+ * NumLock on, Windows hides Shift from a number pad key, so saving a group
+ * there would select it instead and lose the selection being saved.
+ */
 function groupKeys(): Record<string, KeyAction> {
   const keys: Record<string, KeyAction> = {};
-  for (let group = 1; group <= 9; group++) {
-    keys[`Digit${group}`] = keys[`Numpad${group}`] = { type: "controlGroup", group, save: false };
+  for (let group = FIRST_GROUP; group <= LAST_GROUP; group++) {
+    keys[`Digit${group}`] = { type: "controlGroup", group, save: false };
   }
   return keys;
 }
@@ -60,12 +66,24 @@ export function keyAction(press: KeyPress): KeyAction | null {
   return action?.type === "controlGroup" ? { ...action, save: press.shiftKey } : action;
 }
 
+/** Each menu button's letter by its place from the top, read off the table once. */
+const MENU_KEY_LABELS: readonly string[] = Object.entries(KEYS).reduce<string[]>((labels, [code, action]) => {
+  if (action.type === "menuButton") labels[action.index] = code.replace(/^Key/, "");
+  return labels;
+}, []);
+
 /** The letter a side panel button shows for its key, or null for a button no key reaches. */
 export function menuKeyLabel(index: number): string | null {
-  for (const [code, action] of Object.entries(KEYS)) {
-    if (action.type === "menuButton" && action.index === index) return code.replace(/^Key/, "");
-  }
-  return null;
+  return MENU_KEY_LABELS[index] ?? null;
+}
+
+/**
+ * True for the keys that still work under a Victory, defeat or Paused screen:
+ * pausing itself, sound, and looking round the Map. Everything that selects
+ * or gives a Command does nothing there, like a click.
+ */
+export function worksUnderScreen(action: KeyAction): boolean {
+  return action.type === "togglePause" || action.type === "back" || action.type === "muteAll" || action.type === "scroll";
 }
 
 /** Which way the held keys scroll the Map, each axis -1, 0 or 1. */
