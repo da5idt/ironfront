@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { ZOOM_STEPS_PX } from "./camera";
 import { cameraFrame, cameraOnMinimapPoint, minimapToCell, minimapToMap } from "./minimap";
 
 const box = { x: 1000, y: 10, width: 200, height: 200 };
@@ -45,15 +46,36 @@ describe("minimap to Map", () => {
 describe("camera frame on the minimap", () => {
   it("outlines the part of the Map the camera shows", () => {
     // 64 Cells in 200px is 3.125px per Cell; the camera shows Cells (10, 20) to (50, 50).
-    const frame = cameraFrame(box, { width: 64, height: 64 }, { x: 240, y: 480 }, { width: 960, height: 720 });
+    const frame = cameraFrame(box, { width: 64, height: 64 }, { x: 240, y: 480, cellPx: 24 }, { width: 960, height: 720 });
     expect(frame).toEqual({ x: 1031.25, y: 72.5, width: 125, height: 93.75 });
   });
 
   it("stays inside the Map's area when the view is larger than the Map", () => {
     // A 10x10 Map centred in a 480x480 view: the camera starts at -120.
-    const frame = cameraFrame(box, { width: 10, height: 10 }, { x: -120, y: -120 }, { width: 480, height: 480 });
+    const frame = cameraFrame(box, { width: 10, height: 10 }, { x: -120, y: -120, cellPx: 24 }, { width: 480, height: 480 });
     expect(frame).toEqual(box);
   });
+});
+
+describe("camera frame at each zoom step", () => {
+  const bigMap = { width: 200, height: 200 };
+  const view = { width: 960, height: 720 };
+
+  for (const cellPx of ZOOM_STEPS_PX) {
+    it(`covers the Cells on screen at ${cellPx} pixels per Cell`, () => {
+      // The view starts at Cell (50, 40); the minimap shows 200 Cells in 200px, one pixel per Cell.
+      const frame = cameraFrame(box, bigMap, { x: 50 * cellPx, y: 40 * cellPx, cellPx }, view);
+      expect(frame.x).toBeCloseTo(box.x + 50, 9);
+      expect(frame.y).toBeCloseTo(box.y + 40, 9);
+      expect(frame.width).toBeCloseTo(960 / cellPx, 9);
+      expect(frame.height).toBeCloseTo(720 / cellPx, 9);
+    });
+
+    it(`a minimap click centres that place at ${cellPx} pixels per Cell`, () => {
+      const cam = cameraOnMinimapPoint(box, bigMap, view, cellPx, box.x + 100, box.y + 100);
+      expect(cam).toEqual({ x: 100 * cellPx - 480, y: 100 * cellPx - 360, cellPx });
+    });
+  }
 });
 
 describe("moving the camera from the minimap", () => {
@@ -62,11 +84,11 @@ describe("moving the camera from the minimap", () => {
 
   it("centres the camera on the clicked Map position", () => {
     // The minimap centre is Cell position (32, 32), world pixel (768, 768).
-    expect(cameraOnMinimapPoint(box, map, view, 1100, 110)).toEqual({ x: 768 - 480, y: 768 - 360 });
+    expect(cameraOnMinimapPoint(box, map, view, 24, 1100, 110)).toEqual({ x: 768 - 480, y: 768 - 360, cellPx: 24 });
   });
 
   it("keeps the camera on the Map near a corner", () => {
-    expect(cameraOnMinimapPoint(box, map, view, 1001, 11)).toEqual({ x: 0, y: 0 });
-    expect(cameraOnMinimapPoint(box, map, view, 1199, 209)).toEqual({ x: 64 * 24 - 960, y: 64 * 24 - 720 });
+    expect(cameraOnMinimapPoint(box, map, view, 24, 1001, 11)).toEqual({ x: 0, y: 0, cellPx: 24 });
+    expect(cameraOnMinimapPoint(box, map, view, 24, 1199, 209)).toEqual({ x: 64 * 24 - 960, y: 64 * 24 - 720, cellPx: 24 });
   });
 });

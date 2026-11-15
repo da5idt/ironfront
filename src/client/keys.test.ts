@@ -68,6 +68,22 @@ describe("Command keys", () => {
   });
 });
 
+describe("zoom keys", () => {
+  it("+ zooms in and - zooms out, on the main keys and the number pad", () => {
+    expect(keyAction(press("Equal"))).toEqual({ type: "zoom", steps: 1 });
+    expect(keyAction(press("Equal", { shiftKey: true }))).toEqual({ type: "zoom", steps: 1 });
+    expect(keyAction(press("NumpadAdd"))).toEqual({ type: "zoom", steps: 1 });
+    expect(keyAction(press("Minus"))).toEqual({ type: "zoom", steps: -1 });
+    expect(keyAction(press("NumpadSubtract"))).toEqual({ type: "zoom", steps: -1 });
+  });
+
+  it("are left to the browser's own zoom with Ctrl or Cmd, and do nothing under a screen", () => {
+    expect(keyAction(press("Equal", { ctrlKey: true }))).toBeNull();
+    expect(keyAction(press("Minus", { metaKey: true }))).toBeNull();
+    expect(worksUnderScreen({ type: "zoom", steps: 1 })).toBe(false);
+  });
+});
+
 describe("pause, mute and Escape", () => {
   it("P pauses, M mutes and Escape goes back", () => {
     expect(keyAction(press("KeyP"))).toEqual({ type: "togglePause" });

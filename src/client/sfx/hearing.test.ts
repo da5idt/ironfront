@@ -1,16 +1,25 @@
 import { describe, expect, it } from "vitest";
-import { CELL_PX } from "../camera";
+import { ZOOM_STEPS_PX } from "../camera";
 import { hear, type Listener, listenerFor, SKIP_BEYOND_REACHES } from "./hearing";
 
 const listener: Listener = { x: 50, y: 40, reach: 20 };
 
 describe("the listener", () => {
-  it("sits at the centre of the Map view and reaches to its corner", () => {
-    const l = listenerFor({ x: 10 * CELL_PX, y: 20 * CELL_PX }, { width: 60 * CELL_PX, height: 80 * CELL_PX });
-    expect(l.x).toBe(40);
-    expect(l.y).toBe(60);
-    // Half of a 60 by 80 Cell view is a 30-40-50 triangle.
-    expect(l.reach).toBe(50);
+  for (const cellPx of ZOOM_STEPS_PX) {
+    it(`sits at the centre of the Map view and reaches to its corner, at ${cellPx} pixels per Cell`, () => {
+      const l = listenerFor({ x: 10 * cellPx, y: 20 * cellPx, cellPx }, { width: 60 * cellPx, height: 80 * cellPx });
+      expect(l.x).toBe(40);
+      expect(l.y).toBe(60);
+      // Half of a 60 by 80 Cell view is a 30-40-50 triangle.
+      expect(l.reach).toBe(50);
+    });
+  }
+
+  it("hears farther when zoomed out: the same view in pixels covers more Cells", () => {
+    const view = { width: 960, height: 720 };
+    const wide = listenerFor({ x: 0, y: 0, cellPx: 12 }, view);
+    const close = listenerFor({ x: 0, y: 0, cellPx: 36 }, view);
+    expect(wide.reach).toBe(close.reach * 3);
   });
 });
 

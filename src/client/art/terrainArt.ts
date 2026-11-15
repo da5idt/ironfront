@@ -3,7 +3,7 @@ import { ART } from "./artPalette";
 import { hash2 } from "./hash";
 import { createPixelBuffer, type PixelBuffer, setPixel } from "./pixelBuffer";
 
-/** Art pixels per Cell; drawn at 2x so a Cell stays 24 screen pixels (camera CELL_PX). */
+/** Art pixels per Cell; shown at 1x, 2x or 3x by the camera's zoom (ZOOM_STEPS_PX in camera.ts). */
 export const ART_CELL_PX = 12;
 
 export interface TerrainMap {

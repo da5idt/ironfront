@@ -4,7 +4,7 @@ Every sprite, texture, effect, sound, piece of music and spoken alert in Ironfro
 
 ## Consequences
 
-- The world is drawn as pixel art at 12 pixels per Cell into a low-resolution canvas and shown at 2x with smoothing off, so a Cell stays 24 screen pixels and camera, minimap and click maths do not change. Interface text stays sharp at full resolution.
+- The world is drawn as pixel art at 12 pixels per Cell into a low-resolution canvas and shown with smoothing off at a whole-number scale chosen by the camera's zoom step: 1x, 2x or 3x, so a Cell is 12, 24 or 36 screen pixels (amended for spec #33; before camera zoom it was always 2x and 24). The scale is never fractional, so the art is crisp at every step. The zoom lives on the camera and every conversion between screen and Map reads it from there; only the final copy of the pixel world to the screen scales anything. Interface text and the side panel do not scale and stay sharp at full resolution.
 - Art generators output plain pixel buffers (width, height, RGBA) and sound and music generators output plain data, so they run and are tested without a browser; a thin client layer turns them into canvases and audio. They run once at startup or when needed, never per frame for anything that does not change.
 - All art colours live in one palette table (`src/client/art/artPalette.ts`); recolouring the game is an edit there.
 - Code for art and sound lives in folders that the one-way door rules do not match: those rules treat any folder named `assets`, `sprites`, `audio`, `sound`, `sounds`, `music` or `fonts` as third-party assets. Use names such as `src/client/art/` and `src/client/sfx/`; file names do not matter.

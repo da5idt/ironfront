@@ -16,6 +16,8 @@ export type KeyAction =
   | { readonly type: "attackMove" }
   /** Stops the selected Units. */
   | { readonly type: "stop" }
+  /** One zoom step: 1 in, -1 out. */
+  | { readonly type: "zoom"; readonly steps: 1 | -1 }
   | { readonly type: "togglePause" }
   /** Escape: backs out of whatever is in progress; see backAction. */
   | { readonly type: "back" }
@@ -44,6 +46,11 @@ const KEYS: Readonly<Record<string, KeyAction>> = {
   KeyX: { type: "menuButton", index: 1 },
   KeyC: { type: "menuButton", index: 2 },
   KeyV: { type: "menuButton", index: 3 },
+  // "+" is Shift with this key on most layouts; the plain key zooms as well, so no Shift is needed.
+  Equal: { type: "zoom", steps: 1 },
+  NumpadAdd: { type: "zoom", steps: 1 },
+  Minus: { type: "zoom", steps: -1 },
+  NumpadSubtract: { type: "zoom", steps: -1 },
   KeyA: { type: "attackMove" },
   KeyS: { type: "stop" },
   KeyP: { type: "togglePause" },
