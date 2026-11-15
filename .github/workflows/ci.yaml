@@ -17,7 +17,7 @@ jobs:
       - name: door_gate.py compiles
         run: python3 -m py_compile tools/door_gate.py tools/auto_merge.py tools/check_house_rules.py
       - run: pip install pyyaml
-      - name: house rules (ADR 0002: no clock, DOM or real randomness in the Simulation)
+      - name: house rules (ADR 0002, no clock, DOM or real randomness in the Simulation)
         run: python3 tools/check_house_rules.py | tee -a "$GITHUB_STEP_SUMMARY"
       - name: door_gate.py and check_house_rules.py behave as the door table and ADRs say
         run: python3 -m unittest discover -s tests -v 2>&1 | tee -a "$GITHUB_STEP_SUMMARY"
