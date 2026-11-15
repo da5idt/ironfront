@@ -1,7 +1,16 @@
 import { describe, expect, it } from "vitest";
-import { cameraFrame, cameraOnMinimapPoint, minimapToMap } from "./minimap";
+import { cameraFrame, cameraOnMinimapPoint, minimapToCell, minimapToMap } from "./minimap";
 
 const box = { x: 1000, y: 10, width: 200, height: 200 };
+
+describe("the Cell under a minimap pixel", () => {
+  it("is a whole Cell on the Map, even at the far edge and outside the box", () => {
+    const map = { width: 64, height: 64 };
+    expect(minimapToCell(box, map, 1101, 111)).toEqual({ x: 32, y: 32 });
+    expect(minimapToCell(box, map, 1200, 210)).toEqual({ x: 63, y: 63 });
+    expect(minimapToCell(box, map, 900, 0)).toEqual({ x: 0, y: 0 });
+  });
+});
 
 describe("minimap to Map", () => {
   it("maps the minimap's corners and centre onto a square Map", () => {

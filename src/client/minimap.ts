@@ -1,3 +1,4 @@
+import type { CellPos } from "../sim";
 import { type Camera, CELL_PX, clampCamera, type Size } from "./camera";
 import type { Rect } from "./layout";
 
@@ -23,6 +24,12 @@ export function minimapToMap(box: Rect, mapCells: Size, sx: number, sy: number):
     x: clamp((sx - area.x) / scale, mapCells.width),
     y: clamp((sy - area.y) / scale, mapCells.height),
   };
+}
+
+/** The Cell under a minimap pixel, clamped onto the Map, for a Command given through the minimap. */
+export function minimapToCell(box: Rect, mapCells: Size, sx: number, sy: number): CellPos {
+  const p = minimapToMap(box, mapCells, sx, sy);
+  return { x: Math.min(Math.floor(p.x), mapCells.width - 1), y: Math.min(Math.floor(p.y), mapCells.height - 1) };
 }
 
 /** The camera's view as a rectangle on the minimap, cut to the Map's area. */

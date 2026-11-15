@@ -13,6 +13,8 @@ export const FOG_ALPHA: Record<Visibility, number> = {
 
 export const SELECTION_MARKER = ART.marker.selection;
 export const MOVE_MARKER = "#8ef08e";
+/** The marker and hint of an Attack-move: warm where the plain move is green. */
+export const ATTACK_MOVE_MARKER = "#ff9a5c";
 export const RALLY_LINE = "rgba(244, 244, 160, 0.7)";
 export const RALLY_FLAG = "#f0c040";
 export const DRAG_BOX_LINE = "#d8f0d8";

@@ -1,7 +1,7 @@
 import type { CommandOf, CommandResult, CommandType } from "./commands";
 import { OK, reject } from "./commands";
 import { handleCancelBuilding, handlePlaceBuilding, handleStartBuilding } from "./building";
-import { handleAttack } from "./combat";
+import { handleAttack, handleAttackMove } from "./combat";
 import { handleHarvest } from "./harvest";
 import { handleCancelTraining, handleSetRallyPoint, handleTrain } from "./training";
 import { handleMove } from "./movement";
@@ -28,6 +28,7 @@ const stop: CommandHandler<"stop"> = (m, player, command) => {
 export const COMMAND_HANDLERS: { readonly [K in CommandType]: CommandHandler<K> } = {
   move: handleMove,
   attack: handleAttack,
+  attackMove: handleAttackMove,
   harvest: handleHarvest,
   stop,
   setRallyPoint: handleSetRallyPoint,

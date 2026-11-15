@@ -15,6 +15,12 @@ export type UnitOrder =
   | { readonly type: "idle" }
   | { readonly type: "move"; readonly plan: MovePlan }
   | { readonly type: "attack"; readonly targetId: EntityId; chase: MovePlan | null }
+  /**
+   * On an Attack-move: walking the plan, and standing (`firing`) whenever an enemy is in range.
+   * `spot` is the short walk to a Cell of its own when it stopped on top of another own Unit;
+   * `settled` says it has taken its place for this stand and will not shuffle again.
+   */
+  | { readonly type: "attackMove"; readonly plan: MovePlan; firing: boolean; spot: MovePlan | null; settled: boolean }
   | HarvestOrder;
 
 /** A shot fired during a Tick, kept so drawing can show a tracer. Positions in Cell units. */

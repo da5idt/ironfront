@@ -4,6 +4,7 @@ import {
   type BuildingKind,
   type CellPos,
   type Command,
+  type CommandResult,
   createMatch,
   type EntityId,
   getMatchStatus,
@@ -36,10 +37,11 @@ import {
 } from "./controlGroups";
 import { computeLayout, contains, edgeScroll, type Layout, toMapView } from "./layout";
 import { type Clock, interpolationAlpha, stepClock } from "./loop";
-import { cameraOnMinimapPoint } from "./minimap";
+import { cameraOnMinimapPoint, minimapToCell } from "./minimap";
 import { type PlacingOutcome, placingMapClick, placingPreview } from "./placing";
 import { present, type Presentation } from "./presentation";
 import { type Overlay, Renderer } from "./renderer";
+import { ATTACK_MOVE_HINT, attackMoveClick, type AttackMoveOutcome, canArmAttackMove } from "./attackMoveMode";
 import { backAction, keyAction, worksUnderScreen } from "./keys";
 import { type ScreenOverlay, screenOverlay } from "./screenOverlay";
 import {
@@ -157,15 +159,29 @@ window.addEventListener("keydown", (e) => {
   // Only keys that scroll are remembered as held, so Alt+Left (the browser's Back) does not also scroll the Map.
   if (action.type === "scroll") keys.add(e.code);
   if (e.repeat) return;
+  // Only two clicks with no key press of the game's between them make a double-click (Shift alone is not one).
+  if (action.type !== "scroll") lastUnitClick = null;
   // Like a click, a key selects and commands nothing under a Victory, defeat or Paused screen.
   if (currentScreenOverlay() && !worksUnderScreen(action)) return;
   switch (action.type) {
     case "togglePause":
       paused = !paused;
       return;
-    case "back":
-      if (backAction(placing !== null) === "cancelPlacement") placing = null;
+    case "back": {
+      const back = backAction(placing !== null, attackMoveArmed);
+      if (back === "cancelPlacement") placing = null;
+      else if (back === "cancelAttackMove") attackMoveArmed = false;
       else paused = !paused;
+      return;
+    }
+    case "attackMove":
+      if (canArmAttackMove(selection, placing !== null)) attackMoveArmed = true;
+      return;
+    case "stop":
+      if (selection.size > 0 && issue({ type: "stop", unitIds: [...selection] }).ok) {
+        attackMoveArmed = false;
+        sfx.play("commandAck");
+      }
       return;
     case "muteAll":
       // Works under the Paused screen too: silencing the game is never blocked.
@@ -184,7 +200,7 @@ window.addEventListener("blur", () => keys.clear());
 window.addEventListener("mousemove", (e) => (mouse = { x: e.clientX, y: e.clientY }));
 document.addEventListener("mouseleave", () => (mouse = null));
 
-/** How long the move marker stays on the ground after a right-click. */
+/** How long the marker of a move, Attack-move or rally point stays on the ground. */
 const MOVE_MARKER_MS = 600;
 
 let selection: Selection = new Set();
@@ -223,7 +239,20 @@ function pressGroupKey(group: number, save: boolean): void {
 /** The last click that landed on an own Unit, to tell when the next one makes a double-click. */
 let lastUnitClick: UnitClick | null = null;
 let drag: { start: { x: number; y: number }; now: { x: number; y: number } } | null = null;
-let moveMarker: { cell: CellPos; at: number } | null = null;
+let moveMarker: { cell: CellPos; at: number; kind: "move" | "attackMove" } | null = null;
+/** True after the A key, until the next click: that click says where the selected Units attack-move to. */
+let attackMoveArmed = false;
+
+/** Acts on a click while an Attack-move is armed. */
+function onAttackMoveOutcome(outcome: AttackMoveOutcome): void {
+  if (outcome.type === "stay") return;
+  attackMoveArmed = false;
+  if (outcome.type === "cancel") return;
+  // The Simulation can still refuse (nowhere to stand near the Cell): then nothing is marked or acknowledged.
+  if (!issue(outcome.command).ok) return;
+  moveMarker = { cell: outcome.command.target, at: performance.now(), kind: "attackMove" };
+  sfx.play("commandAck");
+}
 /** True while the left button, pressed on the minimap, is held: the camera follows the mouse there. */
 let minimapDrag = false;
 
@@ -231,8 +260,8 @@ function moveCameraToMinimap(at: { x: number; y: number }): void {
   camera = cameraOnMinimapPoint(layout.minimap, mapSize, viewSize, at.x, at.y);
 }
 
-function issue(command: Command): void {
-  issueCommand(match, HUMAN, command);
+function issue(command: Command): CommandResult {
+  return issueCommand(match, HUMAN, command);
 }
 
 /** Right-click: on Ore, selected Harvesters harvest it and everything else walks there. */
@@ -261,6 +290,8 @@ function pressSidePanel(target: ButtonTarget, button: "left" | "right"): void {
     return;
   }
   sfx.play("menuClick");
+  // The panel was used instead: the armed Attack-move is dropped, so a Building put on the cursor owns the next click.
+  attackMoveArmed = false;
   if (action.type === "place") {
     placing = action.kind;
     return;
@@ -311,6 +342,24 @@ canvas.addEventListener("mousedown", (e) => {
     if (e.button === 0 && cover.button && contains(cover.button.rect, at.x, at.y)) restart();
     return;
   }
+  if (attackMoveArmed && (e.button === 0 || e.button === 2)) {
+    // An armed Attack-move takes the next click on the Map or the minimap. The panel still works under it:
+    // a left-click there leaves it armed, and a right-click cancels it and still reaches the button.
+    const onMinimap = contains(layout.minimap, at.x, at.y);
+    const onMap = contains(layout.mapView, at.x, at.y);
+    if (!onMinimap && !onMap) {
+      if (e.button === 2) attackMoveArmed = false;
+    } else {
+      const inMapView = toMapView(layout, at);
+      const cell = onMinimap
+        ? minimapToCell(layout.minimap, mapSize, at.x, at.y)
+        : onMap
+          ? screenToCell(camera, inMapView.x, inMapView.y)
+          : null;
+      onAttackMoveOutcome(attackMoveClick(selection, cell, mapSize, e.button === 0 ? "left" : "right"));
+      return;
+    }
+  }
   if (e.button === 0 && contains(layout.minimap, at.x, at.y)) {
     minimapDrag = true;
     moveCameraToMinimap(at);
@@ -349,7 +398,7 @@ canvas.addEventListener("mousedown", (e) => {
     const cell = screenToCell(camera, inView.x, inView.y);
     if (issueCommand(match, HUMAN, { type: "setRallyPoint", buildingId: selectedBuilding, target: cell }).ok) {
       view = getPlayerView(match, HUMAN);
-      moveMarker = { cell, at: performance.now() };
+      moveMarker = { cell, at: performance.now(), kind: "move" };
       sfx.play("commandAck");
     }
   } else if (e.button === 2 && selection.size > 0) {
@@ -364,7 +413,7 @@ canvas.addEventListener("mousedown", (e) => {
       return;
     }
     orderTo(cell);
-    moveMarker = { cell, at: performance.now() };
+    moveMarker = { cell, at: performance.now(), kind: "move" };
   }
 });
 window.addEventListener("mousemove", (e) => {
@@ -430,6 +479,7 @@ function restart(): void {
   drag = null;
   moveMarker = null;
   placing = null;
+  attackMoveArmed = false;
   paused = false;
   clock = { accumulatedMs: 0 };
   // "Defeat" may still be being said, and the old Match's cooldowns would swallow the new one's first alerts.
@@ -473,6 +523,7 @@ if (import.meta.env.DEV) {
       presentation: () => presentation,
       camera: () => camera,
       selection: () => selection,
+      attackMoveArmed: () => attackMoveArmed,
       groups: () => groups,
       /** Centres the camera on a Cell. */
       lookAt: (x: number, y: number) => {
@@ -513,6 +564,9 @@ function frame(now: number): void {
     setGroups(pruneGroups(groups, view.units));
     if (!view.buildings.some((b) => b.id === selectedBuilding)) selectedBuilding = null;
   }
+  // Everyone it was for has gone: nothing is left to send.
+  if (attackMoveArmed && selection.size === 0) attackMoveArmed = false;
+  canvas.style.cursor = attackMoveArmed && !currentScreenOverlay() ? "crosshair" : "";
   // Nothing left to place (cancelled, or the Match ended): leave placement mode.
   if (placing && !view.production?.ready) placing = null;
 
@@ -532,7 +586,9 @@ function frame(now: number): void {
     groupNumbers: groupNumberOf,
     dragBox:
       drag && isDrag(drag.start, drag.now) ? { a: toMapView(layout, drag.start), b: toMapView(layout, drag.now) } : null,
-    moveMarker: moveMarker ? { cell: moveMarker.cell, age: Math.max(0, markerAge) } : null,
+    moveMarker: moveMarker ? { cell: moveMarker.cell, age: Math.max(0, markerAge), kind: moveMarker.kind } : null,
+    // Not under a Victory, defeat or Paused screen, where no click reaches the Map.
+    hint: attackMoveArmed && !currentScreenOverlay() ? ATTACK_MOVE_HINT : null,
     placement: placementPreview(),
     placing,
     selectedBuilding,

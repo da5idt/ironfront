@@ -126,6 +126,7 @@ export function issueCommand(match: Match, player: PlayerId, command: Command): 
 function targetCell(command: Command): CellPos | null {
   switch (command.type) {
     case "move":
+    case "attackMove":
     case "harvest":
     case "setRallyPoint":
       return command.target;

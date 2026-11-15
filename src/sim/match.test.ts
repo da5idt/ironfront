@@ -139,6 +139,7 @@ describe("Commands with a Cell target", () => {
   type Ids = ReturnType<typeof setup>;
   const commands: Record<string, { at: CellPos; make: (ids: Ids, at: CellPos) => Command }> = {
     move: { at: { x: 3, y: 9 }, make: (ids, target) => ({ type: "move", unitIds: [ids.rifleman], target }) },
+    attackMove: { at: { x: 3, y: 9 }, make: (ids, target) => ({ type: "attackMove", unitIds: [ids.rifleman], target }) },
     harvest: { at: { x: 5, y: 7 }, make: (ids, target) => ({ type: "harvest", unitIds: [ids.harvester], target }) },
     setRallyPoint: { at: { x: 14, y: 14 }, make: (ids, target) => ({ type: "setRallyPoint", buildingId: ids.barracks, target }) },
     placeBuilding: { at: { x: 0, y: 6 }, make: (_, at) => ({ type: "placeBuilding", at }) },
@@ -186,7 +187,8 @@ describe("determinism", () => {
             const target = targets[(t / 50 + player) % targets.length]!;
             const commands: Command[] = [
               { type: "stop", unitIds: ids.slice(0, 1) },
-              { type: "move", unitIds: ids, target },
+              // Turn about, so both ways of walking somewhere are in the run.
+              { type: t % 100 === 0 ? "move" : "attackMove", unitIds: ids, target },
             ];
             for (const c of commands) issueCommand(match, player, c);
           }
