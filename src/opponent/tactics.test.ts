@@ -36,7 +36,7 @@ describe("when a wave may go", () => {
 });
 
 // openMap(40, 40): Player 1's HQ covers (37..39, 37..39), its Refinery (33..35, 38..39).
-// Player 1 picks targets among Player 0's things, seen by a Rifleman of its own
+// Player 1 looks at Player 0's things, seen by a Rifleman of its own
 // at (29,29), as the Opponent only knows what its view holds.
 function sceneFor(stage: (match: ReturnType<typeof createMatch>) => void): PlayerView {
   const match = createMatch(openMap(40, 40), 1);
