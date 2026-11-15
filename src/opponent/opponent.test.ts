@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { RIVERFORD } from "../game/maps/riverford";
 import {
   advanceTick,
+  type Command,
   createMatch,
   getMatchStatus,
   getPlayerView,
@@ -174,6 +175,46 @@ describe("Computer Opponent defending against an unseen attacker", () => {
     );
     expect(defend).toBeDefined();
     for (const command of commands) expect(issueCommand(match, 1, command), JSON.stringify(command)).toEqual({ ok: true });
+  });
+});
+
+describe("Computer Opponent attack waves", () => {
+  /** Plays Player 1 as the Opponent against a passive Player 0 and keeps every Command it gave. */
+  function playRecording(match: Match, ticks: number, onTick?: (tick: number) => void): Command[] {
+    const opponent = createOpponent(1, 7);
+    const given: Command[] = [];
+    const recording: Opponent = {
+      think: (view) => {
+        const commands = opponent.think(view);
+        given.push(...commands);
+        return commands;
+      },
+    };
+    play(match, [{ player: 1, opponent: recording }], ticks, onTick);
+    return given;
+  }
+
+  it("sends a wave by Attack-move, to its gathering point and then onto the other Player's Buildings", () => {
+    const match = createMatch(RIVERFORD, 7);
+    const given = playRecording(match, 8 * MINUTES);
+    const attackMoves = given.filter((c) => c.type === "attackMove");
+    // The wave's first Command takes several Units; the scout is one Unit on a plain move.
+    expect(attackMoves.some((c) => c.unitIds.length >= 3)).toBe(true);
+    // Player 0's base is the top-left corner: HQ at (4,4), Refinery at (9,4).
+    expect(attackMoves.some((c) => Math.hypot(c.target.x - 7, c.target.y - 6) < 6)).toBe(true);
+  });
+
+  it("deals with the Riflemen shooting at it before it has finished off the Buildings they guard", () => {
+    const match = createMatch(RIVERFORD, 7);
+    let buildingsLeftWhenGuardsFell: number | null = null;
+    playRecording(match, 12 * MINUTES, (tick) => {
+      if (buildingsLeftWhenGuardsFell !== null || tick % 20 !== 0) return;
+      const all = getPlayerView(match, 0);
+      if (all.units.some((u) => u.owner === 0 && u.kind === "rifleman")) return;
+      buildingsLeftWhenGuardsFell = all.buildings.filter((b) => b.owner === 0).length;
+    });
+    expect(buildingsLeftWhenGuardsFell).not.toBeNull();
+    expect(buildingsLeftWhenGuardsFell!).toBeGreaterThan(0);
   });
 });
 

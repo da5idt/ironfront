@@ -18,7 +18,7 @@ import {
 import { hqCentre, ownBuildings } from "./base";
 import { buildCommands, rallyCommands, rallyPoint, trainCommands } from "./economy";
 import { type DangerMemory, harvestCommands, rememberDanger } from "./harvesting";
-import { chooseTarget, distanceTo, nearest, waveReady, waveThreshold } from "./tactics";
+import { distanceTo, nearest, waveReady, waveThreshold } from "./tactics";
 
 // The Computer Opponent. It plays by the person's rules: it reads only its own
 // PlayerView, so Fog of War applies, and answers with Commands the caller
@@ -193,7 +193,8 @@ export function createOpponent(playerId: PlayerId, seed: number): Opponent {
       wavesSent++;
       lastWaveTick = view.tick;
       for (const u of sent) notes.get(u.id)!.role = "wave";
-      commands.push({ type: "move", unitIds: sent.map((u) => u.id), target: wave.gatherAt });
+      // An Attack-move, so a wave met on its way out fights back instead of walking on under fire.
+      commands.push({ type: "attackMove", unitIds: sent.map((u) => u.id), target: wave.gatherAt });
     }
     const inWave = withRole(army, "wave");
     if (!wave) return commands;
@@ -213,7 +214,38 @@ export function createOpponent(playerId: PlayerId, seed: number): Opponent {
       wave = null;
       return [...commands, ...sendHome(view, inWave)];
     }
-    return [...commands, ...attackOrders(view, inWave, (u) => chooseTarget(view, u))];
+    return [...commands, ...waveOrders(view, inWave)];
+  }
+
+  /**
+   * Leads a wave onto the enemy's Buildings by Attack-move, each Unit toward the
+   * known Building nearest it, so it fights whatever comes into range on the way
+   * and takes on what shoots back first. An Attack-move ends where the Unit
+   * arrives, which can be short of a Building's walls: a Unit standing with
+   * nothing in range is told to attack the Building itself.
+   */
+  function waveOrders(view: PlayerView, units: readonly UnitView[]): Command[] {
+    const advance = new Map<EntityId, EntityId[]>();
+    const press = new Map<EntityId, EntityId[]>();
+    for (const u of units) {
+      const building = nearestEnemyBuilding(view, u);
+      if (!building) continue;
+      const n = notes.get(u.id)!;
+      const orders = building.id !== n.target ? advance : n.still >= STUCK_THINKS && !fighting(view, u) ? press : null;
+      if (!orders) continue;
+      n.target = building.id;
+      n.still = 0;
+      orders.set(building.id, [...(orders.get(building.id) ?? []), u.id]);
+    }
+    const buildingOf = (id: EntityId) => view.buildings.find((b) => b.id === id)!;
+    return [
+      ...[...advance].map(([id, unitIds]): Command => {
+        const b = buildingOf(id);
+        const target = cellBeside(view, b) ?? { x: b.x, y: b.y };
+        return { type: "attackMove", unitIds, target };
+      }),
+      ...[...press].map(([targetId, unitIds]): Command => ({ type: "attack", unitIds, targetId })),
+    ];
   }
 
   /**
@@ -267,6 +299,13 @@ export function createOpponent(playerId: PlayerId, seed: number): Opponent {
 function inRange(view: PlayerView, u: UnitView, targetId: EntityId): boolean {
   const t = view.units.find((x) => x.id === targetId) ?? view.buildings.find((b) => b.id === targetId);
   return t !== undefined && distanceTo(t, u) <= UNIT_STATS[u.kind].range;
+}
+
+/** Whether anything of the enemy's that the Unit can see or remembers is within its weapon's range. */
+function fighting(view: PlayerView, u: UnitView): boolean {
+  const range = UNIT_STATS[u.kind].range;
+  const enemy = (t: UnitView | BuildingView) => t.owner !== view.playerId && distanceTo(t, u) <= range;
+  return view.units.some(enemy) || view.buildings.some(enemy);
 }
 
 /** The known enemy Building nearest `from`, remembered ones included. */
