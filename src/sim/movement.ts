@@ -110,7 +110,7 @@ export function groupGoals(m: MatchState, units: readonly UnitState[], target: C
 
 /** Where the Unit is walking to, or null when it is standing. */
 export function walkingTo(u: UnitState): CellPos | null {
-  if (u.order.type === "move") return u.order.plan.goal;
+  if (u.order.type === "move" || u.order.type === "attackMove") return u.order.plan.goal;
   if (u.order.type === "attack") return u.order.chase?.goal ?? null;
   return null;
 }

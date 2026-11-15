@@ -21,8 +21,12 @@ One fixed step of game time. The Match advances only in whole Ticks, at a fixed 
 _Avoid_: Frame, turn, update
 
 **Command**:
-An order a Player gives, such as move, attack, harvest, build or train. The person playing and the Computer Opponent give the same Commands.
+An order a Player gives, such as move, attack, Attack-move, harvest, build or train. The person playing and the Computer Opponent give the same Commands.
 _Avoid_: Action, input, order
+
+**Attack-move**:
+A Command that sends Units to a Cell and has them stop to fight any enemy that comes into weapon range on the way, then carry on. They do not leave their route to chase.
+_Avoid_: Aggressive move, a-move, assault
 
 **Victory**:
 The end of a Match when the other Player has no Buildings left.
