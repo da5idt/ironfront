@@ -5,7 +5,7 @@ import type { Rng } from "./rng";
 import { startHarvesting } from "./harvest";
 import type { Tending } from "./tend";
 import { BUILDING_STATS, UNIT_STATS } from "./tuning";
-import type { BuildingKind, CellPos, EntityId, PlayerId, Terrain, UnitKind } from "./types";
+import type { BuildingKind, CellPos, EntityId, PlayerId, Terrain, UnitKind, Vec } from "./types";
 import { isPassableTerrain } from "./types";
 
 // Internal state of a Match. Only code inside src/sim may touch it; everything
@@ -66,11 +66,11 @@ export interface UnitState {
    */
   readonly unreachable: Map<EntityId, number>;
   /**
-   * Tend targets this Unit gave up on at the leash. It does not go to them by
-   * itself again until it is given a Command, or it would follow a marching
-   * target for ever, a leash at a time.
+   * Tend targets this Unit gave up on at the leash, each with where it stood
+   * at the Unit's last look. While one keeps moving the Unit does not go to it
+   * by itself, or it would follow a marching target for ever, a leash at a time.
    */
-  readonly leftAtLeash: Set<EntityId>;
+  readonly leftAtLeash: Map<EntityId, Vec>;
 }
 
 export interface BuildingState {
@@ -179,7 +179,7 @@ export function spawnUnit(m: MatchState, owner: PlayerId, kind: UnitKind, cell: 
     order: kind === "harvester" ? startHarvesting() : { type: "idle" },
     cargo: 0,
     unreachable: new Map(),
-    leftAtLeash: new Set(),
+    leftAtLeash: new Map(),
   };
   m.units.set(unit.id, unit);
   return unit;

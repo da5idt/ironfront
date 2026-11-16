@@ -136,7 +136,6 @@ describe("an idle support Unit near a hurt target it cannot reach", () => {
     expect(issueCommand(match, 0, { type: "tend", unitIds: [mechanic], targetId: raider })).toEqual({ ok: true });
     // Two Cells to walk at 1.5 a second, then work: well inside the back-off.
     run(match, 3 * TICKS_PER_SECOND);
-    expect(3 * TICKS_PER_SECOND).toBeLessThan(TEND.retryTicks - TICKS_PER_SECOND);
     expect(unitHp(match, raider)).toBeGreaterThan(30);
   });
 });

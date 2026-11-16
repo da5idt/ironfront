@@ -97,11 +97,11 @@ describe("the Mechanic", () => {
 
   it("is paid for when queued and steps out beside the Vehicle Factory at full health when trained", () => {
     const match = stage();
-    const factory = building(match, 0, "vehicleFactory", 20, ROW);
+    const vehicleFactory = building(match, 0, "vehicleFactory", 20, ROW);
     setTestCredits(match, 0, 500);
-    expect(issueCommand(match, 0, { type: "train", buildingId: factory, kind: "mechanic" })).toEqual({ ok: true });
+    expect(issueCommand(match, 0, { type: "train", buildingId: vehicleFactory, kind: "mechanic" })).toEqual({ ok: true });
     expect(getPlayerView(match, 0).credits).toBe(200);
-    expect(issueCommand(match, 0, { type: "train", buildingId: factory, kind: "mechanic" }).ok).toBe(false);
+    expect(issueCommand(match, 0, { type: "train", buildingId: vehicleFactory, kind: "mechanic" }).ok).toBe(false);
     const mechanics = () => getPlayerView(match, 0).units.filter((u) => u.kind === "mechanic");
     runUntil(match, () => mechanics().length === 1);
     const [mechanic] = mechanics();
@@ -506,5 +506,30 @@ describe("repairs and replays", () => {
       return seen.join("\n");
     };
     expect(play()).toBe(play());
+  });
+});
+
+describe("a Mechanic and a Harvester that drives off", () => {
+  it("leaves it alone while it is beyond the seek radius, and Repairs it once it has stopped within it", () => {
+    const match = stage();
+    const mechanic = addTestUnit(match, 0, "mechanic", { x: 14, y: ROW });
+    const harvester = hurt(match, 0, "harvester", 15, ROW, 100);
+    issueCommand(match, 0, { type: "stop", unitIds: [harvester] });
+    runUntil(match, () => hp(match, harvester) > 100);
+    // Faster than the Mechanic, and 14 Cells is well beyond the leash: the Mechanic is left behind.
+    issueCommand(match, 0, { type: "move", unitIds: [harvester], target: { x: 29, y: ROW } });
+    runUntil(match, () => at(match, harvester).x === 29.5);
+    run(match, 5 * TICKS_PER_SECOND);
+    const stood = at(match, mechanic);
+    const left = hp(match, harvester);
+    expect(left).toBeLessThan(UNIT_STATS.harvester.maxHp);
+    expect(29.5 - stood.x).toBeGreaterThan(TEND.seekRadius);
+    run(match, 5 * TICKS_PER_SECOND);
+    expect(at(match, mechanic)).toEqual(stood);
+    expect(hp(match, harvester)).toBe(left);
+    // It drives back and parks 4 Cells from the Mechanic.
+    issueCommand(match, 0, { type: "move", unitIds: [harvester], target: { x: Math.floor(stood.x) + 4, y: ROW } });
+    runUntil(match, () => hp(match, harvester) === UNIT_STATS.harvester.maxHp);
+    expect(at(match, harvester).x).toBe(Math.floor(stood.x) + 4.5);
   });
 });
