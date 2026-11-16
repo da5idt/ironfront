@@ -92,9 +92,10 @@ export interface PlayerView {
    */
   readonly shots: readonly ShotView[];
   /**
-   * Units and Buildings that gained health from a Tend during the last Tick,
-   * for drawing and sound, under Fog of War: the Player's own always, the other
-   * Player's only where the target can be seen now.
+   * Units and Buildings worked on by a Tend during the last Tick, for drawing
+   * and sound, under Fog of War. A target is listed on every Tick it is worked
+   * on, also the Ticks that add no whole point of health: the Player's own
+   * always, the other Player's only where the target can be seen now.
    */
   readonly tends: readonly TendView[];
   /** What this Player's HQ is building, or null when it is free. */
@@ -111,13 +112,13 @@ export interface ShotView {
   readonly tick: number;
 }
 
-/** One target gaining health from a Tend. The target is in this view's `units` or `buildings` under the same id. */
+/** One target being worked on by a Tend. The target is in this view's `units` or `buildings` under the same id. */
 export interface TendView {
   readonly targetId: EntityId;
   /** The target's position in Cell units: a Unit's own, or the centre of a Building's footprint. */
   readonly x: number;
   readonly y: number;
-  /** The Tick it gained the health in. */
+  /** The Tick it was worked on in. */
   readonly tick: number;
 }
 

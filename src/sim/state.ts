@@ -34,7 +34,11 @@ export interface Shot {
   readonly tick: number;
 }
 
-/** A target that gained health from a Tend during a Tick, kept so drawing can show it. */
+/**
+ * A target that was worked on by a Tend during a Tick, kept so drawing can show
+ * it. Health comes back in whole points, so not every such Tick adds any: the
+ * work is listed all the same, as one unbroken effect.
+ */
 export interface Tended {
   readonly targetId: EntityId;
   readonly tick: number;
@@ -57,10 +61,16 @@ export interface UnitState {
   /** Ore carried; only Harvesters ever hold any. */
   cargo: number;
   /**
-   * The Tend target this Unit last found no way to, and the Tick until which
-   * it will not go to it by itself again. Null for a Unit that has not given up on anything.
+   * Tend targets this Unit found no way to, each with the Tick until which it
+   * will not go to that one by itself again.
    */
-  unreachable: { readonly targetId: EntityId; readonly untilTick: number } | null;
+  readonly unreachable: Map<EntityId, number>;
+  /**
+   * Tend targets this Unit gave up on at the leash. It does not go to them by
+   * itself again until it is given a Command, or it would follow a marching
+   * target for ever, a leash at a time.
+   */
+  readonly leftAtLeash: Set<EntityId>;
 }
 
 export interface BuildingState {
@@ -123,8 +133,13 @@ export interface MatchState {
   status: MatchStatus;
   /** Shots fired during the last Tick; replaced every Tick. */
   shots: Shot[];
-  /** Targets that gained health from a Tend during the last Tick; replaced every Tick. */
+  /** Targets worked on by a Tend during the last Tick, whether or not it added a whole point; replaced every Tick. */
   tends: Tended[];
+}
+
+/** True for a Unit; false for a Building, or one as last seen: only those have a footprint. */
+export function isUnit(t: UnitState | { readonly width: number }): t is UnitState {
+  return !("width" in t);
 }
 
 export function cellIndex(m: MatchState, x: number, y: number): number {
@@ -163,7 +178,8 @@ export function spawnUnit(m: MatchState, owner: PlayerId, kind: UnitKind, cell: 
     // Harvesters go to work as soon as they exist, so nobody has to tell them.
     order: kind === "harvester" ? startHarvesting() : { type: "idle" },
     cargo: 0,
-    unreachable: null,
+    unreachable: new Map(),
+    leftAtLeash: new Set(),
   };
   m.units.set(unit.id, unit);
   return unit;

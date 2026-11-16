@@ -136,6 +136,10 @@ _Avoid_: Collector, miner, worker
 A fast armoured Vehicle with a light gun, trained at the Vehicle Factory. It is built to carry Infantry.
 _Avoid_: APC, transport, personnel carrier, truck
 
+**Passenger**:
+An Infantry Unit inside a Troop Carrier. It is off the Map: it holds no Cell, cannot be seen, hit, Tended or given a Command, does not fire and gives no sight. It keeps its health, and still counts as a living Unit. Only its owner knows how many Passengers a Troop Carrier holds. If the Troop Carrier is destroyed with a Passenger still inside, the Passenger is lost with it.
+_Avoid_: Rider, occupant, cargo (cargo is the Ore a Harvester carries), load, garrison
+
 ## Controls
 
 **Control Group**:
