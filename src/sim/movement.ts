@@ -115,6 +115,7 @@ export function walkingTo(u: UnitState): CellPos | null {
   // One stepping aside to a spot of its own is walking there, not to the end of its route.
   if (u.order.type === "attackMove") return u.order.firing ? null : (u.order.spot?.goal ?? u.order.plan.goal);
   if (u.order.type === "attack") return u.order.chase?.goal ?? null;
+  if (u.order.type === "tend") return u.order.walk?.goal ?? null;
   return null;
 }
 

@@ -11,6 +11,8 @@ export type Terrain = "open" | "rough" | "rock" | "water";
 export type UnitKind = "rifleman" | "medic" | "raider" | "harvester";
 /** The two classes of Unit. What may heal, repair or carry a Unit goes by its class, never by its kind. */
 export type UnitClass = "infantry" | "vehicle";
+/** What a Tend can be aimed at: a Unit of either class, or a Building. */
+export type TendTargetClass = UnitClass | "building";
 export type BuildingKind = "hq" | "refinery" | "barracks" | "vehicleFactory" | "turret" | "hospital";
 
 /** A Cell coordinate: whole numbers, x to the right, y down. */

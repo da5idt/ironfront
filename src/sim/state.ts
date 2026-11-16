@@ -3,6 +3,7 @@ import type { HarvestOrder } from "./harvest";
 import type { MovePlan } from "./movement";
 import type { Rng } from "./rng";
 import { startHarvesting } from "./harvest";
+import type { TendOrder } from "./tend";
 import { BUILDING_STATS, UNIT_STATS } from "./tuning";
 import type { BuildingKind, CellPos, EntityId, PlayerId, Terrain, UnitKind } from "./types";
 import { isPassableTerrain } from "./types";
@@ -21,7 +22,8 @@ export type UnitOrder =
    * `settled` says it has taken its place for this stand and will not shuffle again.
    */
   | { readonly type: "attackMove"; readonly plan: MovePlan; firing: boolean; spot: MovePlan | null; settled: boolean }
-  | HarvestOrder;
+  | HarvestOrder
+  | TendOrder;
 
 /** A shot fired during a Tick, kept so drawing can show a tracer. Positions in Cell units. */
 export interface Shot {
@@ -29,6 +31,12 @@ export interface Shot {
   readonly fromY: number;
   readonly toX: number;
   readonly toY: number;
+  readonly tick: number;
+}
+
+/** A target that gained health from a Tend during a Tick, kept so drawing can show it. */
+export interface Tended {
+  readonly targetId: EntityId;
   readonly tick: number;
 }
 
@@ -110,6 +118,8 @@ export interface MatchState {
   status: MatchStatus;
   /** Shots fired during the last Tick; replaced every Tick. */
   shots: Shot[];
+  /** Targets that gained health from a Tend during the last Tick; replaced every Tick. */
+  tends: Tended[];
 }
 
 export function cellIndex(m: MatchState, x: number, y: number): number {

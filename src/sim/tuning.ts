@@ -1,4 +1,4 @@
-import type { BuildingKind, UnitClass, UnitKind } from "./types";
+import type { BuildingKind, TendTargetClass, UnitClass, UnitKind } from "./types";
 
 // Every balance number lives here so a tweak is a one-line change.
 // Times are in Ticks (20 per second); distances in Cells.
@@ -168,6 +168,32 @@ export const BUILDING_STATS: Readonly<Record<BuildingKind, BuildingStats>> = {
     reloadTicks: 0,
   },
 };
+
+/** Health a second a Unit restores in what it Tends, by what the target is; 0 where it cannot help. */
+export type TendRates = Readonly<Record<TendTargetClass, number>>;
+
+/** The Unit kinds that can Tend. A kind not listed here helps nothing. */
+export const TEND_RATES: Readonly<Partial<Record<UnitKind, TendRates>>> = {
+  medic: { infantry: 8, vehicle: 0, building: 0 },
+};
+
+/**
+ * Health a second a Unit of that kind restores in a target of that class; 0
+ * when it cannot help it. Every rule that asks "can it help?" asks here, so a
+ * new support kind is a new line of numbers above.
+ */
+export function tendRate(kind: UnitKind, target: TendTargetClass): number {
+  return TEND_RATES[kind]?.[target] ?? 0;
+}
+
+export const TEND = {
+  /** How far an idle support Unit looks for something of its own Player's to help. */
+  seekRadius: 6,
+  /** How far a target may move from where it was when the Tend began before the Unit gives up on it. */
+  leash: 8,
+  /** How often an idle support Unit looks: slow enough to be cheap, quick enough to feel willing. */
+  seekTicks: TICKS_PER_SECOND / 2,
+} as const;
 
 export const PLACEMENT = {
   /** Most empty Cells allowed between a new Building and the nearest own Building. */

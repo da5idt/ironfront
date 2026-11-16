@@ -3,6 +3,7 @@ import { fight, removeDead } from "./combat";
 import { updateFog } from "./fog";
 import { harvestOre } from "./harvest";
 import { moveUnits } from "./movement";
+import { tendTargets } from "./tend";
 import { trainUnits } from "./training";
 import type { MatchState } from "./state";
 import { decideVictory } from "./victory";
@@ -19,6 +20,7 @@ export const SYSTEMS: readonly System[] = [
   moveUnits,
   harvestOre,
   fight,
+  tendTargets,
   removeDead,
   dropOrphanedProduction,
   decideVictory,

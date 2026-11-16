@@ -68,6 +68,7 @@ export function createMatch(map: MapDef, seed: number, options: MatchOptions = {
     nextId: 1,
     status: { state: "running" },
     shots: [],
+    tends: [],
   };
   for (const player of PLAYER_IDS) {
     const start = startOf(player);
