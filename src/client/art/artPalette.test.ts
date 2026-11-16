@@ -25,7 +25,7 @@ describe("art palette", () => {
     const ramps: (readonly string[])[] = [ART.concrete, ART.fire, ART.smoke, ART.shore.sand];
     for (const t of Object.values(ART.player)) ramps.push([t.dark, t.mid, t.light]);
     ramps.push([ART.glass.dark, ART.glass.mid, ART.glass.light]);
-    for (const r of [ART.khaki, ART.sandbag, ART.tank]) ramps.push([r.dark, r.mid, r.light]);
+    for (const r of [ART.khaki, ART.sandbag, ART.tank, ART.hardHat, ART.overalls]) ramps.push([r.dark, r.mid, r.light]);
     ramps.push(ART.packedEarth);
     ramps.push([ART.ore.shadow, ART.ore.dark, ART.ore.mid, ART.ore.light]);
     for (const ramp of ramps) {

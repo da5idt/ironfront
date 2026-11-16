@@ -1,12 +1,12 @@
 import { BUILDING_STATS, type BuildingKind, type BuildingView, type CellPos, type EntityId, PLAYER_IDS, type PlayerId, TICKS_PER_SECOND } from "../../sim";
 import { ART } from "./artPalette";
+import { isBurning } from "./buildingArt";
 import { hash2 } from "./hash";
 import { toCanvas } from "./pixelWorld";
 import {
   BUILDING_FPS,
   type BuildingSprite,
   buildingSprite,
-  DAMAGED_BELOW,
   damageSprite,
   loopFrame,
   TURRET_GUN_PX,
@@ -137,7 +137,7 @@ export class BuildingPainter {
       if (sprite.gun) art.drawImage(sprite.gun[turretFacing(b.id)]!, x - gunOffset, y - gunOffset);
     }
     for (const b of buildings) {
-      if (b.hp >= b.maxHp * DAMAGED_BELOW || rise(b) < 1) continue;
+      if (!isBurning(b) || rise(b) < 1) continue;
       const frames = this.damage.get(b.kind)!;
       const { rise: above } = damageSprite(b.kind);
       const w = b.width * U;

@@ -16,6 +16,13 @@ export const FACINGS = 16;
 export const BUILDING_FPS = 8;
 /** Below this share of its health a Building smokes and burns. Presentation only, so not in the game's tuning table. */
 export const DAMAGED_BELOW = 0.5;
+/**
+ * Whether a Building shows fire and smoke: below half its health, and not at
+ * half or above, so one under repair stops smoking the Tick it is back to half.
+ */
+export function isBurning(b: { readonly hp: number; readonly maxHp: number }): boolean {
+  return b.hp < b.maxHp * DAMAGED_BELOW;
+}
 /** How long a newly placed Building takes to rise from the ground. */
 export const BUILD_UP_SECONDS = 0.9;
 /** Side of the Turret gun's square sprite; its middle sits on the middle of the Turret's Cell. */

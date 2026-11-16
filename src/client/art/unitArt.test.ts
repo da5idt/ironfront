@@ -6,7 +6,7 @@ import { FACINGS } from "./buildingArt";
 import { unitSprite } from "./spriteSheet";
 import { HARVESTER_LOADS, paintUnit, UNIT_FRAMES, UNIT_SPRITE_PX, unitFrame } from "./unitArt";
 
-const KINDS: readonly UnitKind[] = ["rifleman", "medic", "raider", "harvester"];
+const KINDS: readonly UnitKind[] = ["rifleman", "medic", "mechanic", "raider", "harvester"];
 
 const same = (a: PixelBuffer, b: PixelBuffer) => a.data.every((v, i) => v === b.data[i]);
 
@@ -181,6 +181,83 @@ describe("the Medic", () => {
     expect(unitFrame("medic", null, 0)).toBe(0);
     expect([0, 1, 2, 3].map((phase) => unitFrame("medic", phase, 0))).toEqual([1, 0, 2, 0]);
     const { frames } = unitSprite("medic", 0);
+    expect(new Set(frames.map((f) => f[0]!.data.join())).size).toBe(FACINGS);
+    for (let facing = 0; facing < FACINGS; facing++) {
+      const [stand, left, right] = frames[facing]!;
+      expect(same(stand!, left!), `facing ${facing}`).toBe(false);
+      expect(same(stand!, right!), `facing ${facing}`).toBe(false);
+      expect(same(left!, right!), `facing ${facing}`).toBe(false);
+    }
+  });
+});
+
+describe("the Mechanic", () => {
+  const WARD = [ART.ward.dark, ART.ward.mid, ART.ward.light];
+  const AID = [ART.aid.mark, ART.aid.shade];
+  const KHAKI = [ART.khaki.dark, ART.khaki.mid, ART.khaki.light];
+  const HARD_HAT = [ART.hardHat.dark, ART.hardHat.mid, ART.hardHat.light];
+  const OVERALLS = [ART.overalls.dark, ART.overalls.mid, ART.overalls.light];
+  const different = (a: PixelBuffer, b: PixelBuffer): number => {
+    let n = 0;
+    for (let y = 0; y < a.height; y++) for (let x = 0; x < a.width; x++) if (pixelAt(a, x, y) !== pixelAt(b, x, y)) n++;
+    return n;
+  };
+
+  it("differs from the Medic and the Rifleman in both Players' colours: a yellow hard hat and dark overalls, no khaki, no pale coat, no green", () => {
+    expect(UNIT_FRAMES.mechanic).toBe(3);
+    for (const owner of PLAYER_IDS) {
+      const mechanic = unitSprite("mechanic", owner);
+      const others = [unitSprite("medic", owner), unitSprite("rifleman", owner)];
+      for (let facing = 0; facing < FACINGS; facing++) {
+        for (let frame = 0; frame < UNIT_FRAMES.mechanic; frame++) {
+          const m = mechanic.frames[facing]![frame]!;
+          const at = `Player ${owner} facing ${facing} frame ${frame}`;
+          expect(count(m, HARD_HAT), at).toBeGreaterThanOrEqual(5);
+          // Six pixels of overalls, less the two the tool may lie across.
+          expect(count(m, OVERALLS), at).toBeGreaterThanOrEqual(4);
+          expect(count(m, [...KHAKI, ...WARD, ...AID]), at).toBe(0);
+          // Against every Medic and Rifleman frame of that facing, so no pose of one can pass for another.
+          for (const other of others) {
+            for (const o of other.frames[facing]!) {
+              expect(count(o, [...HARD_HAT, ...OVERALLS]), at).toBe(0);
+              expect(different(m, o), at).toBeGreaterThanOrEqual(12);
+            }
+          }
+        }
+      }
+    }
+  });
+
+  it("wears colours no Player has, so its hat and overalls never read as the other Player's", () => {
+    const player = PLAYER_IDS.flatMap((id) => [ART.player[id].dark, ART.player[id].mid, ART.player[id].light]);
+    for (const colour of [...HARD_HAT, ...OVERALLS]) expect(player).not.toContain(colour);
+    expect(new Set([...HARD_HAT, ...OVERALLS]).size).toBe(6);
+  });
+
+  it("carries a tool, not a rifle: a glint of steel on the side it faces, close to the body", () => {
+    for (let facing = 0; facing < FACINGS; facing++) {
+      const sprite = unitSprite("mechanic", 0).frames[facing]![0]!;
+      expect(count(sprite, [ART.steelShine]), `facing ${facing}`).toBe(1);
+      const size = box(sprite);
+      expect(size.width, `facing ${facing}`).toBeLessThanOrEqual(7);
+      expect(size.height, `facing ${facing}`).toBeLessThanOrEqual(11);
+    }
+    // The tool is held to the east when it faces east and to the west when it faces west.
+    const tool = (facing: number) => centreOf(unitSprite("mechanic", 0).frames[facing]![0]!, [ART.steelShine]).x;
+    expect(tool(0)).toBeGreaterThan(tool(8));
+  });
+
+  it("is Infantry-sized, far smaller than a Raider", () => {
+    for (let facing = 0; facing < FACINGS; facing++) {
+      const size = (kind: UnitKind) => solid(unitSprite(kind, 0).frames[facing]![0]!).length;
+      expect(size("mechanic") * 2, `facing ${facing}`).toBeLessThan(size("raider"));
+    }
+  });
+
+  it("shows which way it faces, and steps left, together, right, together as it walks", () => {
+    expect(unitFrame("mechanic", null, 0)).toBe(0);
+    expect([0, 1, 2, 3].map((phase) => unitFrame("mechanic", phase, 0))).toEqual([1, 0, 2, 0]);
+    const { frames } = unitSprite("mechanic", 0);
     expect(new Set(frames.map((f) => f[0]!.data.join())).size).toBe(FACINGS);
     for (let facing = 0; facing < FACINGS; facing++) {
       const [stand, left, right] = frames[facing]!;

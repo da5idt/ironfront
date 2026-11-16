@@ -80,7 +80,7 @@ The Building where Harvesters unload Ore for Credits.
 The Building that trains Riflemen.
 
 **Vehicle Factory**:
-The Building that trains Raiders and Harvesters.
+The Building that trains Raiders, Harvesters and Mechanics.
 _Avoid_: War factory, factory
 
 **Turret**:
@@ -97,7 +97,7 @@ _Avoid_: Infirmary, clinic, med bay, field hospital
 Anything a Player trains that moves. Every Unit kind is either Infantry or a Vehicle.
 
 **Infantry**:
-The class of Units that go on foot: the Rifleman and the Medic. It names the class, never one kind of Unit.
+The class of Units that go on foot: the Rifleman, the Medic and the Mechanic. It names the class, never one kind of Unit.
 _Avoid_: Foot soldiers, footmen, grunts
 
 **Vehicle**:
@@ -115,6 +115,14 @@ _Avoid_: Doctor, healer, nurse, field medic
 **Heal**:
 To restore health to an Infantry Unit, which is what a Medic does when it Tends one. It costs nothing and never goes above full health.
 _Avoid_: Cure, mend, patch up, regenerate
+
+**Mechanic**:
+An unarmed Infantry Unit, trained at the Vehicle Factory, that Repairs Vehicles and Buildings and does nothing for Infantry. It never fires, and an Attack-move is a plain move for it.
+_Avoid_: Engineer, repairman, technician, fitter
+
+**Repair**:
+To restore health to a Vehicle or a Building, which is what a Mechanic does when it Tends one. It costs nothing and never goes above full health.
+_Avoid_: Fix, mend, patch up, rebuild, service
 
 **Raider**:
 The light attack Vehicle.

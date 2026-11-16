@@ -200,6 +200,7 @@ export type { Weapon } from "./art/effectArt";
 const UNIT_WEAPON: Readonly<Record<UnitKind, Weapon | null>> = {
   rifleman: "rifle",
   medic: null,
+  mechanic: null,
   raider: "raiderGun",
   harvester: null,
 };
