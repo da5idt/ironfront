@@ -16,8 +16,11 @@ Issues and specs for this repo live as GitHub issues. Use the `gh` CLI for all o
 
 ### Cloud sessions: REST only
 
-GraphQL is blocked in cloud sessions, and `gh issue ...` uses it. Use these instead:
+GraphQL is blocked in cloud sessions, and every `gh issue ...` command above uses it (they fail with 403). Use these instead:
 
+- **Read**: `gh api repos/<owner>/<repo>/issues/<n>` (add `--jq .body` for the text), and `gh api repos/<owner>/<repo>/issues/<n>/comments` for its comments.
+- **List**: `gh api "repos/<owner>/<repo>/issues?state=open&labels=<name>"`. It also returns pull requests: drop entries that have a `pull_request` field.
+- **Create**: `gh api -X POST repos/<owner>/<repo>/issues -f title="..." -f body="..." -f 'labels[]=<name>'`.
 - **Comment**: `gh api -X POST repos/<owner>/<repo>/issues/<n>/comments -f body="..."`. The path ends in `/comments`: a POST or PATCH to `issues/<n>` itself replaces the issue's text.
 - **Add labels**: `gh api -X POST repos/<owner>/<repo>/issues/<n>/labels -f 'labels[]=<name>'`. **Remove one**: `gh api -X DELETE repos/<owner>/<repo>/issues/<n>/labels/<name>`.
 - **Assign**: `gh api -X POST repos/<owner>/<repo>/issues/<n>/assignees -f 'assignees[]=<login>'`.
