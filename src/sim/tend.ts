@@ -32,7 +32,7 @@ import type { CellPos, EntityId, PlayerId, TendTargetClass, Vec } from "./types"
 type TendTarget = UnitState | BuildingState;
 
 /** A Unit walking to, or working beside, the target of a Tend. */
-export interface TendOrder {
+export interface Tending {
   readonly type: "tend";
   readonly targetId: EntityId;
   /** Where the target was when the Tend began; the leash is measured from here. */
@@ -123,25 +123,25 @@ export const handleTend: CommandHandler<"tend"> = (m, player, command): CommandR
 };
 
 /** One Tick of a Tend: walk until beside the target, and restore health while beside it. */
-function advanceTend(m: MatchState, u: UnitState, order: TendOrder): void {
-  const target = ownTarget(m, u.owner, order.targetId);
+function advanceTend(m: MatchState, u: UnitState, tending: Tending): void {
+  const target = ownTarget(m, u.owner, tending.targetId);
   const full = target ? maxHp(target) : 0;
-  if (!target || target.hp >= full || Math.hypot(target.x - order.from.x, target.y - order.from.y) > TEND.leash) {
+  if (!target || target.hp >= full || Math.hypot(target.x - tending.from.x, target.y - tending.from.y) > TEND.leash) {
     u.order = { type: "idle" };
     return;
   }
-  if (!isBeside(unitCell(u), target) && !(order.walk && isBeside(order.walk.goal, target))) {
+  if (!isBeside(unitCell(u), target) && !(tending.walk && isBeside(tending.walk.goal, target))) {
     const goal = standGoal(m, u, target);
     if (!goal) {
       u.order = { type: "idle" };
       return;
     }
-    order.walk = planMove(m, u, goal);
+    tending.walk = planMove(m, u, goal);
   }
-  if (order.walk && stepAlong(m, u, order.walk) === "arrived") order.walk = null;
+  if (tending.walk && stepAlong(m, u, tending.walk) === "arrived") tending.walk = null;
   if (!isBeside(unitCell(u), target)) {
     // The route ran out short of the target: it cannot be reached, so give up.
-    if (!order.walk) u.order = { type: "idle" };
+    if (!tending.walk) u.order = { type: "idle" };
     return;
   }
   // The rate is spread over the Ticks of a second in whole points (8 a second is
@@ -149,8 +149,8 @@ function advanceTend(m: MatchState, u: UnitState, order: TendOrder): void {
   // restores the rate exactly.
   const rate = rateFor(u, target);
   const due = (ticks: number): number => Math.floor((ticks * rate) / TICKS_PER_SECOND);
-  target.hp = Math.min(full, target.hp + due(order.workedTicks + 1) - due(order.workedTicks));
-  order.workedTicks++;
+  target.hp = Math.min(full, target.hp + due(tending.workedTicks + 1) - due(tending.workedTicks));
+  tending.workedTicks++;
   // Once for a target, however many Units are at work on it: it is one effect to draw and hear.
   if (!m.tends.some((t) => t.targetId === target.id)) m.tends.push({ targetId: target.id, tick: m.tick });
 }

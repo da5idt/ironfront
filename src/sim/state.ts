@@ -3,7 +3,7 @@ import type { HarvestOrder } from "./harvest";
 import type { MovePlan } from "./movement";
 import type { Rng } from "./rng";
 import { startHarvesting } from "./harvest";
-import type { TendOrder } from "./tend";
+import type { Tending } from "./tend";
 import { BUILDING_STATS, UNIT_STATS } from "./tuning";
 import type { BuildingKind, CellPos, EntityId, PlayerId, Terrain, UnitKind } from "./types";
 import { isPassableTerrain } from "./types";
@@ -23,7 +23,7 @@ export type UnitOrder =
    */
   | { readonly type: "attackMove"; readonly plan: MovePlan; firing: boolean; spot: MovePlan | null; settled: boolean }
   | HarvestOrder
-  | TendOrder;
+  | Tending;
 
 /** A shot fired during a Tick, kept so drawing can show a tracer. Positions in Cell units. */
 export interface Shot {
