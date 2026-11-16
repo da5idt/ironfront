@@ -29,7 +29,7 @@ A Command that sends Units to a Cell and has them stop to fight any enemy that c
 _Avoid_: Aggressive move, a-move, assault
 
 **Tend**:
-A Command that sends support Units to one of the Player's own Units or Buildings to restore its health. Each Unit that can help the target walks until it is beside it and works until it is at full health, is gone, has moved too far off, or a new Command arrives. A Unit that cannot help that target ignores the Command. An idle support Unit Tends the nearest target it can help by itself.
+A Command that sends support Units to one of the Player's own Units or Buildings to restore its health. Each Unit that can help the target walks until it is beside it and works until it is at full health, is gone, has moved too far off, or a new Command arrives. A Unit that cannot help that target ignores the Command, and a Tend on a target already at full health is rejected. An idle support Unit Tends the nearest target it can help by itself; one it gave up on for moving too far off it leaves alone until that target has stopped or the Unit is given a Command.
 _Avoid_: Assist, support (as a Command), treat, fix
 
 **Victory**:

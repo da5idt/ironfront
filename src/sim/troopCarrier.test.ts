@@ -85,8 +85,8 @@ describe("the Troop Carrier", () => {
 
   it("is paid for when queued and steps out beside the Vehicle Factory at full health when trained", () => {
     const match = stage();
-    const factory = building(match, 0, "vehicleFactory", 10, 10);
-    expect(issueCommand(match, 0, { type: "train", buildingId: factory, kind: "troopCarrier" })).toEqual({ ok: true });
+    const vehicleFactory = building(match, 0, "vehicleFactory", 10, 10);
+    expect(issueCommand(match, 0, { type: "train", buildingId: vehicleFactory, kind: "troopCarrier" })).toEqual({ ok: true });
     expect(getPlayerView(match, 0).credits).toBe(ECONOMY.startingCredits - 600);
     run(match, UNIT_STATS.troopCarrier.trainTicks - 1);
     expect(carriers(match, 0)).toEqual([]);
