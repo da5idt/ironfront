@@ -1,3 +1,4 @@
+import { HQ_BUILDS, TRAINS } from "../sim";
 import type { Size } from "./camera";
 
 // Screen layout shared by the renderer and input: a side panel on the left,
@@ -19,12 +20,28 @@ export const PANEL_EDGE_SCROLL_PX = 4;
 export const SOUND_STRIP_HEIGHT = 128;
 /** The strip cut down to its mute-all button, for a window too short for all of it. */
 export const SOUND_STRIP_COMPACT_HEIGHT = 34;
+/** Room above a menu's buttons for its heading. */
+export const BUTTONS_HEADER = 20;
+/** The gap between buttons squeezed for room: enough to tell them apart. */
+export const TIGHT_BUTTON_GAP = 4;
+/** A button just tall enough for a name, a key with a cost and a progress bar, clear of each other. */
+export const LEAST_BUTTON_HEIGHT = 42;
 /**
- * The least room a menu of four buttons can use: its heading, and buttons
- * just tall enough for a name, a key with a cost and a progress bar. The
- * sound strip gives way before the buttons get less than this.
+ * The most buttons a menu has, read off what the HQ builds and what each
+ * Building trains, so a longer menu makes room for itself. Every menu's
+ * buttons are sized as if it had this many, so they do not change size from
+ * menu to menu.
  */
-export const MENU_ROOM_NEEDED = 200;
+export const MENU_SLOTS = Math.max(HQ_BUILDS.length, ...Object.values(TRAINS).map((kinds) => kinds.length));
+
+/**
+ * The least room a menu of `buttons` buttons can use: its heading, and the
+ * buttons at their least height with tight gaps. The sound strip gives way
+ * before the buttons get less than this.
+ */
+export function menuRoomNeeded(buttons: number): number {
+  return BUTTONS_HEADER + buttons * LEAST_BUTTON_HEIGHT + Math.max(0, buttons - 1) * TIGHT_BUTTON_GAP;
+}
 
 export interface Rect {
   readonly x: number;
@@ -45,7 +62,8 @@ export interface Layout {
   readonly soundStrip: Rect;
 }
 
-export function computeLayout(screen: Size): Layout {
+/** `menuButtons` is how many buttons the menu must have room for: the longest menu's, unless told otherwise. */
+export function computeLayout(screen: Size, menuButtons: number = MENU_SLOTS): Layout {
   const panelWidth = Math.min(PANEL_WIDTH, Math.max(0, screen.width - 200));
   const panel = { x: 0, y: 0, width: panelWidth, height: screen.height };
   const side = Math.max(0, panelWidth - MINIMAP_MARGIN * 2);
@@ -54,8 +72,9 @@ export function computeLayout(screen: Size): Layout {
   // On a window too short for everything the sound strip gives way first, as its M key works without it:
   // down to its mute-all button, then to nothing. Only after that do the buttons go below their least size.
   const below = Math.max(0, screen.height - buttonsTop);
+  const menuRoom = menuRoomNeeded(menuButtons);
   const stripHeight =
-    [SOUND_STRIP_HEIGHT, SOUND_STRIP_COMPACT_HEIGHT].find((height) => below - height >= MENU_ROOM_NEEDED) ?? 0;
+    [SOUND_STRIP_HEIGHT, SOUND_STRIP_COMPACT_HEIGHT].find((height) => below - height >= menuRoom) ?? 0;
   const stripTop = buttonsTop + below - stripHeight;
   return {
     mapView: { x: panelWidth, y: 0, width: screen.width - panelWidth, height: screen.height },

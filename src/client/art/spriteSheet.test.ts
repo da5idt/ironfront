@@ -6,7 +6,7 @@ import type { PixelBuffer } from "./pixelBuffer";
 import { pixelAt } from "./pixelBuffer";
 import { buildingSprite, damageSprite, loopFrame, TURRET_GUN_PX } from "./spriteSheet";
 
-const KINDS: readonly BuildingKind[] = ["hq", "refinery", "barracks", "vehicleFactory", "turret"];
+const KINDS: readonly BuildingKind[] = ["hq", "refinery", "barracks", "vehicleFactory", "turret", "hospital"];
 
 /** Footprints in Cells times the 12 art pixels a Cell takes. */
 const SIZES: Record<BuildingKind, [number, number]> = {
@@ -15,6 +15,7 @@ const SIZES: Record<BuildingKind, [number, number]> = {
   barracks: [24, 24],
   vehicleFactory: [36, 36],
   turret: [12, 12],
+  hospital: [24, 24],
 };
 
 const same = (a: PixelBuffer, b: PixelBuffer) =>
@@ -99,8 +100,8 @@ describe("Building sprites", () => {
     expect(damageSprite("refinery")).toBe(damageSprite("refinery"));
   });
 
-  it("move while idle: the frames of an HQ, Refinery, Vehicle Factory and Barracks are not all alike", () => {
-    for (const kind of ["hq", "refinery", "vehicleFactory", "barracks"] as const) {
+  it("move while idle: the frames of an HQ, Refinery, Vehicle Factory, Barracks and Hospital are not all alike", () => {
+    for (const kind of ["hq", "refinery", "vehicleFactory", "barracks", "hospital"] as const) {
       const { frames } = buildingSprite(kind, 0);
       expect(frames.length, kind).toBeGreaterThanOrEqual(4);
       expect(new Set(frames.map((f) => f.data.join())).size, kind).toBeGreaterThanOrEqual(4);
@@ -108,8 +109,20 @@ describe("Building sprites", () => {
   });
 
   it("show lit windows", () => {
-    for (const kind of ["hq", "refinery", "vehicleFactory", "barracks"] as const) {
+    for (const kind of ["hq", "refinery", "vehicleFactory", "barracks", "hospital"] as const) {
       expect(count(buildingSprite(kind, 0).frames[0]!, [ART.windowLight.mid, ART.windowLight.light]), kind).toBeGreaterThan(0);
+    }
+  });
+
+  it("mark the Hospital with a plus sign in a colour of its own, the same for both Players", () => {
+    expect([ART.player[0].mid, ART.player[1].mid, ART.lamp.redOn, ART.fire[0]]).not.toContain(ART.aid.mark);
+    for (const owner of PLAYER_IDS) {
+      const still = buildingSprite("hospital", owner).frames[0]!;
+      // A plus with arms 2 pixels thick and 6 long is 20 pixels.
+      expect(count(still, [ART.aid.mark]), `Player ${owner}`).toBeGreaterThanOrEqual(20);
+    }
+    for (const kind of KINDS) {
+      if (kind !== "hospital") expect(count(buildingSprite(kind, 0).frames[0]!, [ART.aid.mark]), kind).toBe(0);
     }
   });
 });

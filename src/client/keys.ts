@@ -46,6 +46,7 @@ const KEYS: Readonly<Record<string, KeyAction>> = {
   KeyX: { type: "menuButton", index: 1 },
   KeyC: { type: "menuButton", index: 2 },
   KeyV: { type: "menuButton", index: 3 },
+  KeyB: { type: "menuButton", index: 4 },
   // "+" is Shift with this key on most layouts; the plain key zooms as well, so no Shift is needed.
   Equal: { type: "zoom", steps: 1 },
   NumpadAdd: { type: "zoom", steps: 1 },

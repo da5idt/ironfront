@@ -1,5 +1,5 @@
 import { BUILDING_STATS, type BuildingKind, type CellPos, type Command, HQ_BUILDS, type PlayerView } from "../sim";
-import { contains, type Rect } from "./layout";
+import { BUTTONS_HEADER, contains, MENU_SLOTS, type Rect, TIGHT_BUTTON_GAP } from "./layout";
 
 // The HQ's build buttons in the side panel: where they are, what state each
 // is in and what a click on one means. Pure, so the rules are unit tested;
@@ -9,8 +9,8 @@ import { contains, type Rect } from "./layout";
 export const BUILD_BUTTON_HEIGHT = 80;
 export const BUTTON_GAP = 6;
 export const BUTTON_MARGIN = 10;
-/** Room above the buttons for the panel's heading. */
-export const BUTTONS_HEADER = 20;
+// The heading's room is the layout's to know, as it reckons the menu's least room; the painters read it from here with the other button sizes.
+export { BUTTONS_HEADER };
 
 export interface BuildButton {
   readonly kind: BuildingKind;
@@ -27,11 +27,6 @@ export type PanelAction =
   | { readonly type: "command"; readonly command: Command }
   /** Enter placement mode for the finished Building. */
   | { readonly type: "place"; readonly kind: BuildingKind };
-
-/** The most buttons a menu has; every menu's buttons are sized as if it had this many, so they do not change size from menu to menu. */
-const MENU_SLOTS = 4;
-/** The gap between buttons squeezed for room: enough to tell them apart. */
-const TIGHT_BUTTON_GAP = 4;
 
 /**
  * Where a menu's first `count` buttons go in `area`, top to bottom. Full size

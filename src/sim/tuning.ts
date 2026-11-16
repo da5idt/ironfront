@@ -130,6 +130,18 @@ export const BUILDING_STATS: Readonly<Record<BuildingKind, BuildingStats>> = {
     range: 5.5,
     reloadTicks: 20,
   },
+  hospital: {
+    name: "Hospital",
+    cost: 800,
+    buildTicks: 15 * TICKS_PER_SECOND,
+    maxHp: 700,
+    width: 2,
+    height: 2,
+    sight: 4,
+    damage: 0,
+    range: 0,
+    reloadTicks: 0,
+  },
 };
 
 export const PLACEMENT = {

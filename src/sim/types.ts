@@ -9,7 +9,7 @@ export type EntityId = number;
 export type Terrain = "open" | "rough" | "rock" | "water";
 
 export type UnitKind = "rifleman" | "raider" | "harvester";
-export type BuildingKind = "hq" | "refinery" | "barracks" | "vehicleFactory" | "turret";
+export type BuildingKind = "hq" | "refinery" | "barracks" | "vehicleFactory" | "turret" | "hospital";
 
 /** A Cell coordinate: whole numbers, x to the right, y down. */
 export interface CellPos {
