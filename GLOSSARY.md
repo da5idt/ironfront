@@ -21,12 +21,16 @@ One fixed step of game time. The Match advances only in whole Ticks, at a fixed 
 _Avoid_: Frame, turn, update
 
 **Command**:
-An order a Player gives, such as move, attack, Attack-move, harvest, build or train. The person playing and the Computer Opponent give the same Commands.
+An order a Player gives, such as move, attack, Attack-move, Tend, harvest, build or train. The person playing and the Computer Opponent give the same Commands.
 _Avoid_: Action, input, order
 
 **Attack-move**:
 A Command that sends Units to a Cell and has them stop to fight any enemy that comes into weapon range on the way, then carry on. They do not leave their route to chase.
 _Avoid_: Aggressive move, a-move, assault
+
+**Tend**:
+A Command that sends support Units to one of the Player's own Units or Buildings to restore its health. Each Unit that can help the target walks until it is beside it and works until it is at full health, is gone, has moved too far off, or a new Command arrives. A Unit that cannot help that target ignores the Command. An idle support Unit Tends the nearest target it can help by itself.
+_Avoid_: Assist, support (as a Command), treat, fix
 
 **Victory**:
 The end of a Match when the other Player has no Buildings left.
@@ -105,8 +109,12 @@ The armed Infantry Unit, trained at the Barracks.
 _Avoid_: Soldier, trooper; "infantry" for this one kind (Infantry is the whole class)
 
 **Medic**:
-An unarmed Infantry Unit, trained at the Hospital. It never fires, and an Attack-move is a plain move for it.
+An unarmed Infantry Unit, trained at the Hospital, that Heals other Infantry, never itself. It never fires, and an Attack-move is a plain move for it.
 _Avoid_: Doctor, healer, nurse, field medic
+
+**Heal**:
+To restore health to an Infantry Unit, which is what a Medic does when it Tends one. It costs nothing and never goes above full health.
+_Avoid_: Cure, mend, patch up, regenerate
 
 **Raider**:
 The light attack Vehicle.

@@ -51,3 +51,9 @@ export function setTestBuildingHp(match: Match, id: EntityId, hp: number): void 
   const building = (match as unknown as MatchState).buildings.get(id);
   if (building) building.hp = hp;
 }
+
+/** Sets a Unit's health, so tests can stage a hurt Unit without a fight. */
+export function setTestUnitHp(match: Match, id: EntityId, hp: number): void {
+  const unit = (match as unknown as MatchState).units.get(id);
+  if (unit) unit.hp = hp;
+}
