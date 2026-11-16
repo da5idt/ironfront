@@ -23,6 +23,10 @@ import type { CellPos, EntityId, PlayerId, TendTargetClass, Vec } from "./types"
 //   target below full health it can help within the seek radius, and Tends it
 //   as if told to. Idle means no Command in progress, so a Unit on a move, or
 //   on a Tend it was given, is never pulled away.
+// - A Unit that finds no way to a target leaves that one alone for a while when
+//   it looks by itself, so a walled-in target costs a route now and then, not
+//   on every look, and does not keep the Unit from others it can reach. A
+//   Tend Command is always tried.
 // - Health comes back in whole points, at the Unit's rate a second.
 // - Health never goes above full, and nothing is paid.
 // - Only own targets: a Player always sees its own Units and Buildings, so
@@ -39,12 +43,14 @@ export interface Tending {
   readonly from: Vec;
   /** The walk to a Cell beside the target, or null while standing. */
   walk: MovePlan | null;
+  /** True when the last route planned stopped short of its goal: there is no way to the target, as against a target that has moved on. */
+  cutShort: boolean;
   /** Ticks spent at work beside the target, which sets how many whole health points are due. */
   workedTicks: number;
 }
 
 function startTend(u: UnitState, t: TendTarget): void {
-  u.order = { type: "tend", targetId: t.id, from: { x: t.x, y: t.y }, walk: null, workedTicks: 0 };
+  u.order = { type: "tend", targetId: t.id, from: { x: t.x, y: t.y }, walk: null, cutShort: false, workedTicks: 0 };
 }
 
 function isUnit(t: TendTarget): t is UnitState {
@@ -133,15 +139,19 @@ function advanceTend(m: MatchState, u: UnitState, tending: Tending): void {
   if (!isBeside(unitCell(u), target) && !(tending.walk && isBeside(tending.walk.goal, target))) {
     const goal = standGoal(m, u, target);
     if (!goal) {
-      u.order = { type: "idle" };
+      giveUpOnUnreachable(m, u, target);
       return;
     }
     tending.walk = planMove(m, u, goal);
+    const end = tending.walk.path.at(-1) ?? unitCell(u);
+    tending.cutShort = end.x !== goal.x || end.y !== goal.y;
   }
   if (tending.walk && stepAlong(m, u, tending.walk) === "arrived") tending.walk = null;
   if (!isBeside(unitCell(u), target)) {
-    // The route ran out short of the target: it cannot be reached, so give up.
-    if (!tending.walk) u.order = { type: "idle" };
+    // The walk is over and the target is not beside the Unit: either no route reaches it, or it moved on meanwhile.
+    if (tending.walk) return;
+    if (tending.cutShort) giveUpOnUnreachable(m, u, target);
+    else u.order = { type: "idle" };
     return;
   }
   // The rate is spread over the Ticks of a second in whole points (8 a second is
@@ -153,6 +163,12 @@ function advanceTend(m: MatchState, u: UnitState, tending: Tending): void {
   tending.workedTicks++;
   // Once for a target, however many Units are at work on it: it is one effect to draw and hear.
   if (!m.tends.some((t) => t.targetId === target.id)) m.tends.push({ targetId: target.id, tick: m.tick });
+}
+
+/** Ends a Tend whose target cannot be reached, and notes it so the Unit does not come straight back by itself. */
+function giveUpOnUnreachable(m: MatchState, u: UnitState, t: TendTarget): void {
+  u.order = { type: "idle" };
+  u.unreachable = { targetId: t.id, untilTick: m.tick + TEND.retryTicks };
 }
 
 /** How far the target is from `from`: to a Unit's position, or to the nearest point of a Building's footprint. */
@@ -172,6 +188,7 @@ function seekTarget(m: MatchState, u: UnitState): TendTarget | undefined {
   let best: TendTarget | undefined;
   let bestD = Infinity;
   const consider = (t: TendTarget): void => {
+    if (u.unreachable?.targetId === t.id && m.tick < u.unreachable.untilTick) return;
     if (t.owner !== u.owner || t.hp <= 0 || t.hp >= maxHp(t) || rateFor(u, t) <= 0) return;
     const d = distanceTo(t, u);
     if (d > TEND.seekRadius) return;

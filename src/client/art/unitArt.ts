@@ -9,7 +9,8 @@ import { createPixelBuffer, type PixelBuffer, pixelAt, setPixel } from "./pixelB
 // built from blocks in the vehicle's own space and turned to each facing, so
 // the light stays put while the vehicle turns under it. Infantry stand
 // upright in every facing: the Rifleman shows the way he faces with his rifle
-// and face, the Medic with its face and the satchel it carries in front.
+// and face, the Medic with its face and the satchel it carries in front, the
+// Mechanic with its face and the tool in its hand.
 // Painted once at startup by the sprite sheet; nothing here runs per frame.
 
 /** Side of every Unit's square sprite; its middle sits on the Unit's position. */
@@ -32,6 +33,7 @@ const ON_FOOT_FRAMES = 3;
 export const UNIT_FRAMES: Readonly<Record<UnitKind, number>> = {
   rifleman: ON_FOOT_FRAMES,
   medic: ON_FOOT_FRAMES,
+  mechanic: ON_FOOT_FRAMES,
   raider: WHEEL_FRAMES,
   harvester: HARVESTER_LOADS * WHEEL_FRAMES,
   troopCarrier: WHEEL_FRAMES,
@@ -45,6 +47,7 @@ export function unitFrame(kind: UnitKind, phase: number | null, load: number): n
   switch (kind) {
     case "rifleman":
     case "medic":
+    case "mechanic":
       return phase === null ? ON_FOOT_STAND : ON_FOOT_CYCLE[phase % STEP_PHASES]!;
     case "raider":
     case "troopCarrier":
@@ -56,7 +59,7 @@ export function unitFrame(kind: UnitKind, phase: number | null, load: number): n
 
 const C = ART.concrete;
 const K = C[0];
-const { glass, khaki, hazard, ore, smoke, skin, ward, aid } = ART;
+const { glass, khaki, hazard, ore, smoke, skin, ward, aid, hardHat, overalls } = ART;
 
 /** How dark the shadow a Unit casts on the ground is (0..255). */
 const SHADOW_ALPHA = 90;
@@ -350,6 +353,54 @@ function paintMedic(buf: PixelBuffer, colours: Ramp, facing: number, frame: numb
 const SATCHEL_REACH = 1.45;
 
 /**
+ * Mechanic: a yellow hard hat with a brim over oil-dark overalls, so it is
+ * taken for neither the Rifleman (his Player's colour over khaki) nor the
+ * Medic (pale, with green). Its Player shows on its sleeves, gloves and belt. It carries no weapon: a short tool with a bright steel head is
+ * held on the side it faces, close to the body.
+ */
+function paintMechanic(buf: PixelBuffer, colours: Ramp, facing: number, frame: number): void {
+  const a = (facing / FACINGS) * Math.PI * 2;
+  const dx = Math.cos(a);
+  const dy = Math.sin(a);
+  const left = FIGURE_LEFT;
+  const topRow = FIGURE_TOP;
+  // Hard hat: a crown, and a brim a pixel wider than the head on each side.
+  setPixel(buf, left, topRow, hardHat.light);
+  setPixel(buf, left + 1, topRow, hardHat.light);
+  setPixel(buf, left + 2, topRow, hardHat.mid);
+  setPixel(buf, left - 1, topRow + 1, hardHat.mid);
+  setPixel(buf, left, topRow + 1, hardHat.mid);
+  setPixel(buf, left + 1, topRow + 1, hardHat.mid);
+  setPixel(buf, left + 2, topRow + 1, hardHat.dark);
+  setPixel(buf, left + 3, topRow + 1, hardHat.dark);
+  paintFace(buf, dx, dy, hardHat.dark);
+  // Overalls, two rows, over a belt in the Player's colour, with a sleeve in that colour at each shoulder.
+  for (let row = 0; row < 2; row++) {
+    setPixel(buf, left, topRow + 3 + row, overalls.light);
+    setPixel(buf, left + 1, topRow + 3 + row, overalls.mid);
+    setPixel(buf, left + 2, topRow + 3 + row, overalls.dark);
+  }
+  setPixel(buf, left, topRow + 5, colours.mid);
+  setPixel(buf, left + 1, topRow + 5, colours.mid);
+  setPixel(buf, left + 2, topRow + 5, colours.dark);
+  // Sleeves down to work gloves, a row longer than the Medic's, so the owner still reads when soot or the tool hides a pixel or two.
+  for (const row of [0, 1, 2]) {
+    setPixel(buf, left - 1, topRow + 3 + row, row === 0 ? colours.light : colours.mid);
+    setPixel(buf, left + 3, topRow + 3 + row, colours.dark);
+  }
+  paintLegs(buf, dx, frame);
+  // The tool swings round the body with the facing: a dark handle from the middle and one bright pixel for its head.
+  const midX = left + 1.5;
+  const midY = topRow + 4.5;
+  setPixel(buf, Math.floor(midX + dx * TOOL_REACH * 0.4), Math.floor(midY + dy * TOOL_REACH * 0.4), K);
+  setPixel(buf, Math.floor(midX + dx * TOOL_REACH), Math.floor(midY + dy * TOOL_REACH), ART.steelShine);
+  outline(buf);
+}
+
+/** How far from the middle of the overalls the head of the Mechanic's tool is, in art pixels: at the body's edge, where a rifle would reach well past it. */
+const TOOL_REACH = 1.45;
+
+/**
  * Rifleman: a helmet in his Player's colour over a khaki jacket and dark legs.
  * He stands upright whichever way he faces; his face shows on the side he
  * looks to and his rifle points there.
@@ -418,11 +469,12 @@ function castShadow(buf: PixelBuffer): void {
   for (const [x, y] of cast) setPixel(buf, x, y, ART.fog, SHADOW_ALPHA);
 }
 
-const SALT: Readonly<Record<UnitKind, number>> = { rifleman: 71, raider: 72, harvester: 73, medic: 74, troopCarrier: 75 };
+const SALT: Readonly<Record<UnitKind, number>> = { rifleman: 71, raider: 72, harvester: 73, medic: 74, troopCarrier: 75, mechanic: 76 };
 
 const PAINTERS: Readonly<Record<UnitKind, (buf: PixelBuffer, colours: Ramp, facing: number, frame: number) => void>> = {
   rifleman: paintRifleman,
   medic: paintMedic,
+  mechanic: paintMechanic,
   raider: paintRaider,
   harvester: paintHarvester,
   troopCarrier: paintTroopCarrier,

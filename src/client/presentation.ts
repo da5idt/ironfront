@@ -200,6 +200,7 @@ export type { Weapon } from "./art/effectArt";
 const UNIT_WEAPON: Readonly<Record<UnitKind, Weapon | null>> = {
   rifleman: "rifle",
   medic: null,
+  mechanic: null,
   raider: "raiderGun",
   harvester: null,
   // A light gun on a Vehicle's mount: it shares the Raider's flash and sound rather than getting a third small-arms look.

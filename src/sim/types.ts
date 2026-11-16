@@ -8,7 +8,7 @@ export type EntityId = number;
 
 export type Terrain = "open" | "rough" | "rock" | "water";
 
-export type UnitKind = "rifleman" | "medic" | "raider" | "harvester" | "troopCarrier";
+export type UnitKind = "rifleman" | "medic" | "mechanic" | "raider" | "harvester" | "troopCarrier";
 /** The two classes of Unit. What may heal, repair or carry a Unit goes by its class, never by its kind. */
 export type UnitClass = "infantry" | "vehicle";
 /** What a Tend can be aimed at: a Unit of either class, or a Building. */

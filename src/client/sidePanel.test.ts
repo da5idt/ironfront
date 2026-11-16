@@ -52,6 +52,24 @@ describe("pressing a side panel button by key", () => {
     for (const index of [1, 2, 3]) expect(sidePanelPress(view, 2, AREA, { index }, "left")).toBeNull();
   });
 
+  it("with a Vehicle Factory selected, the third key (C) trains a Mechanic; a click on its button does too, a right-click cancels it, and too few Credits greys it", () => {
+    const c = { code: "KeyC", ctrlKey: false, metaKey: false, altKey: false, shiftKey: false };
+    expect(keyAction(c)).toEqual({ type: "menuButton", index: 2 });
+    const train = { type: "command", command: { type: "train", buildingId: 3, kind: "mechanic" } };
+    expect(sidePanelPress(panelView(10_000), 3, AREA, { index: 2 }, "left")).toEqual(train);
+    const rect = trainButtons(AREA, "vehicleFactory")[2]!.rect;
+    const point = { x: rect.x + 1, y: rect.y + 1 };
+    expect(sidePanelPress(panelView(UNIT_STATS.mechanic.cost), 3, AREA, { point }, "left")).toEqual(train);
+    expect(sidePanelPress(panelView(UNIT_STATS.mechanic.cost - 1), 3, AREA, { point }, "left")).toBeNull();
+    expect(creditsShortPress(panelView(UNIT_STATS.mechanic.cost - 1), 3, AREA, { point }, "left")).toBe(true);
+    const queued: TrainingView = { queue: ["raider", "mechanic"], progress: 0.5, rallyPoint: null };
+    const view = { ...panelView(0), buildings: [building(3, "vehicleFactory", queued)] };
+    expect(sidePanelPress(view, 3, AREA, { point }, "right")).toEqual({
+      type: "command",
+      command: { type: "cancelTraining", buildingId: 3 },
+    });
+  });
+
   it("with a Vehicle Factory selected, trains a Raider on the first key, a Harvester on the second and a Troop Carrier on its last button", () => {
     const view = panelView(10_000);
     expect(sidePanelPress(view, 3, AREA, { index: 0 }, "left")).toEqual({

@@ -15,7 +15,7 @@ import type { BuildingKind, CellPos, EntityId, PlayerId, UnitKind } from "./type
 /** What each Building can train, in panel order. Buildings not listed train nothing. */
 export const TRAINS: Readonly<Partial<Record<BuildingKind, readonly UnitKind[]>>> = {
   barracks: ["rifleman"],
-  vehicleFactory: ["raider", "harvester", "troopCarrier"],
+  vehicleFactory: ["raider", "harvester", "mechanic", "troopCarrier"],
   hospital: ["medic"],
 };
 

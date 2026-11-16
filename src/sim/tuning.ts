@@ -68,6 +68,18 @@ export const UNIT_STATS: Readonly<Record<UnitKind, UnitStats>> = {
     reloadTicks: 0,
     sight: 5,
   },
+  mechanic: {
+    name: "Mechanic",
+    class: "infantry",
+    cost: 300,
+    trainTicks: 7 * TICKS_PER_SECOND,
+    maxHp: 50,
+    speed: 1.5,
+    damage: 0,
+    range: 0,
+    reloadTicks: 0,
+    sight: 5,
+  },
   raider: {
     name: "Raider",
     class: "vehicle",
@@ -189,6 +201,7 @@ export type TendRates = Readonly<Record<TendTargetClass, number>>;
 /** The Unit kinds that can Tend. A kind not listed here helps nothing. */
 export const TEND_RATES: Readonly<Partial<Record<UnitKind, TendRates>>> = {
   medic: { infantry: 8, vehicle: 0, building: 0 },
+  mechanic: { infantry: 0, vehicle: 10, building: 15 },
 };
 
 /**
@@ -207,6 +220,8 @@ export const TEND = {
   leash: 8,
   /** How often an idle support Unit looks: slow enough to be cheap, quick enough to feel willing. */
   seekTicks: TICKS_PER_SECOND / 2,
+  /** How long an idle support Unit leaves alone a target it found no way to, before it looks at it again. */
+  retryTicks: 5 * TICKS_PER_SECOND,
 } as const;
 
 export const PLACEMENT = {

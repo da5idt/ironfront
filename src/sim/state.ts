@@ -56,6 +56,11 @@ export interface UnitState {
   order: UnitOrder;
   /** Ore carried; only Harvesters ever hold any. */
   cargo: number;
+  /**
+   * The Tend target this Unit last found no way to, and the Tick until which
+   * it will not go to it by itself again. Null for a Unit that has not given up on anything.
+   */
+  unreachable: { readonly targetId: EntityId; readonly untilTick: number } | null;
 }
 
 export interface BuildingState {
@@ -158,6 +163,7 @@ export function spawnUnit(m: MatchState, owner: PlayerId, kind: UnitKind, cell: 
     // Harvesters go to work as soon as they exist, so nobody has to tell them.
     order: kind === "harvester" ? startHarvesting() : { type: "idle" },
     cargo: 0,
+    unreachable: null,
   };
   m.units.set(unit.id, unit);
   return unit;

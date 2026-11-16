@@ -59,6 +59,7 @@ describe("Unit classes", () => {
     const classes: Record<UnitKind, UnitClass> = {
       rifleman: "infantry",
       medic: "infantry",
+      mechanic: "infantry",
       raider: "vehicle",
       harvester: "vehicle",
       troopCarrier: "vehicle",
