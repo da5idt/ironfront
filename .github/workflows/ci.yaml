@@ -8,6 +8,9 @@ permissions:
 jobs:
   checks:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash  # explicit bash turns pipefail on, so a step piped to tee fails when its script fails
     steps:
       - uses: actions/checkout@v5
       - name: actionlint (workflow bugs review would otherwise catch by hand)
@@ -15,9 +18,11 @@ jobs:
           bash <(curl -fsSL https://raw.githubusercontent.com/rhysd/actionlint/v1.7.7/scripts/download-actionlint.bash) 1.7.7
           ./actionlint -color
       - name: door_gate.py compiles
-        run: python3 -m py_compile tools/door_gate.py tools/auto_merge.py
+        run: python3 -m py_compile tools/door_gate.py tools/auto_merge.py tools/check_house_rules.py
       - run: pip install pyyaml
-      - name: door_gate.py classifies the door table correctly
+      - name: house rules (ADR 0002, no clock, DOM or real randomness in the Simulation)
+        run: python3 tools/check_house_rules.py | tee -a "$GITHUB_STEP_SUMMARY"
+      - name: door_gate.py and check_house_rules.py behave as the door table and ADRs say
         run: python3 -m unittest discover -s tests -v 2>&1 | tee -a "$GITHUB_STEP_SUMMARY"
       # Game checks (ADR 0001). No linter yet, to keep dependencies minimal.
       - uses: actions/setup-node@v7

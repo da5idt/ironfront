@@ -26,3 +26,4 @@ These labels sit beside the triage roles. Only the workflow and `door-gate` appl
 | `two-way-door`     | PR may auto-merge once every gate passes (set by `door-gate`)           |
 | `would-auto-merge` | Shadow mode: this PR would have auto-merged                             |
 | `digest`           | Daily list of auto-merged PRs                                           |
+| `retro`            | On a spec: its retro has started. A closed spec without it is owed one  |

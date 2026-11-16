@@ -54,3 +54,4 @@ Used by `/wayfinder`. The **map** is a single issue with **child** issues as tic
 - A **spec** is an issue labelled `spec`. Its tickets are its sub-issues.
 - Agents take only `ready-for-agent` issues with no assignee, and claim one by assigning it and adding `in-progress`.
 - The **daily digest** is an issue labelled `digest`, opened only on days with auto-merges.
+- A spec gets the `retro` label when its retro starts. The label is the claim, so add it before reading anything.

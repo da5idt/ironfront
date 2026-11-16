@@ -26,8 +26,8 @@ How it works, with a diagram: `docs/workflow.md`. Update it in any PR that chang
 - Build with /implement-spec (caps in `.github/aihero.yaml`). /code-review the branch, fix, open the PR with /pr.
 - A fresh thread runs the final /code-review and comments `door-review: two-way` or `door-review: one-way`.
 - Agents never merge. Two-way doors auto-merge at any hour; da5idt merges one-way doors.
-- /retro after each spec; retro PRs are always one-way.
+- /retro starts by itself when a spec's last PR merges: no offer, no question. It saves `docs/retros/spec-<n>-<slug>.md` and opens its fixes as one PR. Retro PRs are always one-way.
 
 ## Door table (strictest of PR body, final review, and `tools/door_gate.py` wins)
 - **Two-way:** new gameplay features, units, buildings and AI behavior; balance and parameter tweaks; bug fixes, tests and refactors inside the game code; docs other than the rules files below.
-- **One-way:** CI and GitHub Actions, door rules (`.github/aihero.yaml`, `tools/`), `CLAUDE.md`, `CODING_STANDARDS.md`, `docs/agents/`, `docs/workflow.md`, the vendored skills; deleting any file; dependency and lockfile changes; build and deploy config; save-game and map file formats; anything that sends data off the player's machine (network, analytics, telemetry); `LICENSE`, `README.md`, and third-party assets (art, sound, fonts).
+- **One-way:** CI and GitHub Actions, door rules (`.github/aihero.yaml`, `tools/`), `CLAUDE.md`, `CODING_STANDARDS.md`, `docs/agents/`, `docs/workflow.md`, the vendored skills; deleting any file that exists on `main`; dependency and lockfile changes; build and deploy config; save-game and map file formats; anything that sends data off the player's machine (network, analytics, telemetry); `LICENSE`, `README.md`, and third-party assets (art, sound, fonts).
