@@ -28,12 +28,13 @@ const ON_FOOT_CYCLE = [1, ON_FOOT_STAND, 2, ON_FOOT_STAND] as const;
 /** A stand and two strides. */
 const ON_FOOT_FRAMES = 3;
 
-/** Frames per facing: a stand and two strides on foot; a Raider's wheels; a Harvester's tracks for each load. */
+/** Frames per facing: a stand and two strides on foot; a Raider's or Troop Carrier's wheels; a Harvester's tracks for each load. */
 export const UNIT_FRAMES: Readonly<Record<UnitKind, number>> = {
   rifleman: ON_FOOT_FRAMES,
   medic: ON_FOOT_FRAMES,
   raider: WHEEL_FRAMES,
   harvester: HARVESTER_LOADS * WHEEL_FRAMES,
+  troopCarrier: WHEEL_FRAMES,
 };
 
 /**
@@ -46,6 +47,7 @@ export function unitFrame(kind: UnitKind, phase: number | null, load: number): n
     case "medic":
       return phase === null ? ON_FOOT_STAND : ON_FOOT_CYCLE[phase % STEP_PHASES]!;
     case "raider":
+    case "troopCarrier":
       return phase === null ? 0 : phase % WHEEL_FRAMES;
     case "harvester":
       return load * WHEEL_FRAMES + (phase === null ? 0 : phase % WHEEL_FRAMES);
@@ -132,6 +134,31 @@ function harvesterParts(colours: Ramp, roll: number, load: number): Part[] {
   if (load === 1) parts.push({ z: 2.5, has: (x, y) => inHold(x, y) && x <= -1.9, ramp: heap });
   if (load >= 2) parts.push({ z: 3.5, has: inHold, ramp: heap });
   return parts;
+}
+
+/** How far ahead of the Troop Carrier's middle its gun cupola sits, in art pixels. */
+const CUPOLA_AHEAD = 2.4;
+
+/**
+ * Troop Carrier: a slab-sided armoured box. Its six wheels sit inside the
+ * hull's outline, under the side plates, so the silhouette is one plain
+ * rectangle where the Raider is a wedge on open wheels and the Harvester a
+ * hull between tracks with a scoop. A flat roof with one wide hatch, a khaki
+ * bedroll strapped across the back and a small gun cupola near the front.
+ */
+function troopCarrierParts(colours: Ramp, roll: number): Part[] {
+  const tread = treads(roll);
+  const wheelAt = (x: number) => (x >= -5.3 && x <= -3.1) || (x >= -1.2 && x <= 1) || (x >= 3 && x <= 5.2);
+  return [
+    block(1, -6.2, 6, 3.8, colours),
+    // Level with the hull, not under it: the wheels show as dark arches cut into the side plates.
+    { z: 1, has: (x, y) => wheelAt(x) && Math.abs(y) >= 2.8 && Math.abs(y) <= 3.8, ramp: tread },
+    block(2, -4.8, 4.4, 2, DECK),
+    block(2.5, -3.6, -0.4, 1.4, STEEL),
+    block(2.5, -6, -4.8, 2.8, khaki),
+    block(2, 4.4, 5.2, 2, glass),
+    { z: 3, has: (x, y) => (x - CUPOLA_AHEAD) ** 2 + y ** 2 <= 1.6 ** 2, ramp: () => GUNMETAL },
+  ];
 }
 
 /** Points across one pixel that are tested against the blocks, so a turned edge lands on the nearer side. */
@@ -231,6 +258,15 @@ function paintRaider(buf: PixelBuffer, colours: Ramp, facing: number, frame: num
 
 function paintHarvester(buf: PixelBuffer, colours: Ramp, facing: number, frame: number): void {
   paintParts(buf, harvesterParts(colours, frame % WHEEL_FRAMES, Math.floor(frame / WHEEL_FRAMES)), facing);
+  outline(buf);
+}
+
+function paintTroopCarrier(buf: PixelBuffer, colours: Ramp, facing: number, frame: number): void {
+  paintParts(buf, troopCarrierParts(colours, frame % WHEEL_FRAMES), facing);
+  // A short barrel, hardly past the nose: a light gun, where the Raider's runs the length of its bonnet.
+  const a = (facing / FACINGS) * Math.PI * 2;
+  const barrel = ray(facing, 1.6, 4.4, Math.cos(a) * CUPOLA_AHEAD, Math.sin(a) * CUPOLA_AHEAD);
+  for (const [x, y] of barrel) setPixel(buf, x, y, ART.steelShine);
   outline(buf);
 }
 
@@ -382,13 +418,14 @@ function castShadow(buf: PixelBuffer): void {
   for (const [x, y] of cast) setPixel(buf, x, y, ART.fog, SHADOW_ALPHA);
 }
 
-const SALT: Readonly<Record<UnitKind, number>> = { rifleman: 71, raider: 72, harvester: 73, medic: 74 };
+const SALT: Readonly<Record<UnitKind, number>> = { rifleman: 71, raider: 72, harvester: 73, medic: 74, troopCarrier: 75 };
 
 const PAINTERS: Readonly<Record<UnitKind, (buf: PixelBuffer, colours: Ramp, facing: number, frame: number) => void>> = {
   rifleman: paintRifleman,
   medic: paintMedic,
   raider: paintRaider,
   harvester: paintHarvester,
+  troopCarrier: paintTroopCarrier,
 };
 
 /** One frame of a Unit in its owner's colours, facing one of the 16 ways; `damaged` gives its look below half health. */
