@@ -84,24 +84,36 @@ A defensive Building that attacks enemy Units in range by itself.
 _Avoid_: Tower, defense
 
 **Hospital**:
-A Building the HQ builds, for the care of hurt Units. It trains nothing yet.
+A Building the HQ builds, for the care of hurt Units. It trains Medics.
 _Avoid_: Infirmary, clinic, med bay, field hospital
 
 ## Units
 
 **Unit**:
-Anything a Player trains that moves.
+Anything a Player trains that moves. Every Unit kind is either Infantry or a Vehicle.
+
+**Infantry**:
+The class of Units that go on foot: the Rifleman and the Medic. It names the class, never one kind of Unit.
+_Avoid_: Foot soldiers, footmen, grunts
+
+**Vehicle**:
+The class of Units that drive: the Raider and the Harvester.
+_Avoid_: Machine, mech, car
 
 **Rifleman**:
-The infantry Unit.
-_Avoid_: Soldier, infantry, trooper
+The armed Infantry Unit, trained at the Barracks.
+_Avoid_: Soldier, trooper; "infantry" for this one kind (Infantry is the whole class)
+
+**Medic**:
+An unarmed Infantry Unit, trained at the Hospital. It never fires, and an Attack-move is a plain move for it.
+_Avoid_: Doctor, healer, nurse, field medic
 
 **Raider**:
-The light attack vehicle.
+The light attack Vehicle.
 _Avoid_: Buggy, jeep, light tank
 
 **Harvester**:
-The Unit that collects Ore from Ore Fields and carries it to a Refinery.
+The Vehicle that collects Ore from Ore Fields and carries it to a Refinery. It is unarmed.
 _Avoid_: Collector, miner, worker
 
 ## Controls

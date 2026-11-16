@@ -14,8 +14,8 @@ import { unitFrame } from "./unitArt";
 const KINDS = Object.keys(UNIT_STATS) as UnitKind[];
 const S = UNIT_SPRITE_PX;
 
-/** On its button a vehicle is side-on, where its shape is plainest; a Rifleman looks out of the picture. */
-const ICON_FACING: Readonly<Record<UnitKind, number>> = { rifleman: 2, raider: 0, harvester: 0 };
+/** On its button a Vehicle is side-on, where its shape is plainest; Infantry look out of the picture. */
+const ICON_FACING: Readonly<Record<UnitKind, number>> = { rifleman: 2, medic: 2, raider: 0, harvester: 0 };
 
 /** What the painter needs to know of how a Unit is shown; the presentation module's UnitLook fits. */
 export interface UnitPose {
@@ -126,12 +126,12 @@ export class UnitPainter {
         S,
         S,
       );
-      if (damaged && u.kind !== "rifleman") this.drawSmoke(art, cx, cy, seconds, u.id);
+      if (damaged && UNIT_STATS[u.kind].class === "vehicle") this.drawSmoke(art, cx, cy, seconds, u.id);
     }
     art.globalAlpha = 1;
   }
 
-  /** A thin trail of smoke off a damaged vehicle: a few pixels that rise, drift and thin out. */
+  /** A thin trail of smoke off a damaged Vehicle: a few pixels that rise, drift and thin out. */
   private drawSmoke(art: CanvasRenderingContext2D, cx: number, cy: number, seconds: number, id: EntityId): void {
     for (let i = 0; i < 3; i++) {
       const age = (seconds * 0.9 + i / 3 + hash2(id, i, 5)) % 1;

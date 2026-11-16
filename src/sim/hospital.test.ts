@@ -69,12 +69,12 @@ describe("the Hospital", () => {
     expect(getPlayerView(match, 0).production?.ready).toBe(true);
   });
 
-  it("trains nothing", () => {
-    expect(TRAINS.hospital).toBeUndefined();
+  it("trains the Medic and nothing else", () => {
+    expect(TRAINS.hospital).toEqual(["medic"]);
     const match = createMatch(openMap(30, 30), 1);
     addTestBuilding(match, 0, "hospital", { x: 0, y: 6 });
     const hospital = own(match, 0, "hospital")[0]!;
-    expect(hospital.training).toBeNull();
+    expect(hospital.training).toEqual({ queue: [], progress: 0, rallyPoint: null });
     expect(issueCommand(match, 0, { type: "train", buildingId: hospital.id, kind: "rifleman" }).ok).toBe(false);
   });
 

@@ -5,7 +5,7 @@ import type { CommandHandler } from "./handlers";
 import { claimedCells, freeCellNear, freeCellsNear, groupMoveGoals, orderMoveTo, planMove, stepAlong, unitCell, walkingTo } from "./movement";
 import type { BuildingState, MatchState, UnitState } from "./state";
 import { cellIndex, ownUnits, removeBuilding } from "./state";
-import { BUILDING_STATS, MOVEMENT, UNIT_STATS, type WeaponStats } from "./tuning";
+import { BUILDING_STATS, isArmed, MOVEMENT, UNIT_STATS, type WeaponStats } from "./tuning";
 import type { CellPos, EntityId, PlayerId, Vec } from "./types";
 
 // Units shooting at Units and Buildings. Rules:
@@ -123,7 +123,7 @@ function crowdsStanding(m: MatchState, u: UnitState): boolean {
 }
 
 function canFight(u: UnitState): boolean {
-  return UNIT_STATS[u.kind].damage > 0;
+  return isArmed(UNIT_STATS[u.kind]);
 }
 
 function distanceTo(t: KnownTarget, from: Vec): number {
@@ -154,7 +154,7 @@ function fire(m: MatchState, shooter: { cooldown: number }, from: Vec, weapon: W
 }
 
 function canFire(b: BuildingState): boolean {
-  return BUILDING_STATS[b.kind].damage > 0;
+  return isArmed(BUILDING_STATS[b.kind]);
 }
 
 /** A Turret shoots from the centre of its footprint. */

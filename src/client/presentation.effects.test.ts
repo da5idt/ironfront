@@ -79,6 +79,20 @@ describe("a Unit that dies in sight", () => {
     expect(seen.state.effects.some((e) => e.kind === "smallExplosion")).toBe(false);
   });
 
+  it("a Medic falls like any Infantry Unit: no explosion and no wreck", () => {
+    const match = createMatch(openMap(30, 30), 1);
+    addTestBuilding(match, 0, "turret", { x: 10, y: 14 });
+    addTestUnit(match, 1, "medic", { x: 10, y: 11 });
+    const seen = watch(match);
+    seen.runUntil("unitDied", 400);
+    expect(seen.of("unitDied")).toEqual([
+      { kind: "unitDied", unit: "medic", vehicle: false, owner: 1, at: { x: 10.5, y: 11.5 } },
+    ]);
+    expect(seen.state.marks).toMatchObject([{ kind: "body", unit: "medic", owner: 1 }]);
+    expect(seen.state.effects.some((e) => e.kind === "fall")).toBe(true);
+    expect(seen.state.effects.some((e) => e.kind === "smallExplosion")).toBe(false);
+  });
+
   it("is told to its own Player wherever it was, with an under attack event as it is hit", () => {
     const match = createMatch(openMap(30, 30), 1);
     addTestBuilding(match, 0, "turret", { x: 10, y: 14 });
@@ -444,6 +458,16 @@ describe("building and training", () => {
     issueCommand(match, 0, { type: "train", buildingId: barracks, kind: "rifleman" });
     seen.runUntil("unitTrained", 1000);
     expect(seen.of("unitTrained")).toEqual([{ kind: "unitTrained", unit: "rifleman" }]);
+  });
+
+  it("gives unit trained when a Hospital's Medic steps out", () => {
+    const match = createMatch(openMap(30, 30), 1);
+    addTestBuilding(match, 0, "hospital", { x: 5, y: 5 });
+    const hospital = buildingId(match, 0, "hospital");
+    const seen = watch(match);
+    issueCommand(match, 0, { type: "train", buildingId: hospital, kind: "medic" });
+    seen.runUntil("unitTrained", 1000);
+    expect(seen.of("unitTrained")).toEqual([{ kind: "unitTrained", unit: "medic" }]);
   });
 
   it("gives unit trained for a Unit that steps out just as another is added to the queue", () => {

@@ -1,14 +1,15 @@
-import type { PlayerId, UnitKind } from "../../sim";
+import { type PlayerId, UNIT_STATS, type UnitKind } from "../../sim";
 import { ART, type Ramp } from "./artPalette";
 import { FACINGS } from "./buildingArt";
 import { hash2 } from "./hash";
 import { createPixelBuffer, type PixelBuffer, pixelAt, setPixel } from "./pixelBuffer";
 
-// The three Units, painted in code (ADR 0003), in the Buildings' style: dark
-// outlines, three-step ramps, light from the top left. The two vehicles are
+// The Units, painted in code (ADR 0003), in the Buildings' style: dark
+// outlines, three-step ramps, light from the top left. The Vehicles are
 // built from blocks in the vehicle's own space and turned to each facing, so
-// the light stays put while the vehicle turns under it. The Rifleman stands
-// upright in every facing and shows the way he faces with his rifle and face.
+// the light stays put while the vehicle turns under it. Infantry stand
+// upright in every facing: the Rifleman shows the way he faces with his rifle
+// and face, the Medic with its face and the satchel it carries in front.
 // Painted once at startup by the sprite sheet; nothing here runs per frame.
 
 /** Side of every Unit's square sprite; its middle sits on the Unit's position. */
@@ -17,17 +18,20 @@ export const UNIT_SPRITE_PX = 20;
 export const HARVESTER_LOADS = 3;
 /** Cells a Unit covers per step of its walk or wheel cycle. */
 export const STEP_CELLS = 0.15;
-/** Steps in the cycle: a Rifleman goes left, together, right, together. */
+/** Steps in the cycle: Infantry go left, together, right, together. */
 export const STEP_PHASES = 4;
 /** Two tread positions are enough for wheels and tracks to read as turning. */
 const WHEEL_FRAMES = 2;
 
-const RIFLEMAN_STAND = 0;
-const RIFLEMAN_CYCLE = [1, RIFLEMAN_STAND, 2, RIFLEMAN_STAND] as const;
+const ON_FOOT_STAND = 0;
+const ON_FOOT_CYCLE = [1, ON_FOOT_STAND, 2, ON_FOOT_STAND] as const;
+/** A stand and two strides. */
+const ON_FOOT_FRAMES = 3;
 
-/** Frames per facing: a Rifleman's stand and two strides; a Raider's wheels; a Harvester's tracks for each load. */
+/** Frames per facing: a stand and two strides on foot; a Raider's wheels; a Harvester's tracks for each load. */
 export const UNIT_FRAMES: Readonly<Record<UnitKind, number>> = {
-  rifleman: 3,
+  rifleman: ON_FOOT_FRAMES,
+  medic: ON_FOOT_FRAMES,
   raider: WHEEL_FRAMES,
   harvester: HARVESTER_LOADS * WHEEL_FRAMES,
 };
@@ -39,7 +43,8 @@ export const UNIT_FRAMES: Readonly<Record<UnitKind, number>> = {
 export function unitFrame(kind: UnitKind, phase: number | null, load: number): number {
   switch (kind) {
     case "rifleman":
-      return phase === null ? RIFLEMAN_STAND : RIFLEMAN_CYCLE[phase % STEP_PHASES]!;
+    case "medic":
+      return phase === null ? ON_FOOT_STAND : ON_FOOT_CYCLE[phase % STEP_PHASES]!;
     case "raider":
       return phase === null ? 0 : phase % WHEEL_FRAMES;
     case "harvester":
@@ -49,7 +54,7 @@ export function unitFrame(kind: UnitKind, phase: number | null, load: number): n
 
 const C = ART.concrete;
 const K = C[0];
-const { glass, khaki, hazard, ore, smoke, skin } = ART;
+const { glass, khaki, hazard, ore, smoke, skin, ward, aid } = ART;
 
 /** How dark the shadow a Unit casts on the ground is (0..255). */
 const SHADOW_ALPHA = 90;
@@ -229,41 +234,22 @@ function paintHarvester(buf: PixelBuffer, colours: Ramp, facing: number, frame: 
   outline(buf);
 }
 
-/**
- * Rifleman: a helmet in his Player's colour over a khaki jacket and dark legs.
- * He stands upright whichever way he faces; his face shows on the side he
- * looks to and his rifle points there.
- */
-function paintRifleman(buf: PixelBuffer, colours: Ramp, facing: number, frame: number): void {
-  const a = (facing / FACINGS) * Math.PI * 2;
-  const dx = Math.cos(a);
-  const dy = Math.sin(a);
-  const left = 8;
-  const topRow = 5;
-  // Helmet, two rows.
-  setPixel(buf, left, topRow, colours.light);
-  setPixel(buf, left + 1, topRow, colours.light);
-  setPixel(buf, left + 2, topRow, colours.mid);
-  setPixel(buf, left, topRow + 1, colours.mid);
-  setPixel(buf, left + 1, topRow + 1, colours.mid);
-  setPixel(buf, left + 2, topRow + 1, colours.dark);
-  // The face shows only on the side he looks to; from behind it is all helmet.
+/** Where a figure on foot stands in its sprite: its left column and the top row of its head. */
+const FIGURE_LEFT = 8;
+const FIGURE_TOP = 5;
+
+/** The row under the headgear: the face shows only on the side the figure looks to; from behind it is all `back`. */
+function paintFace(buf: PixelBuffer, dx: number, dy: number, back: string): void {
   for (const i of [-1, 0, 1]) {
     const shows = dy * 0.8 + i * dx > 0.25;
-    setPixel(buf, left + 1 + i, topRow + 2, shows ? (i < 0 ? skin.light : skin.dark) : colours.dark);
+    setPixel(buf, FIGURE_LEFT + 1 + i, FIGURE_TOP + 2, shows ? (i < 0 ? skin.light : skin.dark) : back);
   }
-  // Jacket, three rows ending in a belt, with an arm at each shoulder.
-  for (let row = 0; row < 3; row++) {
-    setPixel(buf, left, topRow + 3 + row, row === 2 ? khaki.dark : khaki.light);
-    setPixel(buf, left + 1, topRow + 3 + row, row === 2 ? khaki.dark : khaki.mid);
-    setPixel(buf, left + 2, topRow + 3 + row, row === 2 ? K : khaki.dark);
-  }
-  for (const row of [0, 1]) {
-    setPixel(buf, left - 1, topRow + 3 + row, row === 0 ? khaki.light : khaki.mid);
-    setPixel(buf, left + 3, topRow + 3 + row, khaki.dark);
-  }
-  // Legs: seen from the side a stride opens and closes them; seen from front or back one leg leads.
-  const legRow = topRow + 6;
+}
+
+/** Legs: seen from the side a stride opens and closes them; seen from front or back one leg leads. */
+function paintLegs(buf: PixelBuffer, dx: number, frame: number): void {
+  const left = FIGURE_LEFT;
+  const legRow = FIGURE_TOP + 6;
   const sideways = Math.abs(dx) > 0.7;
   const legs: [number, number][] =
     frame === 0
@@ -276,6 +262,88 @@ function paintRifleman(buf: PixelBuffer, colours: Ramp, facing: number, frame: n
           ? [[left, legRow], [left, legRow + 1], [left + 2, legRow]]
           : [[left, legRow], [left + 2, legRow], [left + 2, legRow + 1]];
   for (const [x, y] of legs) setPixel(buf, x, y, y === legRow ? C[4] : C[2]);
+}
+
+/**
+ * Medic: a pale cap and coat with a green band and a green satchel, so it is
+ * never taken for a Rifleman, whose headgear is his Player's colour over
+ * khaki. The Medic's Player shows on its sleeves and belt instead. It carries
+ * no weapon: the satchel hangs on the side it faces and stays close to the
+ * body, where a rifle would reach out.
+ */
+function paintMedic(buf: PixelBuffer, colours: Ramp, facing: number, frame: number): void {
+  const a = (facing / FACINGS) * Math.PI * 2;
+  const dx = Math.cos(a);
+  const dy = Math.sin(a);
+  const left = FIGURE_LEFT;
+  const topRow = FIGURE_TOP;
+  // Cap, two rows, with the green band across its middle.
+  setPixel(buf, left, topRow, ward.light);
+  setPixel(buf, left + 1, topRow, ward.light);
+  setPixel(buf, left + 2, topRow, ward.mid);
+  setPixel(buf, left, topRow + 1, ward.mid);
+  setPixel(buf, left + 1, topRow + 1, aid.mark);
+  setPixel(buf, left + 2, topRow + 1, ward.dark);
+  paintFace(buf, dx, dy, ward.dark);
+  // Coat, two rows, over a belt in the Player's colour, with a sleeve in that colour at each shoulder.
+  for (let row = 0; row < 2; row++) {
+    setPixel(buf, left, topRow + 3 + row, ward.light);
+    setPixel(buf, left + 1, topRow + 3 + row, ward.mid);
+    setPixel(buf, left + 2, topRow + 3 + row, ward.dark);
+  }
+  setPixel(buf, left, topRow + 5, colours.mid);
+  setPixel(buf, left + 1, topRow + 5, colours.mid);
+  setPixel(buf, left + 2, topRow + 5, colours.dark);
+  for (const row of [0, 1]) {
+    setPixel(buf, left - 1, topRow + 3 + row, row === 0 ? colours.light : colours.mid);
+    setPixel(buf, left + 3, topRow + 3 + row, colours.dark);
+  }
+  paintLegs(buf, dx, frame);
+  // The satchel swings round the coat with the facing. It is put on before the outline, so where it
+  // passes the coat's edge the outline closes round it and the figure stays one compact shape.
+  const midX = left + 1.5;
+  const midY = topRow + 4.5;
+  const bag: [number, number] = [Math.floor(midX + dx * SATCHEL_REACH), Math.floor(midY + dy * SATCHEL_REACH)];
+  const strap: [number, number] = [Math.floor(midX + dx * SATCHEL_REACH * 0.4), Math.floor(midY + dy * SATCHEL_REACH * 0.4)];
+  setPixel(buf, strap[0], strap[1], aid.shade);
+  setPixel(buf, bag[0], bag[1], aid.mark);
+  outline(buf);
+}
+
+/** How far from the middle of the coat the Medic's satchel hangs, in art pixels: on the coat's edge, not beyond the sleeves. */
+const SATCHEL_REACH = 1.45;
+
+/**
+ * Rifleman: a helmet in his Player's colour over a khaki jacket and dark legs.
+ * He stands upright whichever way he faces; his face shows on the side he
+ * looks to and his rifle points there.
+ */
+function paintRifleman(buf: PixelBuffer, colours: Ramp, facing: number, frame: number): void {
+  const a = (facing / FACINGS) * Math.PI * 2;
+  const dx = Math.cos(a);
+  const dy = Math.sin(a);
+  const left = FIGURE_LEFT;
+  const topRow = FIGURE_TOP;
+  // Helmet, two rows.
+  setPixel(buf, left, topRow, colours.light);
+  setPixel(buf, left + 1, topRow, colours.light);
+  setPixel(buf, left + 2, topRow, colours.mid);
+  setPixel(buf, left, topRow + 1, colours.mid);
+  setPixel(buf, left + 1, topRow + 1, colours.mid);
+  setPixel(buf, left + 2, topRow + 1, colours.dark);
+  // From behind it is all helmet.
+  paintFace(buf, dx, dy, colours.dark);
+  // Jacket, three rows ending in a belt, with an arm at each shoulder.
+  for (let row = 0; row < 3; row++) {
+    setPixel(buf, left, topRow + 3 + row, row === 2 ? khaki.dark : khaki.light);
+    setPixel(buf, left + 1, topRow + 3 + row, row === 2 ? khaki.dark : khaki.mid);
+    setPixel(buf, left + 2, topRow + 3 + row, row === 2 ? K : khaki.dark);
+  }
+  for (const row of [0, 1]) {
+    setPixel(buf, left - 1, topRow + 3 + row, row === 0 ? khaki.light : khaki.mid);
+    setPixel(buf, left + 3, topRow + 3 + row, khaki.dark);
+  }
+  paintLegs(buf, dx, frame);
   // Looking away, the rifle is on the far side of him: only what sticks out past his body shows.
   const behind = dy < -0.3;
   const body: [number, number][] = [];
@@ -314,7 +382,14 @@ function castShadow(buf: PixelBuffer): void {
   for (const [x, y] of cast) setPixel(buf, x, y, ART.fog, SHADOW_ALPHA);
 }
 
-const SALT: Readonly<Record<UnitKind, number>> = { rifleman: 71, raider: 72, harvester: 73 };
+const SALT: Readonly<Record<UnitKind, number>> = { rifleman: 71, raider: 72, harvester: 73, medic: 74 };
+
+const PAINTERS: Readonly<Record<UnitKind, (buf: PixelBuffer, colours: Ramp, facing: number, frame: number) => void>> = {
+  rifleman: paintRifleman,
+  medic: paintMedic,
+  raider: paintRaider,
+  harvester: paintHarvester,
+};
 
 /** One frame of a Unit in its owner's colours, facing one of the 16 ways; `damaged` gives its look below half health. */
 export function paintUnit(kind: UnitKind, owner: PlayerId, facing: number, frame: number, damaged: boolean): PixelBuffer {
@@ -322,10 +397,9 @@ export function paintUnit(kind: UnitKind, owner: PlayerId, facing: number, frame
   const ramp = ART.player[owner];
   const f = ((frame % UNIT_FRAMES[kind]) + UNIT_FRAMES[kind]) % UNIT_FRAMES[kind];
   const way = ((facing % FACINGS) + FACINGS) % FACINGS;
-  if (kind === "rifleman") paintRifleman(buf, ramp, way, f);
-  else if (kind === "raider") paintRaider(buf, ramp, way, f);
-  else paintHarvester(buf, ramp, way, f);
-  if (damaged) scorch(buf, SALT[kind], kind === "rifleman" ? 1 : 2);
+  PAINTERS[kind](buf, ramp, way, f);
+  // A figure on foot is too small for patches: its burns are single pixels.
+  if (damaged) scorch(buf, SALT[kind], UNIT_STATS[kind].class === "infantry" ? 1 : 2);
   castShadow(buf);
   return buf;
 }

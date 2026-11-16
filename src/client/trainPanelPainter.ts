@@ -5,7 +5,7 @@ import type { Rect } from "./layout";
 import { BUTTON_EDGE, BUTTON_PROGRESS, HUD_TEXT } from "./palette";
 import { type Trainer, trainButtons, trainButtonState, type TrainButtonState } from "./trainPanel";
 
-// Draws the selected Barracks or Vehicle Factory's train buttons from the same
+// Draws the selected training Building's train buttons from the same
 // pure functions main.ts hit-tests with, laid out like the build buttons
 // (buttonPainter.ts).
 

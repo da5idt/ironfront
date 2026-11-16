@@ -416,8 +416,8 @@ canvas.addEventListener("mousedown", (e) => {
     // A Unit standing in front of a Building is the more urgent target.
     const enemy = enemyUnitAt(view.units, point, HUMAN) ?? enemyBuildingAt(view.buildings, point, HUMAN);
     if (enemy) {
-      issue({ type: "attack", unitIds: [...selection], targetId: enemy.id });
-      sfx.play("commandAck");
+      // Refused when nobody selected is armed (Medics, Harvesters): then nothing happened, so nothing is acknowledged.
+      if (issue({ type: "attack", unitIds: [...selection], targetId: enemy.id }).ok) sfx.play("commandAck");
       return;
     }
     orderTo(cell);
