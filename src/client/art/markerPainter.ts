@@ -55,19 +55,29 @@ const DIGITS: Readonly<Record<number, readonly string[]>> = {
   9: [".#.", "#.#", ".##", "..#", "##."],
 };
 
-/** Size of a Control Group number's dark plate: the digit with one art pixel of edge all round. */
-export const GROUP_NUMBER_PX = { width: 5, height: 7 } as const;
-
-/** A Unit's Control Group number on a dark plate with its top-left at x, y, so it reads on any ground. */
-export function drawGroupNumber(art: CanvasRenderingContext2D, x: number, y: number, group: number): void {
+/**
+ * A Control Group number for the Unit centred at cx, cy, on a dark plate so it reads on any ground. `plate`
+ * is measured from that centre. Each dot of the digit is `dotPx` art pixels, which is how the number stays
+ * readable when the zoom makes art pixels small.
+ */
+export function drawGroupNumber(
+  art: CanvasRenderingContext2D,
+  cx: number,
+  cy: number,
+  plate: { readonly x: number; readonly y: number; readonly width: number; readonly height: number },
+  group: number,
+  dotPx: number,
+): void {
   const rows = DIGITS[group];
   if (!rows) return;
+  const x = cx + plate.x;
+  const y = cy + plate.y;
   art.fillStyle = marker.healthBack;
-  art.fillRect(x, y, GROUP_NUMBER_PX.width, GROUP_NUMBER_PX.height);
+  art.fillRect(x, y, plate.width, plate.height);
   art.fillStyle = marker.selection;
   rows.forEach((row, dy) => {
     for (let dx = 0; dx < row.length; dx++) {
-      if (row[dx] === "#") art.fillRect(x + 1 + dx, y + 1 + dy, 1, 1);
+      if (row[dx] === "#") art.fillRect(x + 1 + dx * dotPx, y + 1 + dy * dotPx, dotPx, dotPx);
     }
   });
 }
