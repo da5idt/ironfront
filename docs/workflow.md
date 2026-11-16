@@ -46,7 +46,7 @@ flowchart TD
 5. **Branch review.** `/code-review` checks the branch against `CODING_STANDARDS.md` and the spec, and the agent fixes what it finds.
 6. **Pull request.** `/pr` writes the body. Its **Door** line says one-way or two-way, following the door table below.
 7. **Checks.** CI and `door-gate` run. `door-gate` labels the PR, and the strictest of the PR body, the final review and `tools/door_gate.py` wins.
-8. **Final review.** A fresh agent that never saw the build runs `/code-review` and comments `door-review: two-way` or `door-review: one-way`.
+8. **Final review.** A fresh agent that never saw the build runs `/code-review` and comments `door-review: two-way` or `door-review: one-way`. Before it comments, it files every finding it leaves for later (a note, a follow-up, a call for da5idt) as an issue labelled `needs-triage` that links the PR, and its comment links those issues. A finding that lives only in a PR comment is lost.
 9. **Merge.** da5idt merges one-way doors. Two-way doors auto-merge when every gate passes. Agents never merge.
 10. **Retro.** A retro starts by itself, with no offer and no question to da5idt. When a spec's last PR merges, the build thread closes the tickets and the spec, adds the `retro` label to the spec, and runs `/retro` on the spec's threads and PRs. The retro check (a scheduled job) is the safety net: a closed spec without the `retro` label gets its retro there. The retro is saved as `docs/retros/spec-<n>-<slug>.md` with every finding and its status. Fixes the retro is sure of go in the same PR; fixes that are da5idt's call (repo settings, door rules, new dependencies) are listed as candidates. da5idt picks by merging the PR or commenting on it. A retro PR is always one-way.
 
