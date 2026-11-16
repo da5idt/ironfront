@@ -179,9 +179,9 @@ export function createOpponent(playerId: PlayerId, seed: number): Opponent {
   /**
    * What the waves can spare for support. Nothing before the first has set
    * off; after that a support Unit goes ahead of more army only while the army
-   * at home is already enough for the next wave, so support never makes a
-   * wave later, and a Player short of army (its wave out, or its base under
-   * attack) trains army first.
+   * at home is already enough for the next wave, so support is not paid for
+   * with that wave's Units, and a Player short of army (its wave out, or its
+   * base under attack) trains army first.
    */
   function waveNeeds(army: readonly UnitView[]): WaveNeeds {
     return {

@@ -216,7 +216,7 @@ export function tendRate(kind: UnitKind, target: TendTargetClass): number {
 export const TEND = {
   /** How far an idle support Unit looks for something of its own Player's to help. */
   seekRadius: 6,
-  /** How far a target may move from where it was when the Tend began before the Unit gives up on it. */
+  /** How far a target may move from the line between where it and the Unit were when the Tend began before the Unit gives up on it. */
   leash: 8,
   /** How often an idle support Unit looks: slow enough to be cheap, quick enough to feel willing. */
   seekTicks: Math.ceil(TICKS_PER_SECOND / 2),
