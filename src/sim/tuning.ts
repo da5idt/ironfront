@@ -290,6 +290,13 @@ export const OPPONENT = {
   mostHarvesters: 5,
   /** Army size (Riflemen and Raiders) the Opponent stops training at. */
   mostArmy: 40,
+  /** Medics kept at the rally point and Mechanics kept for the base; a loss is trained again. */
+  mostMedics: 2,
+  mostMechanics: 2,
+  /** Troop Carriers kept for the attack waves: one, as a wave takes one at most. */
+  mostTroopCarriers: 1,
+  /** Longest a wave waits at home for its Riflemen to Board; then it leaves with whoever is aboard. */
+  boardTicks: 12 * TICKS_PER_SECOND,
   /** Units each training Building keeps queued; a short queue keeps Credits free for the build order. */
   queueDepth: 2,
   /** Ore within this many Cells of an enemy fighter seen lately is unsafe for Harvesters. */

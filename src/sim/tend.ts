@@ -21,22 +21,22 @@ import type { CellPos, EntityId, PlayerId, TendTargetClass, Vec } from "./types"
 //   target with one side walled off is helped from another.
 // - A Unit at 0 health does no work: one killed in a Tick restores nothing in it.
 // - A target that moves is followed, but only so far: once it is more than the
-//   leash from where it was when the Tend began, the Unit gives up. Measured
-//   from there, not from the Unit, so a Unit sent across the Map still goes.
+//   leash from the straight line between where it and the Unit were when the
+//   Tend began, the Unit gives up. Measured from that line, not from where the
+//   Unit is now, so a Unit sent across the Map still goes, and a target that
+//   walks to meet its helper is met, not dropped.
 // - It ends, leaving the Unit idle, when the target is at full health, is gone,
 //   is beyond the leash or cannot be reached. Several Units may work on one target; the rates add.
 // - An idle Unit that can Tend looks, every so often, for the nearest own
 //   target below full health it can help within the seek radius, and Tends it
 //   as if told to. Idle means no Command in progress, so a Unit on a move, or
 //   on a Tend it was given, is never pulled away.
-// - A Unit that gave up on a target at the leash does not go to it by itself
-//   again while that target keeps moving. Without that it would start afresh
-//   at its next look and follow a marching target across the Map, a leash at a
-//   time. It remembers where the target stood at its last look; a target found
-//   standing in the same place at the next look has stopped, and is from then
-//   on like any other: Tended, with a fresh leash, if it is within the seek
-//   radius. Any Command to the Unit also ends the memory, and a Tend Command on
-//   that target is always obeyed.
+// - By itself it goes only to a target that is standing still: one found, at
+//   this look, where it stood at the last. Without that it would give up on a
+//   marching target at the leash, start afresh on it or on the next of its
+//   group at the following look, and trail a hurt army across the Map, a leash
+//   at a time. A target that has stopped within the seek radius is helped,
+//   wherever it came from. A Tend Command is always obeyed, moving target or not.
 // - A Unit that finds no way to a target leaves that one alone for a while when
 //   it looks by itself, so a walled-in target costs a route now and then, not
 //   on every look, and does not keep the Unit from others it can reach. Each
@@ -54,8 +54,10 @@ type TendTarget = UnitState | BuildingState;
 export interface Tending {
   readonly type: "tend";
   readonly targetId: EntityId;
-  /** Where the target was when the Tend began; the leash is measured from here. */
+  /** Where the target was when the Tend began; the leash is measured from the line between here */
   readonly from: Vec;
+  /** and here, where the Unit was then. */
+  readonly helperFrom: Vec;
   /** The walk to a Cell beside the target, or null while standing. */
   walk: MovePlan | null;
   /** Ticks spent at work beside the target, which sets how many whole health points are due. */
@@ -63,7 +65,7 @@ export interface Tending {
 }
 
 function startTend(u: UnitState, t: TendTarget): void {
-  u.order = { type: "tend", targetId: t.id, from: { x: t.x, y: t.y }, walk: null, workedTicks: 0 };
+  u.order = { type: "tend", targetId: t.id, from: { x: t.x, y: t.y }, helperFrom: { x: u.x, y: u.y }, walk: null, workedTicks: 0 };
 }
 
 function targetClass(t: TendTarget): TendTargetClass {
@@ -156,9 +158,13 @@ export const handleTend: CommandHandler<"tend"> = (m, player, command): CommandR
   return OK;
 };
 
-/** A Player's Units that were given a Command may again go, by themselves, to the targets they gave up on at the leash. */
-export function forgetLeftAtLeash(m: MatchState, player: PlayerId, unitIds: readonly EntityId[]): void {
-  for (const u of ownUnits(m, player, unitIds)) u.leftAtLeash.clear();
+/** How far `p` is from the nearest point of the straight line from `a` to `b`. */
+function gapToLine(p: Vec, a: Vec, b: Vec): number {
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const lengthSquared = dx * dx + dy * dy;
+  const along = lengthSquared === 0 ? 0 : Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / lengthSquared));
+  return Math.hypot(p.x - (a.x + along * dx), p.y - (a.y + along * dy));
 }
 
 /** One Tick of a Tend: walk until beside the target, and restore health while beside it. */
@@ -169,9 +175,8 @@ function advanceTend(m: MatchState, u: UnitState, tending: Tending): void {
     u.order = { type: "idle" };
     return;
   }
-  if (Math.hypot(target.x - tending.from.x, target.y - tending.from.y) > TEND.leash) {
+  if (isUnit(target) && gapToLine(target, tending.from, tending.helperFrom) > TEND.leash) {
     u.order = { type: "idle" };
-    u.leftAtLeash.set(target.id, { x: target.x, y: target.y });
     return;
   }
   if (!isBeside(unitCell(u), target) && !(tending.walk && isBeside(tending.walk.goal, target))) {
@@ -210,20 +215,11 @@ function giveUpOnUnreachable(m: MatchState, u: UnitState, t: TendTarget): void {
   u.unreachable.set(t.id, m.tick + TEND.retryTicks);
 }
 
-/**
- * One look at what the Unit remembers: drops targets that are gone and waits
- * that are over, so neither memory grows through a long Match, and drops the
- * targets left at the leash that have stopped since the last look.
- */
+/** Drops the targets that are gone and the waits that are over, so the memory does not grow through a long Match. */
 function forgetStale(m: MatchState, u: UnitState): void {
   const gone = (id: EntityId): boolean => !m.units.has(id) && !m.buildings.has(id);
   for (const [id, untilTick] of u.unreachable) {
     if (m.tick >= untilTick || gone(id)) u.unreachable.delete(id);
-  }
-  for (const [id, stood] of u.leftAtLeash) {
-    const t = m.units.get(id) ?? m.buildings.get(id);
-    if (!t || (t.x === stood.x && t.y === stood.y)) u.leftAtLeash.delete(id);
-    else u.leftAtLeash.set(id, { x: t.x, y: t.y });
   }
 }
 
@@ -236,18 +232,23 @@ function gapTo(t: TendTarget, from: Vec): number {
 }
 
 /**
- * What an idle Unit goes to help by itself: the nearest own Unit or Building
- * below full health that it can help, within the seek radius. Ties go to the
- * lowest id so replays agree.
+ * One look around: notes where everything the Unit could help within the seek
+ * radius stands, and returns what an idle Unit goes to by itself: the nearest
+ * of them that stands where it stood at the last look. Ties go to the lowest
+ * id so replays agree.
  */
-function seekTarget(m: MatchState, u: UnitState): TendTarget | undefined {
+function look(m: MatchState, u: UnitState): TendTarget | undefined {
   let best: TendTarget | undefined;
   let bestD = Infinity;
+  const stoodAt = new Map<EntityId, Vec>();
   const consider = (t: TendTarget): void => {
-    if (m.tick < (u.unreachable.get(t.id) ?? 0) || u.leftAtLeash.has(t.id)) return;
     if (t.owner !== u.owner || t.hp <= 0 || t.hp >= maxHp(t) || rateFor(u, t) <= 0) return;
     const d = gapTo(t, u);
     if (d > TEND.seekRadius) return;
+    stoodAt.set(t.id, { x: t.x, y: t.y });
+    const stood = u.stoodAt.get(t.id);
+    if (!stood || stood.x !== t.x || stood.y !== t.y) return;
+    if (m.tick < (u.unreachable.get(t.id) ?? 0)) return;
     if (d < bestD || (d === bestD && best !== undefined && t.id < best.id)) {
       best = t;
       bestD = d;
@@ -255,6 +256,7 @@ function seekTarget(m: MatchState, u: UnitState): TendTarget | undefined {
   };
   for (const t of m.units.values()) consider(t);
   for (const b of m.buildings.values()) consider(b);
+  u.stoodAt = stoodAt;
   return best;
 }
 
@@ -272,8 +274,9 @@ export function tendTargets(m: MatchState): void {
     // Offset by id so the Units of a group do not all look on the same Tick.
     if (canTend(u) && (m.tick + u.id) % TEND.seekTicks === 0) {
       forgetStale(m, u);
-      const target = u.order.type === "idle" ? seekTarget(m, u) : undefined;
-      if (target) startTend(u, target);
+      // Every look notes what stands where, at work or not, so a Unit that ends one Tend can go straight to the next.
+      const target = look(m, u);
+      if (target && u.order.type === "idle") startTend(u, target);
     }
     if (u.order.type === "tend") advanceTend(m, u, u.order);
   }

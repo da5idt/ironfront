@@ -65,14 +65,14 @@ describe("an idle support Unit near a hurt target it cannot reach", () => {
     const door = shut(match, EAST.door);
     const raider = damagedRaider(match, EAST);
     addTestUnit(match, 0, "mechanic", BETWEEN);
-    // One look: it stands as near as it can get already, so it gives up on the spot.
-    run(match, TEND.seekTicks);
+    // Two looks, the first to see that the Raider stands still: it stands as near as it can get already, so it gives up on the spot.
+    run(match, 2 * TEND.seekTicks);
     removeTestBuilding(match, door);
     // Looks go by all through the back-off, and the door is open, but it gave up less than the back-off ago.
-    run(match, TEND.retryTicks - TEND.seekTicks);
+    run(match, TEND.retryTicks - 2 * TEND.seekTicks);
     expect(unitHp(match, raider)).toBe(30);
-    // The back-off ends within one more look; then two Cells to walk at 1.5 a second.
-    run(match, TEND.seekTicks + 3 * TICKS_PER_SECOND);
+    // The back-off ends within two more looks; then two Cells to walk at 1.5 a second.
+    run(match, 2 * TEND.seekTicks + 3 * TICKS_PER_SECOND);
     expect(unitHp(match, raider)).toBeGreaterThan(30);
   });
 
@@ -81,11 +81,11 @@ describe("an idle support Unit near a hurt target it cannot reach", () => {
     const doors = [shut(match, EAST.door), shut(match, WEST.door)];
     const raiders = [damagedRaider(match, EAST), damagedRaider(match, WEST)];
     addTestUnit(match, 0, "mechanic", BETWEEN);
-    // Two looks: it gives up on one, then on the other.
-    run(match, 2 * TEND.seekTicks);
+    // Three looks: it sees that both stand still, gives up on one, then on the other.
+    run(match, 3 * TEND.seekTicks);
     for (const door of doors) removeTestBuilding(match, door);
     // Both ways are open now, and the first back-off still has a look or more to go.
-    run(match, TEND.retryTicks - 2 * TEND.seekTicks);
+    run(match, TEND.retryTicks - 3 * TEND.seekTicks);
     expect(raiders.map((id) => unitHp(match, id))).toEqual([30, 30]);
     runUntil(match, () => raiders.every((id) => unitHp(match, id) > 30));
   });
