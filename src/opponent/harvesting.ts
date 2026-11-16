@@ -5,6 +5,7 @@ import {
   type Command,
   ECONOMY,
   type EntityId,
+  isArmed,
   OPPONENT,
   type PlayerView,
   UNIT_STATS,
@@ -23,7 +24,7 @@ export type DangerMemory = Map<EntityId, { readonly x: number; readonly y: numbe
 /** Notes Visible armed enemy Units and forgets sightings older than OPPONENT.dangerTicks. */
 export function rememberDanger(memory: DangerMemory, view: PlayerView): void {
   for (const u of view.units) {
-    if (u.owner === view.playerId || UNIT_STATS[u.kind].damage === 0) continue;
+    if (u.owner === view.playerId || !isArmed(UNIT_STATS[u.kind])) continue;
     memory.set(u.id, { x: u.x, y: u.y, tick: view.tick });
   }
   for (const [id, seen] of memory) if (view.tick - seen.tick > OPPONENT.dangerTicks) memory.delete(id);
@@ -37,7 +38,7 @@ export function isSafe(view: PlayerView, memory: DangerMemory, cell: CellPos): b
   return !view.buildings.some(
     (b) =>
       b.owner !== view.playerId &&
-      BUILDING_STATS[b.kind].damage > 0 &&
+      isArmed(BUILDING_STATS[b.kind]) &&
       Math.hypot(b.x + b.width / 2 - x, b.y + b.height / 2 - y) <= BUILDING_STATS[b.kind].range + 2,
   );
 }

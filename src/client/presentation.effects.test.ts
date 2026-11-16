@@ -67,6 +67,21 @@ describe("a Unit that dies in sight", () => {
     expect(seen.of("underAttack")).toEqual([]);
   });
 
+  it("a Troop Carrier goes as a Vehicle does: it explodes and leaves a wreck of its own", () => {
+    const match = createMatch(openMap(30, 30), 1);
+    addTestBuilding(match, 0, "turret", { x: 10, y: 14 });
+    const carrier = addTestUnit(match, 1, "troopCarrier", { x: 10, y: 11 });
+    // Told to stay, so it does not answer the Turret and dies where it stands.
+    issueCommand(match, 1, { type: "move", unitIds: [carrier], target: { x: 10, y: 11 } });
+    const seen = watch(match);
+    seen.runUntil("unitDied", 600);
+    expect(seen.of("unitDied")).toEqual([
+      { kind: "unitDied", unit: "troopCarrier", vehicle: true, owner: 1, at: { x: 10.5, y: 11.5 } },
+    ]);
+    expect(seen.state.marks).toMatchObject([{ kind: "wreck", unit: "troopCarrier", at: { x: 10.5, y: 11.5 } }]);
+    expect(seen.state.effects.filter((e) => e.kind === "smallExplosion")).toMatchObject([{ at: { x: 10.5, y: 11.5 } }]);
+  });
+
   it("a Rifleman falls and leaves a mark, without an explosion", () => {
     const match = createMatch(openMap(30, 30), 1);
     addTestBuilding(match, 0, "turret", { x: 10, y: 14 });
@@ -75,6 +90,20 @@ describe("a Unit that dies in sight", () => {
     seen.runUntil("unitDied", 400);
     expect(seen.of("unitDied")).toMatchObject([{ unit: "rifleman", vehicle: false, owner: 1 }]);
     expect(seen.state.marks).toMatchObject([{ kind: "body", unit: "rifleman", owner: 1 }]);
+    expect(seen.state.effects.some((e) => e.kind === "fall")).toBe(true);
+    expect(seen.state.effects.some((e) => e.kind === "smallExplosion")).toBe(false);
+  });
+
+  it("a Medic falls like any Infantry Unit: no explosion and no wreck", () => {
+    const match = createMatch(openMap(30, 30), 1);
+    addTestBuilding(match, 0, "turret", { x: 10, y: 14 });
+    addTestUnit(match, 1, "medic", { x: 10, y: 11 });
+    const seen = watch(match);
+    seen.runUntil("unitDied", 400);
+    expect(seen.of("unitDied")).toEqual([
+      { kind: "unitDied", unit: "medic", vehicle: false, owner: 1, at: { x: 10.5, y: 11.5 } },
+    ]);
+    expect(seen.state.marks).toMatchObject([{ kind: "body", unit: "medic", owner: 1 }]);
     expect(seen.state.effects.some((e) => e.kind === "fall")).toBe(true);
     expect(seen.state.effects.some((e) => e.kind === "smallExplosion")).toBe(false);
   });
@@ -269,6 +298,20 @@ describe("a shot", () => {
     }
   });
 
+  it("has all three for the Troop Carrier's light gun, which flashes and sounds as a Vehicle's gun", () => {
+    const match = createMatch(openMap(30, 30), 1);
+    addTestUnit(match, 0, "troopCarrier", { x: 10, y: 15 });
+    addTestUnit(match, 1, "harvester", { x: 13, y: 15 });
+    const seen = watch(match);
+    seen.run(1);
+    expect(seen.state.effects).toMatchObject([
+      { kind: "muzzle", weapon: "raiderGun", at: { x: 10.5, y: 15.5 }, facing: 0 },
+      { kind: "tracer", weapon: "raiderGun", at: { x: 10.5, y: 15.5 }, to: { x: 13.5, y: 15.5 } },
+      { kind: "impact", weapon: "raiderGun", at: { x: 13.5, y: 15.5 } },
+    ]);
+    expect(seen.of("shotFired")).toMatchObject([{ weapon: "raiderGun", landsInSight: true }]);
+  });
+
   it("from out of sight shows only its impact", () => {
     const match = createMatch(openMap(30, 30), 1);
     addTestUnit(match, 0, "harvester", { x: 10, y: 15 });
@@ -444,6 +487,16 @@ describe("building and training", () => {
     issueCommand(match, 0, { type: "train", buildingId: barracks, kind: "rifleman" });
     seen.runUntil("unitTrained", 1000);
     expect(seen.of("unitTrained")).toEqual([{ kind: "unitTrained", unit: "rifleman" }]);
+  });
+
+  it("gives unit trained when a Hospital's Medic steps out", () => {
+    const match = createMatch(openMap(30, 30), 1);
+    addTestBuilding(match, 0, "hospital", { x: 5, y: 5 });
+    const hospital = buildingId(match, 0, "hospital");
+    const seen = watch(match);
+    issueCommand(match, 0, { type: "train", buildingId: hospital, kind: "medic" });
+    seen.runUntil("unitTrained", 1000);
+    expect(seen.of("unitTrained")).toEqual([{ kind: "unitTrained", unit: "medic" }]);
   });
 
   it("gives unit trained for a Unit that steps out just as another is added to the queue", () => {

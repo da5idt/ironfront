@@ -29,12 +29,9 @@ import { drawAlertBanner } from "./sfx/alertBannerPainter";
 import { drawSoundStrip } from "./sfx/soundStripPainter";
 import { trainerOf } from "./trainPanel";
 import { drawTrainPanel } from "./trainPanelPainter";
+import { UNIT_BRACKET_PX, unitMarkerBoxes } from "./unitMarkers";
 
 // Draws a PlayerView. It only reads; it never changes the Match (ADR 0002).
-
-/** Side of the bracket square round a selected Unit, and the width of a Unit's health bar, in art pixels. */
-const UNIT_BRACKET_PX = 16;
-const UNIT_HEALTH_PX = 12;
 
 /** Client-only things to draw on top of the Match. */
 export interface Overlay {
@@ -59,7 +56,7 @@ export interface Overlay {
   readonly alert: string | null;
   /** How Units face, where Turrets aim, and the effects and marks of the fight, from the presentation module. */
   readonly presentation: Presentation;
-  /** The selected own Building, if any; a Barracks or Vehicle Factory turns the side panel into its train buttons. */
+  /** The selected own Building, if any; one that trains Units turns the side panel into its train buttons. */
   readonly selectedBuilding: EntityId | null;
 }
 
@@ -122,7 +119,7 @@ export class Renderer {
     this.world.drawAboveFog(ctx, cam, viewRect, (art) => {
       this.units.draw(art, view.units, alpha, time, shown.units);
       this.effects.drawEffects(art, shown.effects, time, (e) => effectInSight(e, view.map));
-      this.drawMarkers(art, view, alpha, overlay);
+      this.drawMarkers(art, view, alpha, overlay, cam);
       if (overlay.placement) this.buildings.drawPlacing(art, overlay.placement, view.playerId);
     });
     if (overlay.dragBox) this.drawDragBox(overlay.dragBox.a, overlay.dragBox.b);
@@ -141,8 +138,10 @@ export class Renderer {
   }
 
   /** Selection brackets and health bars, in art pixels, over everything on the Map. */
-  private drawMarkers(art: CanvasRenderingContext2D, view: PlayerView, alpha: number, overlay: Overlay): void {
+  private drawMarkers(art: CanvasRenderingContext2D, view: PlayerView, alpha: number, overlay: Overlay, cam: Camera): void {
     const U = ART_CELL_PX;
+    // The same for every Unit: only the zoom moves the markers about.
+    const boxes = unitMarkerBoxes(cam.cellPx);
     for (const b of view.buildings) {
       const selected = b.id === overlay.selectedBuilding;
       const x = b.x * U;
@@ -161,12 +160,10 @@ export class Renderer {
       if (!showHealth && group === undefined) continue;
       const cx = Math.round((u.prevX + (u.x - u.prevX) * alpha) * U);
       const cy = Math.round((u.prevY + (u.y - u.prevY) * alpha) * U);
-      const half = UNIT_BRACKET_PX / 2;
-      if (selected) drawBrackets(art, cx - half, cy - half, UNIT_BRACKET_PX, UNIT_BRACKET_PX, 3);
-      // Under the bottom-left bracket corner: clear of the brackets, the health bar above and the Unit itself.
-      if (group !== undefined) drawGroupNumber(art, cx - half, cy + half, group);
+      if (selected) drawBrackets(art, cx + boxes.brackets.x, cy + boxes.brackets.y, UNIT_BRACKET_PX, UNIT_BRACKET_PX, 3);
+      if (group !== undefined) drawGroupNumber(art, cx, cy, boxes.groupNumber, group, boxes.groupDotPx);
       if (showHealth) {
-        drawHealthBar(art, cx - UNIT_HEALTH_PX / 2, cy - half - HEALTH_BAR_PX + 1, UNIT_HEALTH_PX, u.hp / u.maxHp);
+        drawHealthBar(art, cx + boxes.healthBar.x, cy + boxes.healthBar.y, boxes.healthBar.width, u.hp / u.maxHp);
       }
     }
   }

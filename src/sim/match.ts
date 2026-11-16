@@ -8,6 +8,7 @@ import { createRng, nextInt } from "./rng";
 import type { MatchState, MatchStatus, PlayerState } from "./state";
 import { addBuilding, isWalkable, spawnUnit } from "./state";
 import { SYSTEMS } from "./systems";
+import { forgetLeftAtLeash } from "./tend";
 import { BUILDING_STATS, ECONOMY } from "./tuning";
 import type { BuildingKind, CellPos, PlayerId, UnitKind } from "./types";
 import { PLAYER_IDS } from "./types";
@@ -68,6 +69,7 @@ export function createMatch(map: MapDef, seed: number, options: MatchOptions = {
     nextId: 1,
     status: { state: "running" },
     shots: [],
+    tends: [],
   };
   for (const player of PLAYER_IDS) {
     const start = startOf(player);
@@ -115,7 +117,10 @@ export function issueCommand(match: Match, player: PlayerId, command: Command): 
   const cell = targetCell(command);
   if (cell && !(Number.isInteger(cell.x) && Number.isInteger(cell.y))) return reject("that is not a Cell");
   const handler = COMMAND_HANDLERS[command.type] as CommandHandler<typeof command.type>;
-  return handler(m, player, command as never);
+  const result = handler(m, player, command as never);
+  // Here, not in each handler, so every Command that names a Unit counts as "given a Command", present and future.
+  if (result.ok && "unitIds" in command) forgetLeftAtLeash(m, player, command.unitIds);
+  return result;
 }
 
 /**

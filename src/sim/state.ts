@@ -3,8 +3,9 @@ import type { HarvestOrder } from "./harvest";
 import type { MovePlan } from "./movement";
 import type { Rng } from "./rng";
 import { startHarvesting } from "./harvest";
+import type { Tending } from "./tend";
 import { BUILDING_STATS, UNIT_STATS } from "./tuning";
-import type { BuildingKind, CellPos, EntityId, PlayerId, Terrain, UnitKind } from "./types";
+import type { BuildingKind, CellPos, EntityId, PlayerId, Terrain, UnitKind, Vec } from "./types";
 import { isPassableTerrain } from "./types";
 
 // Internal state of a Match. Only code inside src/sim may touch it; everything
@@ -21,7 +22,8 @@ export type UnitOrder =
    * `settled` says it has taken its place for this stand and will not shuffle again.
    */
   | { readonly type: "attackMove"; readonly plan: MovePlan; firing: boolean; spot: MovePlan | null; settled: boolean }
-  | HarvestOrder;
+  | HarvestOrder
+  | Tending;
 
 /** A shot fired during a Tick, kept so drawing can show a tracer. Positions in Cell units. */
 export interface Shot {
@@ -29,6 +31,16 @@ export interface Shot {
   readonly fromY: number;
   readonly toX: number;
   readonly toY: number;
+  readonly tick: number;
+}
+
+/**
+ * A target that was worked on by a Tend during a Tick, kept so drawing can show
+ * it. Health comes back in whole points, so not every such Tick adds any: the
+ * work is listed all the same, as one unbroken effect.
+ */
+export interface Tended {
+  readonly targetId: EntityId;
   readonly tick: number;
 }
 
@@ -48,6 +60,17 @@ export interface UnitState {
   order: UnitOrder;
   /** Ore carried; only Harvesters ever hold any. */
   cargo: number;
+  /**
+   * Tend targets this Unit found no way to, each with the Tick until which it
+   * will not go to that one by itself again.
+   */
+  readonly unreachable: Map<EntityId, number>;
+  /**
+   * Tend targets this Unit gave up on at the leash, each with where it stood
+   * at the Unit's last look. While one keeps moving the Unit does not go to it
+   * by itself, or it would follow a marching target for ever, a leash at a time.
+   */
+  readonly leftAtLeash: Map<EntityId, Vec>;
 }
 
 export interface BuildingState {
@@ -110,6 +133,13 @@ export interface MatchState {
   status: MatchStatus;
   /** Shots fired during the last Tick; replaced every Tick. */
   shots: Shot[];
+  /** Targets worked on by a Tend during the last Tick, whether or not it added a whole point; replaced every Tick. */
+  tends: Tended[];
+}
+
+/** True for a Unit; false for a Building, or one as last seen: only those have a footprint. */
+export function isUnit(t: UnitState | { readonly width: number }): t is UnitState {
+  return !("width" in t);
 }
 
 export function cellIndex(m: MatchState, x: number, y: number): number {
@@ -148,6 +178,8 @@ export function spawnUnit(m: MatchState, owner: PlayerId, kind: UnitKind, cell: 
     // Harvesters go to work as soon as they exist, so nobody has to tell them.
     order: kind === "harvester" ? startHarvesting() : { type: "idle" },
     cargo: 0,
+    unreachable: new Map(),
+    leftAtLeash: new Map(),
   };
   m.units.set(unit.id, unit);
   return unit;

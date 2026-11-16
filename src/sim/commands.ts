@@ -9,6 +9,8 @@ export type Command =
   /** Attack-move: walk to the Cell and fight any enemy that comes into weapon range on the way. */
   | { readonly type: "attackMove"; readonly unitIds: readonly EntityId[]; readonly target: CellPos }
   | { readonly type: "attack"; readonly unitIds: readonly EntityId[]; readonly targetId: EntityId }
+  /** Tend: support Units walk to one own Unit or Building and restore its health; those that cannot help it stay as they are. */
+  | { readonly type: "tend"; readonly unitIds: readonly EntityId[]; readonly targetId: EntityId }
   | { readonly type: "harvest"; readonly unitIds: readonly EntityId[]; readonly target: CellPos }
   | { readonly type: "stop"; readonly unitIds: readonly EntityId[] }
   | { readonly type: "setRallyPoint"; readonly buildingId: EntityId; readonly target: CellPos }

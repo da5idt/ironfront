@@ -1,4 +1,4 @@
-import type { BuildingKind, UnitKind } from "./types";
+import type { BuildingKind, TendTargetClass, UnitClass, UnitKind } from "./types";
 
 // Every balance number lives here so a tweak is a one-line change.
 // Times are in Ticks (20 per second); distances in Cells.
@@ -12,8 +12,18 @@ export interface WeaponStats {
   readonly reloadTicks: number;
 }
 
+/**
+ * Whether these numbers make a weapon at all. An unarmed Unit or Building has
+ * no damage, and every rule that asks "can it shoot?" asks here, so a new
+ * unarmed kind needs no list of kinds anywhere.
+ */
+export function isArmed(weapon: WeaponStats): boolean {
+  return weapon.damage > 0;
+}
+
 export interface UnitStats extends WeaponStats {
   readonly name: string;
+  readonly class: UnitClass;
   readonly cost: number;
   readonly trainTicks: number;
   readonly maxHp: number;
@@ -36,6 +46,7 @@ export interface BuildingStats extends WeaponStats {
 export const UNIT_STATS: Readonly<Record<UnitKind, UnitStats>> = {
   rifleman: {
     name: "Rifleman",
+    class: "infantry",
     cost: 100,
     trainTicks: 5 * TICKS_PER_SECOND,
     maxHp: 50,
@@ -45,8 +56,33 @@ export const UNIT_STATS: Readonly<Record<UnitKind, UnitStats>> = {
     reloadTicks: 15,
     sight: 5,
   },
+  medic: {
+    name: "Medic",
+    class: "infantry",
+    cost: 200,
+    trainTicks: 6 * TICKS_PER_SECOND,
+    maxHp: 40,
+    speed: 1.5,
+    damage: 0,
+    range: 0,
+    reloadTicks: 0,
+    sight: 5,
+  },
+  mechanic: {
+    name: "Mechanic",
+    class: "infantry",
+    cost: 300,
+    trainTicks: 7 * TICKS_PER_SECOND,
+    maxHp: 50,
+    speed: 1.5,
+    damage: 0,
+    range: 0,
+    reloadTicks: 0,
+    sight: 5,
+  },
   raider: {
     name: "Raider",
+    class: "vehicle",
     cost: 300,
     trainTicks: 8 * TICKS_PER_SECOND,
     maxHp: 120,
@@ -58,6 +94,7 @@ export const UNIT_STATS: Readonly<Record<UnitKind, UnitStats>> = {
   },
   harvester: {
     name: "Harvester",
+    class: "vehicle",
     cost: 700,
     trainTicks: 12 * TICKS_PER_SECOND,
     maxHp: 300,
@@ -66,6 +103,20 @@ export const UNIT_STATS: Readonly<Record<UnitKind, UnitStats>> = {
     range: 0,
     reloadTicks: 0,
     sight: 3,
+  },
+  troopCarrier: {
+    name: "Troop Carrier",
+    class: "vehicle",
+    cost: 600,
+    trainTicks: 10 * TICKS_PER_SECOND,
+    maxHp: 220,
+    speed: 3.5,
+    // A light gun: the Raider's reach and reload at half its damage, enough to
+    // answer Infantry but no match for a Raider.
+    damage: 5,
+    range: 4,
+    reloadTicks: 12,
+    sight: 6,
   },
 };
 
@@ -130,7 +181,48 @@ export const BUILDING_STATS: Readonly<Record<BuildingKind, BuildingStats>> = {
     range: 5.5,
     reloadTicks: 20,
   },
+  hospital: {
+    name: "Hospital",
+    cost: 800,
+    buildTicks: 15 * TICKS_PER_SECOND,
+    maxHp: 700,
+    width: 2,
+    height: 2,
+    sight: 4,
+    damage: 0,
+    range: 0,
+    reloadTicks: 0,
+  },
 };
+
+/** Health a second a Unit restores in what it Tends, by what the target is; 0 where it cannot help. */
+export type TendRates = Readonly<Record<TendTargetClass, number>>;
+
+/** The Unit kinds that can Tend. A kind not listed here helps nothing. */
+export const TEND_RATES: Readonly<Partial<Record<UnitKind, TendRates>>> = {
+  medic: { infantry: 8, vehicle: 0, building: 0 },
+  mechanic: { infantry: 0, vehicle: 10, building: 15 },
+};
+
+/**
+ * Health a second a Unit of that kind restores in a target of that class; 0
+ * when it cannot help it. Every rule that asks "can it help?" asks here, so a
+ * new support kind is a new line of numbers above.
+ */
+export function tendRate(kind: UnitKind, target: TendTargetClass): number {
+  return TEND_RATES[kind]?.[target] ?? 0;
+}
+
+export const TEND = {
+  /** How far an idle support Unit looks for something of its own Player's to help. */
+  seekRadius: 6,
+  /** How far a target may move from where it was when the Tend began before the Unit gives up on it. */
+  leash: 8,
+  /** How often an idle support Unit looks: slow enough to be cheap, quick enough to feel willing. */
+  seekTicks: Math.ceil(TICKS_PER_SECOND / 2),
+  /** How long an idle support Unit leaves alone a target it found no way to, before it looks at it again. */
+  retryTicks: 5 * TICKS_PER_SECOND,
+} as const;
 
 export const PLACEMENT = {
   /** Most empty Cells allowed between a new Building and the nearest own Building. */

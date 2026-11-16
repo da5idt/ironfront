@@ -5,7 +5,7 @@ import { createPixelBuffer, type PixelBuffer } from "./pixelBuffer";
 import { type Brush, brushOn, type Legend } from "./spriteTemplate";
 import { ART_CELL_PX } from "./terrainArt";
 
-// The five Buildings, painted in code (ADR 0003). Every one is seen the same
+// The six Buildings, painted in code (ADR 0003). Every one is seen the same
 // way: roof from above, front wall facing the viewer, light from the top
 // left. A Building fills its footprint at 12 art pixels per Cell. All frames
 // are painted once at startup by the sprite sheet; nothing here runs per frame.
@@ -16,6 +16,13 @@ export const FACINGS = 16;
 export const BUILDING_FPS = 8;
 /** Below this share of its health a Building smokes and burns. Presentation only, so not in the game's tuning table. */
 export const DAMAGED_BELOW = 0.5;
+/**
+ * Whether a Building shows fire and smoke: below half its health, and not at
+ * half or above, so one under repair stops smoking the Tick it is back to half.
+ */
+export function isBurning(b: { readonly hp: number; readonly maxHp: number }): boolean {
+  return b.hp < b.maxHp * DAMAGED_BELOW;
+}
 /** How long a newly placed Building takes to rise from the ground. */
 export const BUILD_UP_SECONDS = 0.9;
 /** Side of the Turret gun's square sprite; its middle sits on the middle of the Turret's Cell. */
@@ -34,12 +41,13 @@ export const IDLE_FRAMES: Readonly<Record<BuildingKind, number>> = {
   barracks: 16,
   vehicleFactory: 32,
   turret: 8,
+  hospital: 16,
 };
 export const DAMAGE_FRAMES = 16;
 
 const C = ART.concrete;
 const K = C[0];
-const { glass, windowLight, lamp, khaki, sandbag, tank, hazard, ore, fire, smoke } = ART;
+const { glass, windowLight, lamp, khaki, sandbag, tank, hazard, ore, fire, smoke, ward, aid } = ART;
 
 /** The legend every template shares; D, T and L are the owner's colours. */
 function legendFor(colours: Ramp): Legend {
@@ -457,12 +465,61 @@ const paintTurret: Painter = (b, t, f) => {
   b.px(9, 9, Math.floor(f / 4) % 2 ? lamp.redOn : lamp.redOff);
 };
 
+/**
+ * Hospital: a pale, flat-roofed ward block trimmed in the owner's colour, with
+ * a green plus sign on a roof pad, a cooling unit, a skylight over a screen
+ * whose trace runs across it, and a canopied door between rows of lit windows.
+ */
+const paintHospital: Painter = (b, t, f) => {
+  slab(b, 24, 24, 43);
+
+  // Ward roof.
+  b.box(1, 1, 22, 15, ward.mid, ward.light, ward.dark, K);
+  b.rect(2, 2, 20, 1, t.mid);
+  b.rect(2, 2, 1, 12, t.light);
+  b.rect(21, 3, 1, 11, t.dark);
+  for (const y of [6, 10]) b.rect(15, y, 6, 1, ward.dark);
+
+  // The pad with the plus sign: the one mark that says what this Building is for.
+  b.box(4, 4, 10, 10, ward.light, ART.steelShine, ward.dark, C[3]);
+  b.rect(8, 6, 2, 6, aid.mark);
+  b.rect(6, 8, 6, 2, aid.mark);
+  b.px(9, 12, aid.shade);
+  b.px(12, 9, aid.shade);
+
+  smallFan(b, 15, 4, f);
+  // Skylight over a monitor: a bright trace crossing the glass four times a loop.
+  b.rect(15, 11, 6, 3, K);
+  b.rect(16, 12, 4, 1, glass.dark);
+  b.px(16 + (Math.floor(f / 4) % 4), 12, glass.light);
+  b.px(21, 3, Math.floor(f / 4) % 2 ? lamp.amberOn : lamp.amberOff);
+
+  // Front wall.
+  b.rect(1, 15, 22, 8, K);
+  b.rect(2, 16, 20, 6, ward.mid);
+  b.rect(2, 16, 20, 1, t.mid);
+  b.rect(2, 17, 20, 1, ward.dark);
+  b.rect(2, 21, 20, 1, ward.dark);
+  for (const x of [3, 6, 16, 19]) litWindow(b, x, 18);
+  // Double door under a canopy in the owner's colour.
+  b.rect(9, 17, 6, 1, t.dark);
+  b.rect(10, 18, 4, 4, K);
+  b.rect(10, 18, 2, 3, glass.mid);
+  b.rect(12, 18, 2, 3, glass.dark);
+  b.px(10, 18, glass.light);
+  b.px(8, 19, lamp.flood);
+  b.px(15, 19, lamp.flood);
+  // The path to the door.
+  b.rect(10, 22, 4, 1, C[5]);
+};
+
 const PAINTERS: Readonly<Record<BuildingKind, Painter>> = {
   hq: paintHq,
   refinery: paintRefinery,
   barracks: paintBarracks,
   vehicleFactory: paintVehicleFactory,
   turret: paintTurret,
+  hospital: paintHospital,
 };
 
 /** The Turret's gun, a domed head and a barrel, facing one of the 16 ways. */
@@ -517,6 +574,7 @@ const DAMAGE: Readonly<Record<BuildingKind, DamageSpots>> = {
   barracks: { fires: [[5, 6], [18, 10]], cracks: [[3, 3, 5, 5], [16, 8, 20, 13]] },
   vehicleFactory: { fires: [[12, 10], [29, 15]], cracks: [[5, 5, 10, 9], [14, 16, 20, 19], [27, 12, 31, 17]] },
   turret: { fires: [[3, 3]], cracks: [[7, 2, 9, 4]] },
+  hospital: { fires: [[9, 12], [18, 7]], cracks: [[3, 4, 6, 7], [15, 9, 19, 13]] },
 };
 
 /**

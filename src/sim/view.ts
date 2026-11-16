@@ -91,6 +91,13 @@ export interface PlayerView {
    * shot is left out.
    */
   readonly shots: readonly ShotView[];
+  /**
+   * Units and Buildings worked on by a Tend during the last Tick, for drawing
+   * and sound, under Fog of War. A target is listed on every Tick it is worked
+   * on, also the Ticks that add no whole point of health: the Player's own
+   * always, the other Player's only where the target can be seen now.
+   */
+  readonly tends: readonly TendView[];
   /** What this Player's HQ is building, or null when it is free. */
   readonly production: ProductionView | null;
 }
@@ -102,6 +109,16 @@ export interface ShotView {
   readonly toX: number;
   readonly toY: number;
   /** The Tick it was fired in. */
+  readonly tick: number;
+}
+
+/** One target being worked on by a Tend. The target is in this view's `units` or `buildings` under the same id. */
+export interface TendView {
+  readonly targetId: EntityId;
+  /** The target's position in Cell units: a Unit's own, or the centre of a Building's footprint. */
+  readonly x: number;
+  readonly y: number;
+  /** The Tick it was worked on in. */
   readonly tick: number;
 }
 
@@ -130,6 +147,23 @@ function visibleShots(m: MatchState, fog: PlayerFog): ShotView[] {
     else if (seen(s.toX, s.toY)) shots.push({ ...s, fromX: s.toX, fromY: s.toY });
   }
   return shots;
+}
+
+/** The Tends a Player may see; the rule is on PlayerView.tends. */
+function visibleTends(m: MatchState, playerId: PlayerId, fog: PlayerFog): TendView[] {
+  const tends: TendView[] = [];
+  for (const t of m.tends) {
+    const u = m.units.get(t.targetId);
+    if (u) {
+      if (u.owner === playerId || isVisible(fog, cellIndex(m, Math.floor(u.x), Math.floor(u.y)))) tends.push({ ...t, x: u.x, y: u.y });
+      continue;
+    }
+    const b = m.buildings.get(t.targetId);
+    if (b && (b.owner === playerId || isFootprintVisible(m, fog, b))) {
+      tends.push({ ...t, x: b.x + b.width / 2, y: b.y + b.height / 2 });
+    }
+  }
+  return tends;
 }
 
 export function buildPlayerView(m: MatchState, playerId: PlayerId): PlayerView {
@@ -174,6 +208,7 @@ export function buildPlayerView(m: MatchState, playerId: PlayerId): PlayerView {
     units,
     buildings,
     shots: visibleShots(m, fog),
+    tends: visibleTends(m, playerId, fog),
     production: productionView(m, playerId),
   };
 }

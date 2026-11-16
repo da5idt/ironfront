@@ -73,7 +73,7 @@ export interface UnitLook {
   readonly walked: number;
   /** A Harvester's load, from 0 (empty) to HARVESTER_LOADS - 1 (full); 0 for other Units. */
   readonly load: number;
-  /** Which frame of the Unit's sprite shows: a Rifleman's step, a vehicle's wheels, a Harvester's load. */
+  /** Which frame of the Unit's sprite shows: a step on foot, a Vehicle's wheels, a Harvester's load. */
   readonly frame: number;
 }
 
@@ -105,7 +105,7 @@ export interface Effect {
   readonly end: number;
 }
 
-/** What a death leaves on the ground for a while: a vehicle's wreck, a fallen Rifleman, a Building's rubble. */
+/** What a death leaves on the ground for a while: a Vehicle's wreck, a fallen Infantry Unit, a Building's rubble. */
 export interface Mark {
   readonly kind: MarkKind;
   /** Its middle. */
@@ -159,7 +159,7 @@ export type PresentationEvent =
   | { readonly kind: "impact"; readonly at: Vec }
   /**
    * A Unit that was in the view is gone from a Cell the Player still sees, or
-   * was the Player's own: it died. `vehicle` is false for a Rifleman.
+   * was the Player's own: it died. `vehicle` is false for Infantry.
    */
   | {
       readonly kind: "unitDied";
@@ -179,7 +179,7 @@ export type PresentationEvent =
   | { readonly kind: "buildingPlaced"; readonly building: BuildingKind; readonly owner: PlayerId; readonly at: Vec }
   /** The Player's HQ has finished its Building, which now waits to be placed. */
   | { readonly kind: "buildingReady" }
-  /** One of the Player's own Barracks or Vehicle Factories has trained a Unit. */
+  /** One of the Player's own training Buildings (Barracks, Vehicle Factory, Hospital) has trained a Unit. */
   | { readonly kind: "unitTrained"; readonly unit: UnitKind }
   /**
    * One of the Player's own Units or Buildings was hit or lost this Tick; at
@@ -196,7 +196,16 @@ export type PresentationEvent =
 
 export type { Weapon } from "./art/effectArt";
 
-const UNIT_WEAPON: Readonly<Record<UnitKind, Weapon | null>> = { rifleman: "rifle", raider: "raiderGun", harvester: null };
+/** How each kind's shots look and sound; null for a kind that is unarmed. */
+const UNIT_WEAPON: Readonly<Record<UnitKind, Weapon | null>> = {
+  rifleman: "rifle",
+  medic: null,
+  mechanic: null,
+  raider: "raiderGun",
+  harvester: null,
+  // A light gun on a Vehicle's mount: it shares the Raider's flash and sound rather than getting a third small-arms look.
+  troopCarrier: "raiderGun",
+};
 
 export interface Presented {
   readonly state: Presentation;
@@ -356,7 +365,7 @@ export function present(prev: Presentation | null, view: PlayerView): Presented 
       const own = was.owner === me;
       if (!own && !visibleAround(was.x, was.y, UNIT_STATS[was.kind].speed / TICKS_PER_SECOND)) continue;
       const at = { x: was.x, y: was.y };
-      const vehicle = was.kind !== "rifleman";
+      const vehicle = UNIT_STATS[was.kind].class === "vehicle";
       events.push({ kind: "unitDied", unit: was.kind, vehicle, owner: was.owner, at });
       if (vehicle) effect("smallExplosion", at);
       else effect("fall", at, { owner: was.owner, facing: was.facing });
@@ -408,7 +417,7 @@ export function present(prev: Presentation | null, view: PlayerView): Presented 
 
     if (view.production?.ready && !last.ready) events.push({ kind: "buildingReady" });
 
-    // A new Unit of the Player's own was trained if a Barracks or Vehicle Factory had its kind at the head of
+    // A new Unit of the Player's own was trained if a training Building had its kind at the head of
     // its queue, done or a Tick from done, and has since started afresh. (The Harvester that comes with a
     // Refinery was not.) The queue's length says nothing: a Command between two Ticks can add to it or take from it.
     const usedTrainers = new Set<EntityId>();

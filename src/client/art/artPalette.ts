@@ -49,6 +49,14 @@ export const ART = {
   sandbag: { dark: "#5e5a40", mid: "#a39a70", light: "#d2ca9c" },
   /** Painted copper-brown steel: the Refinery's tank. */
   tank: { dark: "#6a4426", mid: "#a8703a", light: "#e0aa62" },
+  /** Pale painted panels: the Hospital's roof and walls. */
+  ward: { dark: "#98a2a6", mid: "#ccd4d7", light: "#edf1f2" },
+  /** The Hospital's plus sign. A green of its own, so it never reads as either Player's colour or as fire. */
+  aid: { mark: "#2fae7c", shade: "#1e7656" },
+  /** A Mechanic's hard hat. Brighter and yellower than Ore, and neither Player's colour. */
+  hardHat: { dark: "#a87c14", mid: "#e8b820", light: "#f8e078" },
+  /** A Mechanic's oil-dark overalls. */
+  overalls: { dark: "#2e2a26", mid: "#4a443c", light: "#6a6256" },
   packedEarth: ["#55472d", "#625337", "#706042"],
   hazard: { yellow: "#e8b820", black: "#1c1a14" },
   /** Small lights on Buildings, lit and unlit. */

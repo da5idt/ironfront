@@ -21,12 +21,16 @@ One fixed step of game time. The Match advances only in whole Ticks, at a fixed 
 _Avoid_: Frame, turn, update
 
 **Command**:
-An order a Player gives, such as move, attack, Attack-move, harvest, build or train. The person playing and the Computer Opponent give the same Commands.
+An order a Player gives, such as move, attack, Attack-move, Tend, harvest, build or train. The person playing and the Computer Opponent give the same Commands.
 _Avoid_: Action, input, order
 
 **Attack-move**:
 A Command that sends Units to a Cell and has them stop to fight any enemy that comes into weapon range on the way, then carry on. They do not leave their route to chase.
 _Avoid_: Aggressive move, a-move, assault
+
+**Tend**:
+A Command that sends support Units to one of the Player's own Units or Buildings to restore its health. Each Unit that can help the target walks until it is beside it and works until it is at full health, is gone, has moved too far off, or a new Command arrives. A Unit that cannot help that target ignores the Command, and a Tend on a target already at full health is rejected. An idle support Unit Tends the nearest target it can help by itself; one it gave up on for moving too far off it leaves alone until that target has stopped or the Unit is given a Command.
+_Avoid_: Assist, support (as a Command), treat, fix
 
 **Victory**:
 The end of a Match when the other Player has no Buildings left.
@@ -76,29 +80,65 @@ The Building where Harvesters unload Ore for Credits.
 The Building that trains Riflemen.
 
 **Vehicle Factory**:
-The Building that trains Raiders and Harvesters.
+The Building that trains Raiders, Harvesters, Mechanics and Troop Carriers.
 _Avoid_: War factory, factory
 
 **Turret**:
 A defensive Building that attacks enemy Units in range by itself.
 _Avoid_: Tower, defense
 
+**Hospital**:
+A Building the HQ builds, for the care of hurt Units. It trains Medics.
+_Avoid_: Infirmary, clinic, med bay, field hospital
+
 ## Units
 
 **Unit**:
-Anything a Player trains that moves.
+Anything a Player trains that moves. Every Unit kind is either Infantry or a Vehicle.
+
+**Infantry**:
+The class of Units that go on foot: the Rifleman, the Medic and the Mechanic. It names the class, never one kind of Unit.
+_Avoid_: Foot soldiers, footmen, grunts
+
+**Vehicle**:
+The class of Units that drive: the Raider, the Harvester and the Troop Carrier.
+_Avoid_: Machine, mech, car
 
 **Rifleman**:
-The infantry Unit.
-_Avoid_: Soldier, infantry, trooper
+The armed Infantry Unit, trained at the Barracks.
+_Avoid_: Soldier, trooper; "infantry" for this one kind (Infantry is the whole class)
+
+**Medic**:
+An unarmed Infantry Unit, trained at the Hospital, that Heals other Infantry, never itself. It never fires, and an Attack-move is a plain move for it.
+_Avoid_: Doctor, healer, nurse, field medic
+
+**Heal**:
+To restore health to an Infantry Unit, which is what a Medic does when it Tends one. It costs nothing and never goes above full health.
+_Avoid_: Cure, mend, patch up, regenerate
+
+**Mechanic**:
+An unarmed Infantry Unit, trained at the Vehicle Factory, that Repairs Vehicles and Buildings and does nothing for Infantry. It never fires, and an Attack-move is a plain move for it.
+_Avoid_: Engineer, repairman, technician, fitter
+
+**Repair**:
+To restore health to a Vehicle or a Building, which is what a Mechanic does when it Tends one. It costs nothing and never goes above full health.
+_Avoid_: Fix, mend, patch up, rebuild, service
 
 **Raider**:
-The light attack vehicle.
+The light attack Vehicle.
 _Avoid_: Buggy, jeep, light tank
 
 **Harvester**:
-The Unit that collects Ore from Ore Fields and carries it to a Refinery.
+The Vehicle that collects Ore from Ore Fields and carries it to a Refinery. It is unarmed.
 _Avoid_: Collector, miner, worker
+
+**Troop Carrier**:
+A fast armoured Vehicle with a light gun, trained at the Vehicle Factory. It is built to carry Infantry.
+_Avoid_: APC, transport, personnel carrier, truck
+
+**Passenger**:
+An Infantry Unit inside a Troop Carrier. It is off the Map: it holds no Cell, cannot be seen, hit, Tended or given a Command, does not fire and gives no sight. It keeps its health, and still counts as a living Unit. Only its owner knows how many Passengers a Troop Carrier holds. If the Troop Carrier is destroyed with a Passenger still inside, the Passenger is lost with it.
+_Avoid_: Rider, occupant, cargo (cargo is the Ore a Harvester carries), load, garrison
 
 ## Controls
 

@@ -8,14 +8,15 @@ import { inBounds, spawnUnit } from "./state";
 import { TRAINING, UNIT_STATS } from "./tuning";
 import type { BuildingKind, CellPos, EntityId, PlayerId, UnitKind } from "./types";
 
-// Training: a Barracks or Vehicle Factory works through its own short queue of
+// Training: a Barracks, Vehicle Factory or Hospital works through its own short queue of
 // Units. Credits are paid when a Unit is queued, so the queue never stalls for
 // lack of Credits; only the first Unit in the queue makes progress.
 
 /** What each Building can train, in panel order. Buildings not listed train nothing. */
 export const TRAINS: Readonly<Partial<Record<BuildingKind, readonly UnitKind[]>>> = {
   barracks: ["rifleman"],
-  vehicleFactory: ["raider", "harvester"],
+  vehicleFactory: ["raider", "harvester", "mechanic", "troopCarrier"],
+  hospital: ["medic"],
 };
 
 /** A Building's training as its owner sees it. */

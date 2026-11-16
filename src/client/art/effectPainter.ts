@@ -1,4 +1,4 @@
-import { PLAYER_IDS, type PlayerId, TICKS_PER_SECOND, type UnitKind } from "../../sim";
+import { PLAYER_IDS, type PlayerId, TICKS_PER_SECOND, UNIT_STATS, type UnitKind } from "../../sim";
 import type { Effect, Mark } from "../presentation";
 import { ART } from "./artPalette";
 import { FACINGS } from "./buildingArt";
@@ -31,7 +31,8 @@ import { ART_CELL_PX } from "./terrainArt";
 // a square of its strip, so a big fight costs a few hundred small copies.
 
 const WEAPONS: readonly Weapon[] = ["rifle", "raiderGun", "turretCannon"];
-const VEHICLES: readonly UnitKind[] = ["raider", "harvester"];
+/** The kinds that leave a wreck: read from the class, so a new Vehicle gets its wreck without a change here. */
+const VEHICLES = (Object.keys(UNIT_STATS) as UnitKind[]).filter((kind) => UNIT_STATS[kind].class === "vehicle");
 const U = ART_CELL_PX;
 
 /** How many steps a mark's fade-out takes: whole steps suit the pixel look better than a smooth fade. */

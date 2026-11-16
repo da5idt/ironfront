@@ -13,7 +13,7 @@ import { menuButtonRects } from "./buildPanel";
 import { contains, type Rect } from "./layout";
 
 // The side panel's train buttons, shown in place of the HQ's build buttons
-// while an own Barracks or Vehicle Factory is selected. Pure, like buildPanel.ts,
+// while an own Building that trains Units is selected. Pure, like buildPanel.ts,
 // so main.ts hit-tests and the painter draws from the same functions.
 
 export interface TrainButton {

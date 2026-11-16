@@ -3,6 +3,7 @@ import { OK, reject } from "./commands";
 import { handleCancelBuilding, handlePlaceBuilding, handleStartBuilding } from "./building";
 import { handleAttack, handleAttackMove } from "./combat";
 import { handleHarvest } from "./harvest";
+import { handleTend } from "./tend";
 import { handleCancelTraining, handleSetRallyPoint, handleTrain } from "./training";
 import { handleMove } from "./movement";
 import type { MatchState } from "./state";
@@ -30,6 +31,7 @@ export const COMMAND_HANDLERS: { readonly [K in CommandType]: CommandHandler<K> 
   attack: handleAttack,
   attackMove: handleAttackMove,
   harvest: handleHarvest,
+  tend: handleTend,
   stop,
   setRallyPoint: handleSetRallyPoint,
   startBuilding: handleStartBuilding,

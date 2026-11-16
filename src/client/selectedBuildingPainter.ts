@@ -2,7 +2,7 @@ import type { BuildingView, CellPos } from "../sim";
 import { type Camera, mapToScreen } from "./camera";
 import { RALLY_FLAG, RALLY_LINE, SELECTION_MARKER } from "./palette";
 
-// The selected Barracks or Vehicle Factory's rally point: a dashed line from
+// The selected training Building's rally point: a dashed line from
 // the Building out to a flag. (Its selection brackets are pixel art, drawn
 // with the other markers in the renderer.)
 

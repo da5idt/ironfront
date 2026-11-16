@@ -13,7 +13,7 @@ import type { BuildingKind, CellPos, PlayerId } from "./types";
 // Building waits for the Player to place it before the HQ starts another.
 
 /** What the HQ can build, in panel order. */
-export const HQ_BUILDS: readonly BuildingKind[] = ["refinery", "barracks", "vehicleFactory", "turret"];
+export const HQ_BUILDS: readonly BuildingKind[] = ["refinery", "barracks", "vehicleFactory", "turret", "hospital"];
 
 /** Production as a Player sees it. */
 export interface ProductionView {
