@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { PLAYER_IDS, type UnitKind } from "../../sim";
+import { PLAYER_IDS, UNIT_STATS, type UnitKind } from "../../sim";
 import { ART } from "./artPalette";
 import { type PixelBuffer, pixelAt } from "./pixelBuffer";
 import { FACINGS } from "./buildingArt";
 import { unitSprite } from "./spriteSheet";
 import { HARVESTER_LOADS, paintUnit, UNIT_FRAMES, UNIT_SPRITE_PX, unitFrame } from "./unitArt";
 
-const KINDS: readonly UnitKind[] = ["rifleman", "raider", "harvester"];
+const KINDS: readonly UnitKind[] = ["rifleman", "medic", "raider", "harvester"];
 
 const same = (a: PixelBuffer, b: PixelBuffer) => a.data.every((v, i) => v === b.data[i]);
 
@@ -88,7 +88,9 @@ describe("Unit sprites", () => {
               }
             }
             // Enough of it that the owner reads at a glance, even on the smallest Unit.
-            expect(playerPixels, `${kind} facing ${facing} frame ${frame}`).toBeGreaterThanOrEqual(kind === "rifleman" ? 4 : 12);
+            expect(playerPixels, `${kind} facing ${facing} frame ${frame}`).toBeGreaterThanOrEqual(
+              UNIT_STATS[kind].class === "infantry" ? 4 : 12,
+            );
           }
         }
       }
@@ -122,6 +124,69 @@ describe("Unit sprites", () => {
       expect(count(frames[2]![0]!, [ART.scorch]), kind).toBe(0);
       expect(count(damaged[2]![0]!, [ART.scorch]), kind).toBeGreaterThan(0);
       expect(solid(damaged[2]![0]!).length).toBe(solid(frames[2]![0]!).length);
+    }
+  });
+});
+
+describe("the Medic", () => {
+  const WARD = [ART.ward.dark, ART.ward.mid, ART.ward.light];
+  const AID = [ART.aid.mark, ART.aid.shade];
+  const KHAKI = [ART.khaki.dark, ART.khaki.mid, ART.khaki.light];
+  const different = (a: PixelBuffer, b: PixelBuffer): number => {
+    let n = 0;
+    for (let y = 0; y < a.height; y++) for (let x = 0; x < a.width; x++) if (pixelAt(a, x, y) !== pixelAt(b, x, y)) n++;
+    return n;
+  };
+
+  it("is clearly not a Rifleman in either Player's colours: a pale coat with a green mark where he wears khaki, and no rifle", () => {
+    for (const owner of PLAYER_IDS) {
+      const medic = unitSprite("medic", owner);
+      const rifleman = unitSprite("rifleman", owner);
+      expect(UNIT_FRAMES.medic).toBe(3);
+      for (let facing = 0; facing < FACINGS; facing++) {
+        for (let frame = 0; frame < UNIT_FRAMES.medic; frame++) {
+          const m = medic.frames[facing]![frame]!;
+          const at = `Player ${owner} facing ${facing} frame ${frame}`;
+          expect(count(m, WARD), at).toBeGreaterThanOrEqual(8);
+          expect(count(m, AID), at).toBeGreaterThanOrEqual(2);
+          expect(count(m, KHAKI), at).toBe(0);
+          // Against every Rifleman frame of that facing, so no pose of one can pass for the other.
+          for (const r of rifleman.frames[facing]!) {
+            expect(count(r, [...WARD, ...AID]), at).toBe(0);
+            expect(different(m, r), at).toBeGreaterThanOrEqual(12);
+          }
+        }
+      }
+    }
+  });
+
+  it("carries a satchel, not a rifle: nothing of the sprite reaches out along the facing", () => {
+    for (let facing = 0; facing < FACINGS; facing++) {
+      const medic = box(unitSprite("medic", 0).frames[facing]![0]!);
+      expect(medic.width, `facing ${facing}`).toBeLessThanOrEqual(7);
+      expect(medic.height, `facing ${facing}`).toBeLessThanOrEqual(11);
+    }
+    // The Rifleman's rifle sticks out sideways when he faces east.
+    expect(box(unitSprite("rifleman", 0).frames[0]![0]!).width).toBeGreaterThan(7);
+  });
+
+  it("is Infantry-sized, far smaller than a Raider", () => {
+    for (let facing = 0; facing < FACINGS; facing++) {
+      const size = (kind: UnitKind) => solid(unitSprite(kind, 0).frames[facing]![0]!).length;
+      expect(size("medic") * 2, `facing ${facing}`).toBeLessThan(size("raider"));
+    }
+  });
+
+  it("shows which way it faces, and steps left, together, right, together as it walks", () => {
+    expect(unitFrame("medic", null, 0)).toBe(0);
+    expect([0, 1, 2, 3].map((phase) => unitFrame("medic", phase, 0))).toEqual([1, 0, 2, 0]);
+    const { frames } = unitSprite("medic", 0);
+    expect(new Set(frames.map((f) => f[0]!.data.join())).size).toBe(FACINGS);
+    for (let facing = 0; facing < FACINGS; facing++) {
+      const [stand, left, right] = frames[facing]!;
+      expect(same(stand!, left!), `facing ${facing}`).toBe(false);
+      expect(same(stand!, right!), `facing ${facing}`).toBe(false);
+      expect(same(left!, right!), `facing ${facing}`).toBe(false);
     }
   });
 });

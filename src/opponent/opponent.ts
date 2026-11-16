@@ -5,6 +5,7 @@ import {
   type Command,
   createRng,
   type EntityId,
+  isArmed,
   isPassableTerrain,
   nextInt,
   OPPONENT,
@@ -112,7 +113,7 @@ export function createOpponent(playerId: PlayerId, seed: number): Opponent {
     for (const id of fields.keys()) if (!alive.has(id)) fields.delete(id);
     for (const u of own) note(u);
     rememberDanger(danger, view);
-    const army = own.filter((u) => UNIT_STATS[u.kind].damage > 0);
+    const army = own.filter((u) => isArmed(UNIT_STATS[u.kind]));
 
     return [
       ...buildCommands(view, placeFailures),

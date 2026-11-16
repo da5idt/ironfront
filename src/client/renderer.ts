@@ -56,7 +56,7 @@ export interface Overlay {
   readonly alert: string | null;
   /** How Units face, where Turrets aim, and the effects and marks of the fight, from the presentation module. */
   readonly presentation: Presentation;
-  /** The selected own Building, if any; a Barracks or Vehicle Factory turns the side panel into its train buttons. */
+  /** The selected own Building, if any; one that trains Units turns the side panel into its train buttons. */
   readonly selectedBuilding: EntityId | null;
 }
 

@@ -1,4 +1,4 @@
-import type { BuildingKind, UnitKind } from "./types";
+import type { BuildingKind, UnitClass, UnitKind } from "./types";
 
 // Every balance number lives here so a tweak is a one-line change.
 // Times are in Ticks (20 per second); distances in Cells.
@@ -12,8 +12,18 @@ export interface WeaponStats {
   readonly reloadTicks: number;
 }
 
+/**
+ * Whether these numbers make a weapon at all. An unarmed Unit or Building has
+ * no damage, and every rule that asks "can it shoot?" asks here, so a new
+ * unarmed kind needs no list of kinds anywhere.
+ */
+export function isArmed(weapon: WeaponStats): boolean {
+  return weapon.damage > 0;
+}
+
 export interface UnitStats extends WeaponStats {
   readonly name: string;
+  readonly class: UnitClass;
   readonly cost: number;
   readonly trainTicks: number;
   readonly maxHp: number;
@@ -36,6 +46,7 @@ export interface BuildingStats extends WeaponStats {
 export const UNIT_STATS: Readonly<Record<UnitKind, UnitStats>> = {
   rifleman: {
     name: "Rifleman",
+    class: "infantry",
     cost: 100,
     trainTicks: 5 * TICKS_PER_SECOND,
     maxHp: 50,
@@ -45,8 +56,21 @@ export const UNIT_STATS: Readonly<Record<UnitKind, UnitStats>> = {
     reloadTicks: 15,
     sight: 5,
   },
+  medic: {
+    name: "Medic",
+    class: "infantry",
+    cost: 200,
+    trainTicks: 6 * TICKS_PER_SECOND,
+    maxHp: 40,
+    speed: 1.5,
+    damage: 0,
+    range: 0,
+    reloadTicks: 0,
+    sight: 5,
+  },
   raider: {
     name: "Raider",
+    class: "vehicle",
     cost: 300,
     trainTicks: 8 * TICKS_PER_SECOND,
     maxHp: 120,
@@ -58,6 +82,7 @@ export const UNIT_STATS: Readonly<Record<UnitKind, UnitStats>> = {
   },
   harvester: {
     name: "Harvester",
+    class: "vehicle",
     cost: 700,
     trainTicks: 12 * TICKS_PER_SECOND,
     maxHp: 300,

@@ -8,7 +8,9 @@ export type EntityId = number;
 
 export type Terrain = "open" | "rough" | "rock" | "water";
 
-export type UnitKind = "rifleman" | "raider" | "harvester";
+export type UnitKind = "rifleman" | "medic" | "raider" | "harvester";
+/** The two classes of Unit. What may heal, repair or carry a Unit goes by its class, never by its kind. */
+export type UnitClass = "infantry" | "vehicle";
 export type BuildingKind = "hq" | "refinery" | "barracks" | "vehicleFactory" | "turret" | "hospital";
 
 /** A Cell coordinate: whole numbers, x to the right, y down. */

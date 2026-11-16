@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { BUILDING_STATS, type BuildingView, type ProductionView, TRAINING, type TrainingView, UNIT_STATS } from "../sim";
 import { creditsShortPress, type SidePanelView, sidePanelPress } from "./sidePanel";
 import { buildButtons } from "./buildPanel";
+import { keyAction } from "./keys";
 import { trainButtons } from "./trainPanel";
 
 const AREA = { x: 0, y: 230, width: 220, height: 500 };
@@ -17,7 +18,12 @@ function building(id: number, kind: BuildingView["kind"], training: TrainingView
 
 /** A trainer with nothing queued, as trainingView (src/sim/training.ts) gives it. */
 const idle: TrainingView = { queue: [], progress: 0, rallyPoint: null };
-const BUILDINGS = [building(1, "hq", null), building(2, "barracks", idle), building(3, "vehicleFactory", idle)];
+const BUILDINGS = [
+  building(1, "hq", null),
+  building(2, "barracks", idle),
+  building(3, "vehicleFactory", idle),
+  building(4, "hospital", idle),
+];
 
 function panelView(credits: number, production: ProductionView | null = null): SidePanelView {
   return { credits, production, buildings: BUILDINGS };
@@ -57,6 +63,29 @@ describe("pressing a side panel button by key", () => {
       command: { type: "train", buildingId: 3, kind: "harvester" },
     });
     expect(sidePanelPress(view, 3, AREA, { index: 2 }, "left")).toBeNull();
+  });
+
+  it("with a Hospital selected, trains a Medic on the first key (Z) and does nothing on the others", () => {
+    const view = panelView(10_000);
+    const z = { code: "KeyZ", ctrlKey: false, metaKey: false, altKey: false, shiftKey: false };
+    expect(keyAction(z)).toEqual({ type: "menuButton", index: 0 });
+    expect(sidePanelPress(view, 4, AREA, { index: 0 }, "left")).toEqual({
+      type: "command",
+      command: { type: "train", buildingId: 4, kind: "medic" },
+    });
+    for (const index of [1, 2, 3, 4]) expect(sidePanelPress(view, 4, AREA, { index }, "left")).toBeNull();
+  });
+
+  it("with a Hospital selected, a right-click on the Medic button cancels the newest Medic in the queue", () => {
+    const queued: TrainingView = { queue: ["medic", "medic"], progress: 0.5, rallyPoint: null };
+    const view = { ...panelView(0), buildings: [building(4, "hospital", queued)] };
+    const rect = trainButtons(AREA, "hospital")[0]!.rect;
+    expect(sidePanelPress(view, 4, AREA, { point: { x: rect.x + 1, y: rect.y + 1 } }, "right")).toEqual({
+      type: "command",
+      command: { type: "cancelTraining", buildingId: 4 },
+    });
+    // No Credits for a third: a left press is the "Credits short" kind, as at the Barracks.
+    expect(creditsShortPress(view, 4, AREA, { index: 0 }, "left")).toBe(true);
   });
 
   it("does nothing on a greyed-out button", () => {
