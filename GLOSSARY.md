@@ -21,7 +21,7 @@ One fixed step of game time. The Match advances only in whole Ticks, at a fixed 
 _Avoid_: Frame, turn, update
 
 **Command**:
-An order a Player gives, such as move, attack, Attack-move, Tend, harvest, build or train. The person playing and the Computer Opponent give the same Commands.
+An order a Player gives, such as move, attack, Attack-move, Tend, Board, Unload, harvest, build or train. The person playing and the Computer Opponent give the same Commands.
 _Avoid_: Action, input, order
 
 **Attack-move**:
@@ -31,6 +31,18 @@ _Avoid_: Aggressive move, a-move, assault
 **Tend**:
 A Command that sends support Units to one of the Player's own Units or Buildings to restore its health. Each Unit that can help the target walks until it is beside it and works until it is at full health, is gone, has moved too far off, or a new Command arrives. A Unit that cannot help that target ignores the Command, and a Tend on a target already at full health is rejected. An idle support Unit Tends the nearest target it can help by itself; one it gave up on for moving too far off it leaves alone until that target has stopped or the Unit is given a Command.
 _Avoid_: Assist, support (as a Command), treat, fix
+
+**Board**:
+A Command that sends Infantry to one of the Player's own Troop Carriers to get in. Each walks until it is in a Cell touching the Troop Carrier's and becomes a Passenger if there is room; with no room it stops beside it. Vehicles ignore the Command.
+_Avoid_: Load, embark, enter, mount, garrison
+
+**Unload**:
+A Command that has every Passenger of a Troop Carrier get out onto a free Cell beside it, nearest first; a Passenger with no free Cell stays inside. A Troop Carrier that loses health Unloads by itself on that Tick. Units that get out are idle. (A Harvester emptying its Ore at a Refinery is not this.)
+_Avoid_: Disembark, deploy, drop off, eject, evacuate
+
+**Collecting**:
+What a Troop Carrier does, once, on the Tick it finishes a move or an Attack-move that it began with no Passengers and had none on since: idle Infantry of its own Player within the pick-up radius (two Cells) become its Passengers from where they stand, nearest first and lowest id first among those as near as each other, until it is full. No Command asks for it. A Troop Carrier that stands takes nobody, so Units that got out, and Units sent beside a parked one, stay on the Map until it has been sent off empty and has stopped again. A move on which it held a Passenger or put one out ends without it, and so does a stop on a Tick it lost health.
+_Avoid_: Auto-load, auto-board, pick-up mode
 
 **Victory**:
 The end of a Match when the other Player has no Buildings left.
@@ -133,7 +145,7 @@ The Vehicle that collects Ore from Ore Fields and carries it to a Refinery. It i
 _Avoid_: Collector, miner, worker
 
 **Troop Carrier**:
-A fast armoured Vehicle with a light gun, trained at the Vehicle Factory. It is built to carry Infantry.
+A fast armoured Vehicle with a light gun, trained at the Vehicle Factory. It carries up to five Infantry as Passengers, who Board it and get out when it Unloads.
 _Avoid_: APC, transport, personnel carrier, truck
 
 **Passenger**:
@@ -141,6 +153,10 @@ An Infantry Unit inside a Troop Carrier. It is off the Map: it holds no Cell, ca
 _Avoid_: Rider, occupant, cargo (cargo is the Ore a Harvester carries), load, garrison
 
 ## Controls
+
+**Passenger mark**:
+One of the small marks over a Troop Carrier of the person playing, one for each place inside: bright for a place a Passenger has taken, dark for a free one. The other Player's Troop Carriers show none.
+_Avoid_: Pip, seat icon
 
 **Control Group**:
 A selection of Units the person playing has saved under a number from 1 to 9, to get back with one key. It belongs to the person's controls, not to the Match: the Computer Opponent has none and no rule depends on it.

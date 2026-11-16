@@ -30,6 +30,13 @@ export function soundsForEvent(event: PresentationEvent): readonly SoundCue[] {
       return [{ name: "impact", at: event.at }];
     case "unitDied":
       return [{ name: event.vehicle ? "smallExplosion" : "unitDeath", at: event.at }];
+    case "unitBoarded":
+      return [{ name: "board", at: event.at }];
+    case "unitUnloaded":
+      return [{ name: "unload", at: event.at }];
+    // The two sounds are named after the work. Their recipes space them out, so work on every Tick is not a drone.
+    case "tended":
+      return [{ name: event.work, at: event.at }];
     case "buildingDestroyed":
       return [{ name: "largeExplosion", at: event.at }];
     case "buildingPlaced":
@@ -68,6 +75,9 @@ export function alertForEvent(event: PresentationEvent, me: PlayerId): AlertEven
     case "shotFired":
     case "impact":
     case "buildingPlaced":
+    case "unitBoarded":
+    case "unitUnloaded":
+    case "tended":
       return null;
   }
 }

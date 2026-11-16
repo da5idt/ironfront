@@ -11,6 +11,10 @@ export type Command =
   | { readonly type: "attack"; readonly unitIds: readonly EntityId[]; readonly targetId: EntityId }
   /** Tend: support Units walk to one own Unit or Building and restore its health; those that cannot help it stay as they are. */
   | { readonly type: "tend"; readonly unitIds: readonly EntityId[]; readonly targetId: EntityId }
+  /** Board: Infantry walk to one own Troop Carrier and get in when beside it, while it has room; Vehicles stay as they are. */
+  | { readonly type: "board"; readonly unitIds: readonly EntityId[]; readonly targetId: EntityId }
+  /** Unload: every Passenger of the Troop Carriers named gets out onto a free Cell beside it; those with no free Cell stay inside. */
+  | { readonly type: "unload"; readonly unitIds: readonly EntityId[] }
   | { readonly type: "harvest"; readonly unitIds: readonly EntityId[]; readonly target: CellPos }
   | { readonly type: "stop"; readonly unitIds: readonly EntityId[] }
   | { readonly type: "setRallyPoint"; readonly buildingId: EntityId; readonly target: CellPos }

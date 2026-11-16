@@ -17,7 +17,8 @@ function hasBuildings(m: MatchState, player: PlayerId): boolean {
 
 function unitCount(m: MatchState, player: PlayerId): number {
   let n = 0;
-  for (const u of m.units.values()) if (u.owner === player) n++;
+  // A Passenger is as alive as a Unit on the Map, and could still have fought on.
+  for (const u of m.units.values()) if (u.owner === player) n += 1 + u.passengers.length;
   return n;
 }
 

@@ -77,6 +77,12 @@ export interface UnitLook {
   readonly frame: number;
 }
 
+/** A Passenger of the Player's own: its kind, and the Troop Carrier it is in. */
+export interface PassengerLook {
+  readonly kind: UnitKind;
+  readonly carrier: EntityId;
+}
+
 /** Where a Turret's gun points. Only Turrets that have fired are noted; the rest sit at TURRET_REST_FACING. */
 export interface TurretLook {
   readonly facing: number;
@@ -85,7 +91,7 @@ export interface TurretLook {
 
 /**
  * Something short-lived drawn over the Map: a muzzle flash, a tracer, an
- * impact, an explosion or a Rifleman falling. It shows from Tick `start`
+ * impact, an explosion, a Rifleman falling, or a round of a Heal or a Repair. It shows from Tick `start`
  * (which may be a few Ticks ahead, for blasts that follow one another) until
  * Tick `end`; its lifetime in seconds is in EFFECT_SECONDS.
  */
@@ -128,6 +134,8 @@ export interface Presentation {
   readonly tick: number;
   /** Every Unit in the last view. */
   readonly units: ReadonlyMap<EntityId, UnitLook>;
+  /** Every Passenger the last view listed inside the Player's own Troop Carriers, to tell the next view who was lost with one. */
+  readonly passengers: ReadonlyMap<EntityId, PassengerLook>;
   readonly turrets: ReadonlyMap<EntityId, TurretLook>;
   /** Every Building in the last view, remembered ones too, so the next view can tell what was placed, hit or destroyed. */
   readonly buildings: ReadonlyMap<EntityId, BuildingView>;
@@ -141,6 +149,8 @@ export interface Presentation {
   readonly marks: readonly Mark[];
   /** Which of the Player's own Buildings are newly placed and still rising, and since which Tick. */
   readonly placedAt: PlacedAt;
+  /** For each Unit or Building with a round of the heal or repair effect playing: the Tick that round ends. */
+  readonly tended: ReadonlyMap<EntityId, number>;
 }
 
 /** What happened in the Tick just shown, for sounds and alerts (sfx/eventCues.ts maps them) and effects. */
@@ -159,7 +169,9 @@ export type PresentationEvent =
   | { readonly kind: "impact"; readonly at: Vec }
   /**
    * A Unit that was in the view is gone from a Cell the Player still sees, or
-   * was the Player's own: it died. `vehicle` is false for Infantry.
+   * was the Player's own: it died. `vehicle` is false for Infantry. One of the
+   * Player's own Passengers lost with its Troop Carrier died too, `at` the
+   * Troop Carrier's place.
    */
   | {
       readonly kind: "unitDied";
@@ -168,6 +180,16 @@ export type PresentationEvent =
       readonly owner: PlayerId;
       readonly at: Vec;
     }
+  /** A Unit got into a Troop Carrier: the Player's own, or the other Player's seen doing it. `at` is where it stood. */
+  | { readonly kind: "unitBoarded"; readonly unit: UnitKind; readonly owner: PlayerId; readonly at: Vec }
+  /** A Unit got out of a Troop Carrier, under the same rule. `at` is where it got out onto. */
+  | { readonly kind: "unitUnloaded"; readonly unit: UnitKind; readonly owner: PlayerId; readonly at: Vec }
+  /**
+   * A new round of work on a Unit or Building gaining health from a Tend: a
+   * Heal for Infantry, a Repair for a Vehicle or a Building. One for each round
+   * of the effect, not one a Tick. `at` is the Unit's place or the Building's centre.
+   */
+  | { readonly kind: "tended"; readonly work: "heal" | "repair"; readonly at: Vec }
   /** A Building that stood in sight is gone; `at` is its centre. */
   | {
       readonly kind: "buildingDestroyed";
@@ -325,7 +347,35 @@ export function present(prev: Presentation | null, view: PlayerView): Presented 
   }
 
   const units = new Map<EntityId, UnitLook>();
-  for (const u of view.units) units.set(u.id, unitLook(last?.units.get(u.id), u, unitAims.get(u.id)));
+  /** The Player's own Passengers: the view lists nobody inside the other Player's Units. */
+  const passengers = new Map<EntityId, PassengerLook>();
+  for (const u of view.units) {
+    units.set(u.id, unitLook(last?.units.get(u.id), u, unitAims.get(u.id)));
+    for (const p of u.passengers ?? []) passengers.set(p.id, { kind: p.kind, carrier: u.id });
+  }
+
+  // The view names a target on every Tick it gains health. One round of the effect plays out before the
+  // next begins, however many Ticks and Units the work takes, so steady work is a calm pulse and not a pile.
+  const tended = new Map<EntityId, number>();
+  for (const [id, end] of last?.tended ?? []) if (end > tick) tended.set(id, end);
+  for (const t of view.tends) {
+    if (tended.has(t.targetId)) continue;
+    const unit = view.units.find((u) => u.id === t.targetId);
+    const building = unit ? undefined : view.buildings.find((b) => b.id === t.targetId);
+    if (!unit && !building) continue;
+    const work = unit && UNIT_STATS[unit.kind].class === "infantry" ? "heal" : "repair";
+    const at = { x: t.x, y: t.y };
+    // Sparks fly from a new spot each round: anywhere on a Building's footprint short of its edge, or about a Vehicle's hull.
+    const reachX = building ? building.width / 2 - SPARK_EDGE_CELLS : SPARK_HULL_CELLS;
+    const reachY = building ? building.height / 2 - SPARK_EDGE_CELLS : SPARK_HULL_CELLS;
+    const spot =
+      work === "heal"
+        ? at
+        : { x: at.x + (hash2(t.targetId, tick, 31) * 2 - 1) * reachX, y: at.y + (hash2(t.targetId, tick, 32) * 2 - 1) * reachY };
+    effect(work, spot);
+    tended.set(t.targetId, tick + ticksOf(EFFECT_SECONDS[work]));
+    events.push({ kind: "tended", work, at });
+  }
 
   const turrets = new Map<EntityId, TurretLook>();
   for (const b of view.buildings) {
@@ -355,22 +405,59 @@ export function present(prev: Presentation | null, view: PlayerView): Presented 
       if (!attack || nearOwnBuildings) attack = { kind: "underAttack", hit: "unit", at, nearOwnBuildings };
     };
 
-    // The Simulation takes a Unit out of the Match only when it dies, so one missing from the view either
-    // died or is out of sight. The Player's own are always in the view: missing is dead, wherever it was.
+    // Units getting in and out, as the view tells them: the Player's own, and the other Player's seen doing it.
+    const boarded = new Set<EntityId>();
+    /** Where each Unit that got out stepped onto the Map. */
+    const unloaded = new Map<EntityId, Vec>();
+    for (const e of view.passengerEvents) {
+      const at = { x: e.x, y: e.y };
+      if (e.type === "board") boarded.add(e.unitId);
+      else unloaded.set(e.unitId, at);
+      events.push({ kind: e.type === "board" ? "unitBoarded" : "unitUnloaded", unit: e.kind, owner: e.owner, at });
+    }
+
+    /** A Unit that died on the Map: told, seen to fall or blow up, and marked on the ground. */
+    const diedOnMap = (unit: UnitKind, owner: PlayerId, at: Vec, facing: number): void => {
+      const vehicle = UNIT_STATS[unit].class === "vehicle";
+      events.push({ kind: "unitDied", unit, vehicle, owner, at });
+      if (vehicle) effect("smallExplosion", at);
+      else effect("fall", at, { owner, facing });
+      mark(vehicle ? "wreck" : "body", at, { unit, owner, facing });
+      if (owner === me) hitUnit(at);
+    };
+
+    // The Simulation takes a Unit off the Map only when it dies or becomes a Passenger, so one missing from
+    // the view died, got into a Troop Carrier or is out of sight. The Player's own are always in the view,
+    // on the Map or listed inside their Troop Carrier: missing from both is dead, wherever it was.
     // The other Player's died only if this Player still sees everywhere it could be by now: where it
-    // stood and one Tick's travel round it. Otherwise it may just have gone out of sight, and a death
-    // there is not this Player's to know (Fog of War).
+    // stood and one Tick's travel round it, and was not seen getting in. Otherwise it may just have gone
+    // out of sight, and a death there is not this Player's to know (Fog of War).
     for (const [id, was] of last.units) {
-      if (units.has(id)) continue;
+      // Got in and is already lost with its Troop Carrier, or out again: the lists below tell of it.
+      if (units.has(id) || passengers.has(id) || boarded.has(id)) continue;
       const own = was.owner === me;
       if (!own && !visibleAround(was.x, was.y, UNIT_STATS[was.kind].speed / TICKS_PER_SECOND)) continue;
-      const at = { x: was.x, y: was.y };
-      const vehicle = UNIT_STATS[was.kind].class === "vehicle";
-      events.push({ kind: "unitDied", unit: was.kind, vehicle, owner: was.owner, at });
-      if (vehicle) effect("smallExplosion", at);
-      else effect("fall", at, { owner: was.owner, facing: was.facing });
-      mark(vehicle ? "wreck" : "body", at, { unit: was.kind, owner: was.owner, facing: was.facing });
-      if (own) hitUnit(at);
+      diedOnMap(was.kind, was.owner, { x: was.x, y: was.y }, was.facing);
+    }
+    // A Passenger of the Player's own that is neither inside nor out any more was lost with its Troop Carrier,
+    // whether it was inside in the last view or got in and was lost within this one Tick. Nobody is seen to
+    // fall and no mark is left: the Troop Carrier's own blast and wreck are there.
+    const lostInside = (id: EntityId, kind: UnitKind, at: Vec): void => {
+      if (units.has(id) || passengers.has(id)) return;
+      events.push({ kind: "unitDied", unit: kind, vehicle: false, owner: me, at });
+      hitUnit(at);
+    };
+    for (const [id, was] of last.passengers) {
+      if (units.has(id) || passengers.has(id)) continue;
+      // Out before it died (by a Command since the last view): it fell on the Map, where it had stepped out.
+      const out = unloaded.get(id);
+      const carrier = last.units.get(was.carrier);
+      if (out) diedOnMap(was.kind, me, out, firstFacing(id));
+      // The Troop Carrier was in the last view with it, so its place is known.
+      else if (carrier) lostInside(id, was.kind, { x: carrier.x, y: carrier.y });
+    }
+    for (const e of view.passengerEvents) {
+      if (e.type === "board" && e.owner === me && !last.passengers.has(e.unitId)) lostInside(e.unitId, e.kind, { x: e.x, y: e.y });
     }
     for (const [id, u] of units) {
       const was = last.units.get(id);
@@ -422,7 +509,8 @@ export function present(prev: Presentation | null, view: PlayerView): Presented 
     // Refinery was not.) The queue's length says nothing: a Command between two Ticks can add to it or take from it.
     const usedTrainers = new Set<EntityId>();
     for (const u of view.units) {
-      if (u.owner !== me || last.units.has(u.id)) continue;
+      // One that has just got out of a Troop Carrier is new to the Map and was trained long ago.
+      if (u.owner !== me || last.units.has(u.id) || unloaded.has(u.id)) continue;
       for (const [id, was] of last.buildings) {
         const training = was.owner === me ? was.training : null;
         if (!training || training.queue[0] !== u.kind || usedTrainers.has(id)) continue;
@@ -442,6 +530,7 @@ export function present(prev: Presentation | null, view: PlayerView): Presented 
       playerId: me,
       tick,
       units,
+      passengers,
       turrets,
       buildings,
       visibility: view.map.visibility,
@@ -450,10 +539,16 @@ export function present(prev: Presentation | null, view: PlayerView): Presented 
       effects: effects.length > MAX_EFFECTS ? effects.slice(-MAX_EFFECTS) : effects,
       marks: marks.length > MAX_MARKS ? marks.slice(-MAX_MARKS) : marks,
       placedAt: risingBuildings(last, view),
+      tended,
     },
     events,
   };
 }
+
+/** How far inside a Building's footprint the sparks of a Repair stay, so none fly from the ground beside it. */
+const SPARK_EDGE_CELLS = 0.35;
+/** How far from a Vehicle's middle they fly from: on the hull. */
+const SPARK_HULL_CELLS = 0.2;
 
 /** How finely a tracer's line is checked against Fog of War, in Cells: one art pixel, as fine as it is drawn. */
 const SIGHT_STEP_CELLS = 1 / ART_CELL_PX;

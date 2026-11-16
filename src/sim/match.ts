@@ -70,6 +70,8 @@ export function createMatch(map: MapDef, seed: number, options: MatchOptions = {
     status: { state: "running" },
     shots: [],
     tends: [],
+    passengerEvents: [],
+    damaged: new Set(),
   };
   for (const player of PLAYER_IDS) {
     const start = startOf(player);
@@ -118,7 +120,7 @@ export function issueCommand(match: Match, player: PlayerId, command: Command): 
   if (cell && !(Number.isInteger(cell.x) && Number.isInteger(cell.y))) return reject("that is not a Cell");
   const handler = COMMAND_HANDLERS[command.type] as CommandHandler<typeof command.type>;
   const result = handler(m, player, command as never);
-  // Here, not in each handler, so every Command that names a Unit counts as "given a Command", present and future.
+  // Here and not in each handler: "was given a Command" has no other single place, present and future, and Stop leaves no other mark.
   if (result.ok && "unitIds" in command) forgetLeftAtLeash(m, player, command.unitIds);
   return result;
 }

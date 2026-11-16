@@ -224,6 +224,26 @@ export const TEND = {
   retryTicks: 5 * TICKS_PER_SECOND,
 } as const;
 
+export const TROOP_CARRIER = {
+  /** Most Passengers a Troop Carrier holds. */
+  capacity: 5,
+  /** How far, in Cells, a Troop Carrier reaches for idle Infantry of its own Player when it collects. */
+  pickupRadius: 2,
+} as const;
+
+/**
+ * How many Passengers a Unit of that kind has room for; 0 for a kind that
+ * carries nobody. Every rule that asks "can it carry?" asks here.
+ */
+export function passengerRoom(kind: UnitKind): number {
+  return kind === "troopCarrier" ? TROOP_CARRIER.capacity : 0;
+}
+
+/** True for a Unit kind that carries Passengers. */
+export function isTroopCarrier(kind: UnitKind): boolean {
+  return passengerRoom(kind) > 0;
+}
+
 export const PLACEMENT = {
   /** Most empty Cells allowed between a new Building and the nearest own Building. */
   maxGap: 3,

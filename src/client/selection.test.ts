@@ -17,7 +17,7 @@ import {
 } from "./selection";
 
 function u(id: number, owner: 0 | 1, x: number, y: number): UnitView {
-  return { id, kind: "rifleman", owner, x, y, prevX: x, prevY: y, hp: 50, maxHp: 50, cargo: 0 };
+  return { id, kind: "rifleman", owner, x, y, prevX: x, prevY: y, hp: 50, maxHp: 50, cargo: 0, passengers: [] };
 }
 
 const units = [u(1, 0, 2.5, 2.5), u(2, 0, 3.5, 2.5), u(3, 1, 5.5, 5.5), u(4, 0, 8.5, 8.5)];
@@ -193,5 +193,13 @@ describe("sameKindInBox", () => {
     const ids = sameKindInBox(mixed, mixed[0]!, viewA, viewB, 0);
     expect(boxSelect(new Set([3]), ids, true)).toEqual(new Set([1, 2, 3]));
     expect(boxSelect(new Set([3]), ids, false)).toEqual(new Set([1, 2]));
+  });
+});
+
+describe("a selected Unit that gets into a Troop Carrier", () => {
+  it("leaves the selection, as it is no longer on the Map; the Troop Carrier stays selected", () => {
+    const carrier = { ...u(9, 0, 6.5, 6.5), kind: "troopCarrier" as const, passengers: [{ id: 2, kind: "rifleman" as const }] };
+    const pruned = pruneSelection(new Set([1, 2, 9]), [u(1, 0, 2.5, 2.5), carrier]);
+    expect([...pruned].sort()).toEqual([1, 9]);
   });
 });

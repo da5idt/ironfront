@@ -8,6 +8,8 @@ import {
   blastSize,
   FALL_FRAMES,
   FALL_PX,
+  HEAL_FRAMES,
+  HEAL_PX,
   impactBlast,
   MARK_FADE_SECONDS,
   MUZZLE_FRAMES,
@@ -16,9 +18,13 @@ import {
   paintBlast,
   paintBody,
   paintFall,
+  paintHeal,
   paintMuzzle,
+  paintRepair,
   paintRubble,
   paintWreck,
+  REPAIR_FRAMES,
+  REPAIR_PX,
   type Weapon,
   WRECK_PX,
 } from "./effectArt";
@@ -66,6 +72,9 @@ export class EffectPainter {
   private readonly bodies = new Map<PlayerId, HTMLCanvasElement>();
   /** Per vehicle: facings across. */
   private readonly wrecks = new Map<UnitKind, HTMLCanvasElement>();
+  /** The heal effect's frames, then the repair effect's, each left to right. */
+  private readonly heal = strip(range(HEAL_FRAMES).map(paintHeal), HEAL_FRAMES);
+  private readonly repair = strip(range(REPAIR_FRAMES).map(paintRepair), REPAIR_FRAMES);
   /** By footprint, made the first time a Building of that size is destroyed. */
   private readonly rubble = new Map<string, HTMLCanvasElement>();
 
@@ -117,7 +126,7 @@ export class EffectPainter {
   }
 
   /**
-   * Flashes, tracers, blasts and falling Riflemen, into the pixel world's
+   * Flashes, tracers, blasts, falling Riflemen, Heals and Repairs, into the pixel world's
    * layer above the fog. `time` is game time in Ticks. `inSight` says how
    * much of each effect the Fog of War lets through right now (0 none, 1
    * all; for a tracer, the share of its flight from the barrel): this layer
@@ -167,6 +176,19 @@ export class EffectPainter {
             S,
             S,
           );
+          break;
+        }
+        case "heal": {
+          const S = HEAL_PX;
+          const frame = Math.min(HEAL_FRAMES - 1, Math.floor(progress * HEAL_FRAMES));
+          // The sprite's bottom rows sit just under the Unit's middle, so the motes rise past its shoulders and head.
+          art.drawImage(this.heal, frame * S, 0, S, S, Math.round(x - S / 2), Math.round(y) - S + 4, S, S);
+          break;
+        }
+        case "repair": {
+          const S = REPAIR_PX;
+          const frame = Math.min(REPAIR_FRAMES - 1, Math.floor(progress * REPAIR_FRAMES));
+          art.drawImage(this.repair, frame * S, 0, S, S, Math.round(x - S / 2), Math.round(y - S / 2), S, S);
           break;
         }
       }

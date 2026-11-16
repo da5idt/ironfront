@@ -7,6 +7,8 @@ import {
   EFFECT_SECONDS,
   FALL_FRAMES,
   FALL_PX,
+  HEAL_FRAMES,
+  HEAL_PX,
   impactBlast,
   MARK_FADE_SECONDS,
   MARK_SECONDS,
@@ -15,9 +17,13 @@ import {
   paintBlast,
   paintBody,
   paintFall,
+  paintHeal,
   paintMuzzle,
+  paintRepair,
   paintRubble,
   paintWreck,
+  REPAIR_FRAMES,
+  REPAIR_PX,
   RUBBLE_MARGIN,
   WRECK_PX,
 } from "./effectArt";
@@ -153,7 +159,82 @@ describe("what a death leaves", () => {
   });
 });
 
+/** The mean row of what is painted: lower numbers are higher up the picture. */
+function meanRow(buf: PixelBuffer): number {
+  let rows = 0;
+  let count = 0;
+  for (let y = 0; y < buf.height; y++) {
+    for (let x = 0; x < buf.width; x++) {
+      if (pixelAt(buf, x, y)) {
+        rows += y;
+        count++;
+      }
+    }
+  }
+  return rows / count;
+}
+
+describe("the heal and repair effects", () => {
+  const heal = Array.from({ length: HEAL_FRAMES }, (_, f) => paintHeal(f));
+  const repair = Array.from({ length: REPAIR_FRAMES }, (_, f) => paintRepair(f));
+  /** Reds a Player or a wound could be read from: Player 1's colours, the low-health bar, the darkest fire. */
+  const REDS: string[] = [...Object.values(ART.player[1]), ART.marker.healthLow, ART.fire[0], ART.lamp.redOn];
+
+  it("are small squares with something painted in every frame, the same pixels every time", () => {
+    expect(heal.length).toBeGreaterThanOrEqual(3);
+    expect(repair.length).toBeGreaterThanOrEqual(3);
+    for (const [f, buf] of heal.entries()) {
+      expect([buf.width, buf.height]).toEqual([HEAL_PX, HEAL_PX]);
+      expect(painted(buf)).toBeGreaterThan(0);
+      expect(same(buf, paintHeal(f))).toBe(true);
+    }
+    for (const [f, buf] of repair.entries()) {
+      expect([buf.width, buf.height]).toEqual([REPAIR_PX, REPAIR_PX]);
+      expect(painted(buf)).toBeGreaterThan(0);
+      expect(same(buf, paintRepair(f))).toBe(true);
+    }
+  });
+
+  it("stay small: no bigger than a Cell and a bit, so they sit on their target and not on its neighbours", () => {
+    expect(HEAL_PX).toBeLessThanOrEqual(16);
+    expect(REPAIR_PX).toBeLessThanOrEqual(16);
+  });
+
+  it("change from every frame to the next", () => {
+    expect(HEAL_FRAMES).toBeGreaterThanOrEqual(3);
+    expect(REPAIR_FRAMES).toBeGreaterThanOrEqual(3);
+    for (let f = 1; f < HEAL_FRAMES; f++) expect(same(heal[f]!, heal[f - 1]!)).toBe(false);
+    for (let f = 1; f < REPAIR_FRAMES; f++) expect(same(repair[f]!, repair[f - 1]!)).toBe(false);
+  });
+
+  it("heal is the game's own green aid colour rising, with no red and neither Player's colour in it", () => {
+    const seen = new Set(heal.flatMap((buf) => [...colours(buf)]));
+    expect(seen.has(ART.aid.mark)).toBe(true);
+    for (const c of [...REDS, ...PLAYER_COLOURS]) expect(seen.has(c)).toBe(false);
+    // The motes drift up over the effect's life.
+    expect(meanRow(heal[HEAL_FRAMES - 1]!)).toBeLessThan(meanRow(heal[0]!) - 2);
+  });
+
+  it("repair is a bright weld point throwing sparks that spread and cool, nothing like the heal", () => {
+    const first = colours(repair[0]!);
+    expect(first.has(ART.weldSpark)).toBe(true);
+    const seen = new Set(repair.flatMap((buf) => [...colours(buf)]));
+    expect(seen.has(ART.fire[2])).toBe(true);
+    for (const c of PLAYER_COLOURS) expect(seen.has(c)).toBe(false);
+    expect(seen.has(ART.aid.mark)).toBe(false);
+    // The weld point has gone out by the last frame, and the sparks have fallen below where it was.
+    const last = repair[REPAIR_FRAMES - 1]!;
+    expect(colours(last).has(ART.weldSpark)).toBe(false);
+    expect(meanRow(last)).toBeGreaterThan(meanRow(repair[0]!));
+  });
+});
+
 describe("how long things show", () => {
+  it("heal and repair are short enough to end soon after the work does", () => {
+    expect(EFFECT_SECONDS.heal).toBeLessThanOrEqual(0.75);
+    expect(EFFECT_SECONDS.repair).toBeLessThanOrEqual(0.75);
+  });
+
   it("effects are over within a second, and marks stay much longer and fade at the end", () => {
     for (const s of Object.values(EFFECT_SECONDS)) expect(s).toBeLessThanOrEqual(1);
     for (const s of Object.values(MARK_SECONDS)) expect(s).toBeGreaterThan(MARK_FADE_SECONDS * 2);

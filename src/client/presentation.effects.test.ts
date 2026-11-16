@@ -16,6 +16,7 @@ import {
   removeTestBuilding,
   setTestBuildingHp,
   setTestCredits,
+  setTestUnitHp,
 } from "../sim/testing/setup";
 import { EFFECT_SECONDS, MARK_SECONDS, MAX_EFFECTS, MAX_MARKS } from "./art/effectArt";
 import { effectInSight, type Presentation, type PresentationEvent, present } from "./presentation";
@@ -140,6 +141,141 @@ describe("a Unit that goes from the view out of sight", () => {
     expect(seen.of("unitDied")).toMatchObject([{ owner: 0 }]);
     expect(seen.state.marks).toMatchObject([{ owner: 0 }]);
     expect(seen.state.effects.filter((e) => e.kind === "fall")).toHaveLength(1);
+  });
+
+  it("is not a death when it is the Player's own and has got into a Troop Carrier", () => {
+    const match = createMatch(openMap(30, 30), 1);
+    const carrier = addTestUnit(match, 0, "troopCarrier", { x: 10, y: 15 });
+    const rifleman = addTestUnit(match, 0, "rifleman", { x: 11, y: 15 });
+    const seen = watch(match);
+    issueCommand(match, 0, { type: "board", unitIds: [rifleman], targetId: carrier });
+    seen.run(2);
+    expect(seen.state.units.has(rifleman)).toBe(false);
+    // It is told as a Unit getting in, where it stood, and as nothing else.
+    expect(seen.events).toEqual([{ kind: "unitBoarded", unit: "rifleman", owner: 0, at: { x: 11.5, y: 15.5 } }]);
+    expect(seen.state.marks).toEqual([]);
+    expect(seen.state.effects).toEqual([]);
+    // Nor is getting out again a Unit trained: it is a Unit getting out, at the Cell it steps onto.
+    issueCommand(match, 0, { type: "unload", unitIds: [carrier] });
+    seen.run(2);
+    expect(seen.state.units.has(rifleman)).toBe(true);
+    const out = seen.state.units.get(rifleman)!;
+    expect(seen.events.slice(1)).toEqual([{ kind: "unitUnloaded", unit: "rifleman", owner: 0, at: { x: out.x, y: out.y } }]);
+  });
+
+  it("is not a death when it is the other Player's and gets into a Troop Carrier in sight", () => {
+    const match = createMatch(openMap(30, 30), 1);
+    // A Harvester watches: it sees them and shoots nobody. Medics, so nobody shoots it either... but the Troop Carrier's gun does.
+    addTestUnit(match, 0, "harvester", { x: 10, y: 13 });
+    const carrier = addTestUnit(match, 1, "troopCarrier", { x: 10, y: 15 });
+    const medic = addTestUnit(match, 1, "medic", { x: 11, y: 15 });
+    const seen = watch(match);
+    seen.run(1);
+    expect(seen.state.units.has(medic)).toBe(true);
+    issueCommand(match, 1, { type: "board", unitIds: [medic], targetId: carrier });
+    seen.run(2);
+    expect(seen.state.units.has(medic)).toBe(false);
+    expect(seen.of("unitDied")).toEqual([]);
+    expect(seen.of("unitBoarded")).toEqual([{ kind: "unitBoarded", unit: "medic", owner: 1, at: { x: 11.5, y: 15.5 } }]);
+    expect(seen.state.marks).toEqual([]);
+    expect(seen.state.effects.filter((e) => e.kind === "fall")).toEqual([]);
+  });
+
+  it("gives no event for the other Player's Unit getting in or out where this Player cannot see", () => {
+    const match = createMatch(openMap(40, 30), 1);
+    const carrier = addTestUnit(match, 1, "troopCarrier", { x: 30, y: 15 });
+    const medic = addTestUnit(match, 1, "medic", { x: 31, y: 15 });
+    const seen = watch(match);
+    issueCommand(match, 1, { type: "board", unitIds: [medic], targetId: carrier });
+    seen.run(2);
+    issueCommand(match, 1, { type: "unload", unitIds: [carrier] });
+    seen.run(2);
+    expect(seen.events).toEqual([]);
+  });
+});
+
+describe("a Troop Carrier destroyed with Passengers inside", () => {
+  /** A Troop Carrier of `owner` at (10, 15), one shot from destroyed, holding two Riflemen, with every Cell beside it taken or not. */
+  function doomed(owner: PlayerId, boxedIn: boolean) {
+    const other: PlayerId = owner === 0 ? 1 : 0;
+    const match = createMatch(openMap(30, 30), 1);
+    const carrier = addTestUnit(match, owner, "troopCarrier", { x: 10, y: 15 });
+    const inside = [0, 1].map(() => {
+      const id = addTestUnit(match, owner, "rifleman", { x: 9, y: 15 });
+      issueCommand(match, owner, { type: "board", unitIds: [id], targetId: carrier });
+      advanceTick(match);
+      return id;
+    });
+    if (boxedIn) {
+      for (let dy = -1; dy <= 1; dy++) {
+        for (let dx = -1; dx <= 1; dx++) {
+          if (dx !== 0 || dy !== 0) addTestUnit(match, owner, "harvester", { x: 10 + dx, y: 15 + dy });
+        }
+      }
+    }
+    setTestUnitHp(match, carrier, 1);
+    const shooter = addTestUnit(match, other, "raider", { x: 13, y: 15 });
+    issueCommand(match, other, { type: "attack", unitIds: [shooter], targetId: carrier });
+    return { match, carrier, inside };
+  }
+
+  it("tells its own Player of each Passenger lost with it, where it stood, besides the Troop Carrier itself", () => {
+    const { match } = doomed(0, true);
+    const seen = watch(match);
+    seen.runUntil("unitDied", 100);
+    const at = { x: 10.5, y: 15.5 };
+    expect(seen.of("unitDied")).toEqual([
+      { kind: "unitDied", unit: "troopCarrier", vehicle: true, owner: 0, at },
+      { kind: "unitDied", unit: "rifleman", vehicle: false, owner: 0, at },
+      { kind: "unitDied", unit: "rifleman", vehicle: false, owner: 0, at },
+    ]);
+    // Nobody is seen to fall: they were inside, and the wreck is what is left.
+    expect(seen.state.effects.filter((e) => e.kind === "fall")).toEqual([]);
+    expect(seen.state.marks).toMatchObject([{ kind: "wreck", unit: "troopCarrier" }]);
+    // And they are told once.
+    seen.run(5);
+    expect(seen.of("unitDied")).toHaveLength(3);
+  });
+
+  it("tells of no death for the Passengers that got out as it was destroyed", () => {
+    const { match, inside } = doomed(0, false);
+    const seen = watch(match);
+    seen.runUntil("unitDied", 100);
+    expect(seen.of("unitDied")).toMatchObject([{ unit: "troopCarrier" }]);
+    expect(seen.of("unitUnloaded")).toHaveLength(2);
+    for (const id of inside) expect(seen.state.units.has(id)).toBe(true);
+  });
+
+  it("tells of a Passenger that got out and was killed before the next view as a death on the Map, where it got out", () => {
+    const match = createMatch(openMap(30, 30), 1);
+    const carrier = addTestUnit(match, 0, "troopCarrier", { x: 10, y: 15 });
+    const rifleman = addTestUnit(match, 0, "rifleman", { x: 9, y: 15 });
+    // One shot from dead once it is out.
+    setTestUnitHp(match, rifleman, 1);
+    issueCommand(match, 0, { type: "board", unitIds: [rifleman], targetId: carrier });
+    advanceTick(match);
+    // In range of the Cell a Passenger gets out onto, (10, 14), and not of the Troop Carrier.
+    addTestUnit(match, 1, "rifleman", { x: 10, y: 11 });
+    const seen = watch(match);
+    expect(seen.state.passengers.has(rifleman)).toBe(true);
+    // Out by a Command, and shot in the Tick after it: the next view has it neither inside nor on the Map.
+    issueCommand(match, 0, { type: "unload", unitIds: [carrier] });
+    seen.run(1);
+    const at = { x: 10.5, y: 14.5 };
+    expect(seen.of("unitUnloaded")).toEqual([{ kind: "unitUnloaded", unit: "rifleman", owner: 0, at }]);
+    expect(seen.of("unitDied")).toEqual([{ kind: "unitDied", unit: "rifleman", vehicle: false, owner: 0, at }]);
+    expect(seen.state.effects.filter((e) => e.kind === "fall")).toMatchObject([{ at, owner: 0 }]);
+    expect(seen.state.marks).toMatchObject([{ kind: "body", unit: "rifleman", at }]);
+  });
+
+  it("tells the other Player of the Troop Carrier alone: who was inside is not its to know", () => {
+    const { match } = doomed(1, true);
+    const seen = watch(match);
+    seen.runUntil("unitDied", 100);
+    seen.run(3);
+    expect(seen.of("unitDied")).toEqual([
+      { kind: "unitDied", unit: "troopCarrier", vehicle: true, owner: 1, at: { x: 10.5, y: 15.5 } },
+    ]);
   });
 
   it("is not a death when it has only driven off", () => {
@@ -555,5 +691,114 @@ describe("building and training", () => {
     seen.run(20);
     expect(count(0, "harvester")).toBe(2);
     expect(seen.of("unitTrained")).toEqual([]);
+  });
+});
+
+describe("a Unit or Building gaining health from a Tend", () => {
+  const ROUND_TICKS = Math.round(EFFECT_SECONDS.heal * TICKS_PER_SECOND);
+  const shown = (seen: ReturnType<typeof watch>, kind: "heal" | "repair") => seen.state.effects.filter((e) => e.kind === kind);
+
+  /** A Medic beside a hurt Rifleman, already told to Tend it. */
+  function healing(owner: PlayerId = 0) {
+    const match = createMatch(openMap(40, 30), 1);
+    const medic = addTestUnit(match, owner, "medic", { x: 10, y: 15 });
+    const hurt = addTestUnit(match, owner, "rifleman", { x: 11, y: 15 });
+    setTestUnitHp(match, hurt, 5);
+    issueCommand(match, owner, { type: "tend", unitIds: [medic], targetId: hurt });
+    return { match, medic, hurt };
+  }
+
+  it("shows a heal effect on an Infantry Unit while a Medic heals it, and tells of it where the Unit is", () => {
+    const { match } = healing();
+    const seen = watch(match);
+    seen.run(3);
+    expect(shown(seen, "heal")).toMatchObject([{ at: { x: 11.5, y: 15.5 } }]);
+    expect(shown(seen, "repair")).toEqual([]);
+    expect(seen.of("tended")).toEqual([{ kind: "tended", work: "heal", at: { x: 11.5, y: 15.5 } }]);
+  });
+
+  it("plays one round of the effect after another, not a new one every Tick, however many Medics are at work", () => {
+    const { match, hurt } = healing();
+    const second = addTestUnit(match, 0, "medic", { x: 11, y: 16 });
+    issueCommand(match, 0, { type: "tend", unitIds: [second], targetId: hurt });
+    const seen = watch(match);
+    const ticks = 3 * ROUND_TICKS;
+    for (let t = 0; t < ticks; t++) {
+      seen.run(1);
+      expect(shown(seen, "heal").length).toBeLessThanOrEqual(1);
+    }
+    // The Rifleman is still short of full health, so the work went on through every one of those Ticks.
+    expect(getPlayerView(match, 0).units.find((u) => u.id === hurt)!.hp).toBeLessThan(UNIT_STATS.rifleman.maxHp);
+    expect(seen.of("tended")).toHaveLength(3);
+  });
+
+  it("ends with the work: once the Unit is at full health no new round starts and the last one plays out", () => {
+    const { match, hurt } = healing();
+    setTestUnitHp(match, hurt, UNIT_STATS.rifleman.maxHp - 2);
+    const seen = watch(match);
+    seen.run(2 * TICKS_PER_SECOND);
+    expect(getPlayerView(match, 0).units.find((u) => u.id === hurt)!.hp).toBe(UNIT_STATS.rifleman.maxHp);
+    expect(shown(seen, "heal")).toEqual([]);
+    expect(seen.of("tended")).toHaveLength(1);
+  });
+
+  it("shows a repair effect on a Vehicle a Mechanic repairs", () => {
+    const match = createMatch(openMap(40, 30), 1);
+    const mechanic = addTestUnit(match, 0, "mechanic", { x: 10, y: 15 });
+    const raider = addTestUnit(match, 0, "raider", { x: 11, y: 15 });
+    setTestUnitHp(match, raider, 20);
+    // The Raider is told to stay, so it is where the effect is looked for.
+    issueCommand(match, 0, { type: "tend", unitIds: [mechanic], targetId: raider });
+    const seen = watch(match);
+    seen.run(3);
+    expect(shown(seen, "heal")).toEqual([]);
+    expect(shown(seen, "repair")).toHaveLength(1);
+    const { at } = shown(seen, "repair")[0]!;
+    // On the hull, not beside it.
+    expect(Math.hypot(at.x - 11.5, at.y - 15.5)).toBeLessThanOrEqual(0.4);
+    expect(seen.of("tended")).toEqual([{ kind: "tended", work: "repair", at: { x: 11.5, y: 15.5 } }]);
+  });
+
+  it("shows a repair effect on a Building a Mechanic repairs, somewhere on its footprint and not always the same spot", () => {
+    const match = createMatch(openMap(40, 30), 1);
+    addTestBuilding(match, 0, "barracks", { x: 11, y: 14 });
+    const barracks = getPlayerView(match, 0).buildings.find((b) => b.kind === "barracks")!;
+    setTestBuildingHp(match, barracks.id, 100);
+    const mechanic = addTestUnit(match, 0, "mechanic", { x: 10, y: 15 });
+    issueCommand(match, 0, { type: "tend", unitIds: [mechanic], targetId: barracks.id });
+    const seen = watch(match);
+    const spots = new Set<string>();
+    for (let t = 0; t < 4 * TICKS_PER_SECOND; t++) {
+      seen.run(1);
+      expect(shown(seen, "repair").length).toBeLessThanOrEqual(1);
+      for (const e of shown(seen, "repair")) {
+        expect(e.at.x).toBeGreaterThan(barracks.x);
+        expect(e.at.x).toBeLessThan(barracks.x + barracks.width);
+        expect(e.at.y).toBeGreaterThan(barracks.y);
+        expect(e.at.y).toBeLessThan(barracks.y + barracks.height);
+        spots.add(`${e.at.x},${e.at.y}`);
+      }
+    }
+    expect(spots.size).toBeGreaterThan(2);
+    // The sound comes from the Building, wherever on it the sparks fly.
+    const centre = { x: barracks.x + barracks.width / 2, y: barracks.y + barracks.height / 2 };
+    expect(seen.of("tended")[0]).toEqual({ kind: "tended", work: "repair", at: centre });
+  });
+
+  it("is shown for the other Player's Unit healed in sight, and never for one healed under Fog of War", () => {
+    const inSight = healing(1);
+    // The Player's own Harvester (unarmed, so nobody is shot) stands where it sees the healing.
+    addTestUnit(inSight.match, 0, "harvester", { x: 11, y: 13 });
+    const near = watch(inSight.match, 0);
+    near.run(3);
+    expect(near.of("tended")).toEqual([{ kind: "tended", work: "heal", at: { x: 11.5, y: 15.5 } }]);
+    expect(shown(near, "heal")).toHaveLength(1);
+
+    const hidden = healing(1);
+    addTestUnit(hidden.match, 0, "harvester", { x: 35, y: 25 });
+    const far = watch(hidden.match, 0);
+    far.run(ROUND_TICKS * 2);
+    expect(far.of("tended")).toEqual([]);
+    expect(far.state.effects).toEqual([]);
   });
 });

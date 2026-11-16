@@ -16,6 +16,8 @@ export type KeyAction =
   | { readonly type: "attackMove" }
   /** Stops the selected Units. */
   | { readonly type: "stop" }
+  /** Unloads the selected Troop Carriers. */
+  | { readonly type: "unload" }
   /** One zoom step: 1 in, -1 out. */
   | { readonly type: "zoom"; readonly steps: 1 | -1 }
   | { readonly type: "togglePause" }
@@ -54,6 +56,7 @@ const KEYS: Readonly<Record<string, KeyAction>> = {
   NumpadSubtract: { type: "zoom", steps: -1 },
   KeyA: { type: "attackMove" },
   KeyS: { type: "stop" },
+  KeyU: { type: "unload" },
   KeyP: { type: "togglePause" },
   Escape: { type: "back" },
   KeyM: { type: "muteAll" },

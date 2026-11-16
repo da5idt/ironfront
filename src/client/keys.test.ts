@@ -73,6 +73,18 @@ describe("Command keys", () => {
     expect(worksUnderScreen({ type: "attackMove" })).toBe(false);
     expect(worksUnderScreen({ type: "stop" })).toBe(false);
   });
+
+  it("U Unloads the selected Troop Carriers, and does nothing under a screen", () => {
+    expect(keyAction(press("KeyU"))).toEqual({ type: "unload" });
+    expect(worksUnderScreen({ type: "unload" })).toBe(false);
+  });
+
+  it("U is left to the browser with Ctrl, Cmd or Alt, where Ctrl+U shows the page's source", () => {
+    for (const held of [{ ctrlKey: true }, { metaKey: true }, { altKey: true }]) {
+      expect(keyAction(press("KeyU", held))).toBeNull();
+    }
+  });
+
 });
 
 describe("zoom keys", () => {
