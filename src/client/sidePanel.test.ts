@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { BUILDING_STATS, type BuildingView, type ProductionView, TRAINING, type TrainingView, UNIT_STATS } from "../sim";
+import { BUILDING_STATS, type BuildingView, type ProductionView, TRAINING, type TrainingView, TRAINS, UNIT_STATS } from "../sim";
 import { creditsShortPress, type SidePanelView, sidePanelPress } from "./sidePanel";
 import { buildButtons } from "./buildPanel";
 import { keyAction } from "./keys";
@@ -52,7 +52,7 @@ describe("pressing a side panel button by key", () => {
     for (const index of [1, 2, 3]) expect(sidePanelPress(view, 2, AREA, { index }, "left")).toBeNull();
   });
 
-  it("with a Vehicle Factory selected, trains a Raider on the first key and a Harvester on the second, and nothing on the third", () => {
+  it("with a Vehicle Factory selected, trains a Raider on the first key, a Harvester on the second and a Troop Carrier on its last button", () => {
     const view = panelView(10_000);
     expect(sidePanelPress(view, 3, AREA, { index: 0 }, "left")).toEqual({
       type: "command",
@@ -62,7 +62,13 @@ describe("pressing a side panel button by key", () => {
       type: "command",
       command: { type: "train", buildingId: 3, kind: "harvester" },
     });
-    expect(sidePanelPress(view, 3, AREA, { index: 2 }, "left")).toBeNull();
+    const last = TRAINS.vehicleFactory!.length - 1;
+    expect(sidePanelPress(view, 3, AREA, { index: last }, "left")).toEqual({
+      type: "command",
+      command: { type: "train", buildingId: 3, kind: "troopCarrier" },
+    });
+    // No button past the last: the next key does nothing.
+    expect(sidePanelPress(view, 3, AREA, { index: last + 1 }, "left")).toBeNull();
   });
 
   it("with a Hospital selected, trains a Medic on the first key (Z) and does nothing on the others", () => {

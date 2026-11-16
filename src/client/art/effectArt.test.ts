@@ -124,7 +124,7 @@ describe("what a death leaves", () => {
   });
 
   it("a wreck is burnt bare: none of its Player's colour is left on it, and it keeps the way the vehicle faced", () => {
-    for (const kind of ["raider", "harvester"] as const) {
+    for (const kind of ["raider", "harvester", "troopCarrier"] as const) {
       const pictures = new Set<string>();
       for (let facing = 0; facing < 16; facing++) {
         const wreck = paintWreck(kind, facing);

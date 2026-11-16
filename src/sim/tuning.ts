@@ -92,6 +92,20 @@ export const UNIT_STATS: Readonly<Record<UnitKind, UnitStats>> = {
     reloadTicks: 0,
     sight: 3,
   },
+  troopCarrier: {
+    name: "Troop Carrier",
+    class: "vehicle",
+    cost: 600,
+    trainTicks: 10 * TICKS_PER_SECOND,
+    maxHp: 220,
+    speed: 3.5,
+    // A light gun: the Raider's reach and reload at half its damage, enough to
+    // answer Infantry but no match for a Raider.
+    damage: 5,
+    range: 4,
+    reloadTicks: 12,
+    sight: 6,
+  },
 };
 
 export const BUILDING_STATS: Readonly<Record<BuildingKind, BuildingStats>> = {

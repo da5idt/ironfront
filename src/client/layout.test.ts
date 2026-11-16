@@ -132,9 +132,11 @@ describe("the side panel on a short window", () => {
   it("sizes the train buttons like the build buttons", () => {
     for (const height of [800, 657, 600]) {
       const area = computeLayout({ width: 1366, height }).buttons;
-      expect(trainButtons(area, "vehicleFactory").map((b) => b.rect)).toEqual(
+      const train = trainButtons(area, "vehicleFactory").map((b) => b.rect);
+      expect(train.length).toBeGreaterThanOrEqual(3);
+      expect(train).toEqual(
         buildButtons(area)
-          .slice(0, 2)
+          .slice(0, train.length)
           .map((b) => b.rect),
       );
     }

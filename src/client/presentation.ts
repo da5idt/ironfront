@@ -202,6 +202,8 @@ const UNIT_WEAPON: Readonly<Record<UnitKind, Weapon | null>> = {
   medic: null,
   raider: "raiderGun",
   harvester: null,
+  // A light gun on a Vehicle's mount: it shares the Raider's flash and sound rather than getting a third small-arms look.
+  troopCarrier: "raiderGun",
 };
 
 export interface Presented {
