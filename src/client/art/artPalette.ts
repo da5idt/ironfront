@@ -52,7 +52,7 @@ export const ART = {
   /** Pale painted panels: the Hospital's roof and walls. */
   ward: { dark: "#98a2a6", mid: "#ccd4d7", light: "#edf1f2" },
   /** The Hospital's plus sign. A green of its own, so it never reads as either Player's colour or as fire. */
-  aid: { mark: "#2fae7c", shade: "#1e7656" },
+  aid: { mark: "#2fae7c", shade: "#1e7656", glow: "#aef5d0", core: "#f6fffa" },
   /** A Mechanic's hard hat. Brighter and yellower than Ore, and neither Player's colour. */
   hardHat: { dark: "#a87c14", mid: "#e8b820", light: "#f8e078" },
   /** A Mechanic's oil-dark overalls. */
@@ -65,7 +65,7 @@ export const ART = {
   /** The placement preview's wash: green where the Building fits, red where it does not. */
   placing: { fits: "#5fd35f", blocked: "#e04a3a" },
   /** Pixel-style selection brackets and health bars. */
-  marker: { selection: "#f4f4a0", healthBack: "#0a0c0e", healthGood: "#5fd35f", healthLow: "#e04a3a" },
+  marker: { selection: "#f4f4a0", healthBack: "#0a0c0e", healthGood: "#5fd35f", healthLow: "#e04a3a", passenger: "#bfe9ff" },
   /** Minimap and frame trims around the Map view. */
   frame: { dark: "#0c0e12", mid: "#3a414c", light: "#6b7480" },
 } as const satisfies {

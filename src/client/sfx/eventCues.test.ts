@@ -43,6 +43,18 @@ describe("sounds for presentation events", () => {
     ]);
   });
 
+  it("plays a short sound where a Unit gets into a Troop Carrier, and another where one gets out", () => {
+    expect(soundsForEvent({ kind: "unitBoarded", unit: "rifleman", owner: 0, at })).toEqual([{ name: "board", at }]);
+    expect(soundsForEvent({ kind: "unitUnloaded", unit: "medic", owner: 1, at })).toEqual([{ name: "unload", at }]);
+  });
+
+  it("plays a soft heal sound where a Unit is healed and a tool sound where something is repaired", () => {
+    expect(soundsForEvent({ kind: "tended", work: "heal", at })).toEqual([{ name: "heal", at }]);
+    expect(soundsForEvent({ kind: "tended", work: "repair", at })).toEqual([{ name: "repair", at }]);
+    // Nothing to say aloud: the work is the person's own doing, or the other Player's.
+    expect(alertForEvent({ kind: "tended", work: "heal", at }, 0)).toBeNull();
+  });
+
   it("plays a large explosion where a Building is destroyed", () => {
     expect(soundsForEvent({ kind: "buildingDestroyed", building: "hq", owner: 0, at })).toEqual([
       { name: "largeExplosion", at },
@@ -88,6 +100,11 @@ describe("the alert a presentation event raises", () => {
     // The same events seen from the other chair.
     expect(alertForEvent(unit(1), 1)).toEqual({ kind: "unitFallen" });
     expect(alertForEvent(building(0), 1)).toBeNull();
+  });
+
+  it("says nothing for Units getting into and out of a Troop Carrier", () => {
+    expect(alertForEvent({ kind: "unitBoarded", unit: "rifleman", owner: 0, at }, 0)).toBeNull();
+    expect(alertForEvent({ kind: "unitUnloaded", unit: "rifleman", owner: 0, at }, 0)).toBeNull();
   });
 
   it("says nothing for shots, impacts and Buildings going down", () => {

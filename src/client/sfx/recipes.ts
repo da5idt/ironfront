@@ -36,6 +36,13 @@ export interface Recipe {
   readonly layers: readonly Layer[];
   /** How many of this sound may play at once, so a big fight does not stack dozens of the same one. */
   readonly cap: number;
+  /**
+   * Least seconds from one start of this sound to the next, for a sound whose
+   * cause goes on Tick after Tick (work, not a shot): the cap alone would let
+   * it start again the moment it ends, and it would run together into a drone.
+   * Left out, only the cap limits it.
+   */
+  readonly gap?: number;
 }
 
 export const SOUND_NAMES = [
@@ -52,6 +59,10 @@ export const SOUND_NAMES = [
   "commandAck",
   "menuClick",
   "cantBuild",
+  "board",
+  "unload",
+  "heal",
+  "repair",
 ] as const;
 export type SoundName = (typeof SOUND_NAMES)[number];
 
@@ -161,6 +172,44 @@ export const RECIPES: Record<SoundName, Recipe> = {
     layers: [
       { kind: "tone", wave: "sawtooth", start: 0, duration: 0.09, gain: 0.3, from: 150, to: 132, attack: 0.005 },
       { kind: "tone", wave: "sawtooth", start: 0.12, duration: 0.12, gain: 0.3, from: 150, to: 118, attack: 0.005 },
+    ],
+  },
+  // Boots up a ramp and a hatch shut: two soft knocks going down in pitch. Capped low, as several Units get in almost at once.
+  board: {
+    cap: 2,
+    layers: [
+      { kind: "tone", wave: "triangle", start: 0, duration: 0.06, gain: 0.3, from: 300, to: 190 },
+      { kind: "noise", filter: "lowpass", start: 0, duration: 0.05, gain: 0.22, from: 900, to: 300 },
+      { kind: "tone", wave: "triangle", start: 0.08, duration: 0.09, gain: 0.3, from: 210, to: 120 },
+    ],
+  },
+  // The same two knocks the other way up, with a breath of air as the hatch opens: out, where board is in.
+  unload: {
+    cap: 2,
+    layers: [
+      { kind: "tone", wave: "triangle", start: 0, duration: 0.06, gain: 0.3, from: 170, to: 250 },
+      { kind: "noise", filter: "bandpass", start: 0.02, duration: 0.12, gain: 0.16, from: 700, to: 1900, attack: 0.03 },
+      { kind: "tone", wave: "triangle", start: 0.08, duration: 0.09, gain: 0.3, from: 240, to: 360 },
+    ],
+  },
+  // A Heal at work: two soft notes easing in, the second a third above the first. No noise in it, so it never reads as a hit.
+  heal: {
+    cap: 1,
+    gap: 0.9,
+    layers: [
+      { kind: "tone", wave: "sine", start: 0, duration: 0.2, gain: 0.16, from: 587, to: 600, attack: 0.04 },
+      { kind: "tone", wave: "sine", start: 0.1, duration: 0.22, gain: 0.13, from: 740, to: 760, attack: 0.05 },
+    ],
+  },
+  // A Repair at work: two taps of a tool on plate, each a ring of metal with a tick of grit, the second lower.
+  repair: {
+    cap: 1,
+    gap: 0.6,
+    layers: [
+      { kind: "tone", wave: "triangle", start: 0, duration: 0.07, gain: 0.26, from: 1480, to: 1400 },
+      { kind: "noise", filter: "bandpass", q: 4, start: 0, duration: 0.03, gain: 0.2, from: 3400, to: 2400 },
+      { kind: "tone", wave: "triangle", start: 0.12, duration: 0.09, gain: 0.22, from: 1180, to: 1100 },
+      { kind: "noise", filter: "bandpass", q: 4, start: 0.12, duration: 0.03, gain: 0.16, from: 3000, to: 2000 },
     ],
   },
 };

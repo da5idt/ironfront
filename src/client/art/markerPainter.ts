@@ -1,3 +1,4 @@
+import type { PassengerMark } from "../unitMarkers";
 import { ART } from "./artPalette";
 
 // Selection brackets and health bars in the pixel world's own chunky pixels,
@@ -80,4 +81,23 @@ export function drawGroupNumber(
       if (row[dx] === "#") art.fillRect(x + 1 + dx * dotPx, y + 1 + dy * dotPx, dotPx, dotPx);
     }
   });
+}
+
+/**
+ * Passenger marks for the Unit centred at cx, cy: the taken places bright and the free ones dark, so a free
+ * place still reads as a place on pale ground. `marks` are measured from that centre.
+ */
+export function drawPassengerMarks(
+  art: CanvasRenderingContext2D,
+  cx: number,
+  cy: number,
+  marks: readonly PassengerMark[],
+): void {
+  // One colour at a time: this runs for every own Troop Carrier in every frame.
+  for (const filled of [false, true]) {
+    art.fillStyle = filled ? marker.passenger : marker.healthBack;
+    for (const mark of marks) {
+      if (mark.filled === filled) art.fillRect(cx + mark.box.x, cy + mark.box.y, mark.box.width, mark.box.height);
+    }
+  }
 }

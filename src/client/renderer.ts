@@ -1,7 +1,7 @@
 import type { BuildingKind, CellPos, EntityId, PlayerView } from "../sim";
 import { BuildingPainter } from "./art/buildingPainter";
 import { EffectPainter } from "./art/effectPainter";
-import { drawBrackets, drawGroupNumber, drawHealthBar, HEALTH_BAR_PX } from "./art/markerPainter";
+import { drawBrackets, drawGroupNumber, drawHealthBar, drawPassengerMarks, HEALTH_BAR_PX } from "./art/markerPainter";
 import { PixelWorld } from "./art/pixelWorld";
 import { ART_CELL_PX } from "./art/terrainArt";
 import { UnitPainter } from "./art/unitPainter";
@@ -29,7 +29,7 @@ import { drawAlertBanner } from "./sfx/alertBannerPainter";
 import { drawSoundStrip } from "./sfx/soundStripPainter";
 import { trainerOf } from "./trainPanel";
 import { drawTrainPanel } from "./trainPanelPainter";
-import { UNIT_BRACKET_PX, unitMarkerBoxes } from "./unitMarkers";
+import { passengerMarks, UNIT_BRACKET_PX, unitMarkerBoxes } from "./unitMarkers";
 
 // Draws a PlayerView. It only reads; it never changes the Match (ADR 0002).
 
@@ -157,11 +157,14 @@ export class Renderer {
       const group = overlay.groupNumbers.get(u.id);
       // Damaged Units always show their health, so a fight reads without selecting anything.
       const showHealth = selected || u.hp < u.maxHp;
-      if (!showHealth && group === undefined) continue;
+      // Always on the Player's own Troop Carriers, selected or not: how full each is reads at a glance.
+      const marks = passengerMarks(u, boxes);
+      if (!showHealth && group === undefined && marks.length === 0) continue;
       const cx = Math.round((u.prevX + (u.x - u.prevX) * alpha) * U);
       const cy = Math.round((u.prevY + (u.y - u.prevY) * alpha) * U);
       if (selected) drawBrackets(art, cx + boxes.brackets.x, cy + boxes.brackets.y, UNIT_BRACKET_PX, UNIT_BRACKET_PX, 3);
       if (group !== undefined) drawGroupNumber(art, cx, cy, boxes.groupNumber, group, boxes.groupDotPx);
+      if (marks.length > 0) drawPassengerMarks(art, cx, cy, marks);
       if (showHealth) {
         drawHealthBar(art, cx + boxes.healthBar.x, cy + boxes.healthBar.y, boxes.healthBar.width, u.hp / u.maxHp);
       }

@@ -3,6 +3,7 @@ import type { HarvestOrder } from "./harvest";
 import type { MovePlan } from "./movement";
 import type { Rng } from "./rng";
 import { startHarvesting } from "./harvest";
+import type { Boarding } from "./passengers";
 import type { Tending } from "./tend";
 import { BUILDING_STATS, UNIT_STATS } from "./tuning";
 import type { BuildingKind, CellPos, EntityId, PlayerId, Terrain, UnitKind, Vec } from "./types";
@@ -23,7 +24,8 @@ export type UnitOrder =
    */
   | { readonly type: "attackMove"; readonly plan: MovePlan; firing: boolean; spot: MovePlan | null; settled: boolean }
   | HarvestOrder
-  | Tending;
+  | Tending
+  | Boarding;
 
 /** A shot fired during a Tick, kept so drawing can show a tracer. Positions in Cell units. */
 export interface Shot {
@@ -44,6 +46,24 @@ export interface Tended {
   readonly tick: number;
 }
 
+/**
+ * A Unit that got into ("board") or out of ("unload") a Troop Carrier, kept
+ * until the next Tick is over so drawing and sound can show it. It does not
+ * name the Troop Carrier, which may be out of the sight of a Player shown it.
+ */
+export interface PassengerEvent {
+  readonly type: "board" | "unload";
+  /** The id the Unit has among a view's `units` while it is on the Map. */
+  readonly unitId: EntityId;
+  readonly kind: UnitKind;
+  readonly owner: PlayerId;
+  /** Where the Unit stood, in Cell units: before it got in, or once it was out. */
+  readonly x: number;
+  readonly y: number;
+  /** The Tick it happened in. */
+  readonly tick: number;
+}
+
 export interface UnitState {
   readonly id: EntityId;
   readonly kind: UnitKind;
@@ -60,6 +80,18 @@ export interface UnitState {
   order: UnitOrder;
   /** Ore carried; only Harvesters ever hold any. */
   cargo: number;
+  /**
+   * The Passengers inside, in the order they got in; only a Troop Carrier ever
+   * holds any. A Passenger is in this list and not in the Match's Units, so
+   * every rule that walks the Units leaves it out without having to ask.
+   */
+  readonly passengers: UnitState[];
+  /**
+   * Where a Troop Carrier is on the way to collecting (passengers.ts):
+   * "atStop" while on a move or an Attack-move it began with no Passengers and
+   * has had none on since, "now" on the Tick that move ends, "no" otherwise.
+   */
+  pickUp: "no" | "atStop" | "now";
   /**
    * Tend targets this Unit found no way to, each with the Tick until which it
    * will not go to that one by itself again.
@@ -135,6 +167,14 @@ export interface MatchState {
   shots: Shot[];
   /** Targets worked on by a Tend during the last Tick, whether or not it added a whole point; replaced every Tick. */
   tends: Tended[];
+  /**
+   * Units that got into or out of a Troop Carrier since the last Tick began: in
+   * that Tick, or by a Command given after it. Each is dropped once a Tick has
+   * run after it, so every one is in exactly one Tick's views.
+   */
+  passengerEvents: PassengerEvent[];
+  /** Ids of the Units and Buildings that lost health during the last Tick; emptied every Tick. */
+  readonly damaged: Set<EntityId>;
 }
 
 /** True for a Unit; false for a Building, or one as last seen: only those have a footprint. */
@@ -178,6 +218,8 @@ export function spawnUnit(m: MatchState, owner: PlayerId, kind: UnitKind, cell: 
     // Harvesters go to work as soon as they exist, so nobody has to tell them.
     order: kind === "harvester" ? startHarvesting() : { type: "idle" },
     cargo: 0,
+    passengers: [],
+    pickUp: "no",
     unreachable: new Map(),
     leftAtLeash: new Map(),
   };
@@ -222,7 +264,7 @@ export function removeBuilding(m: MatchState, building: BuildingState): void {
   m.buildings.delete(building.id);
 }
 
-/** The Player's own Units among the given ids. Unknown and enemy ids are dropped. */
+/** The Player's own Units among the given ids. Unknown and enemy ids are dropped, and so are Passengers, who take no Commands while inside. */
 export function ownUnits(m: MatchState, player: PlayerId, ids: readonly EntityId[]): UnitState[] {
   const out: UnitState[] = [];
   for (const id of ids) {

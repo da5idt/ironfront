@@ -46,13 +46,12 @@ import { type PlacingOutcome, placingMapClick, placingPreview } from "./placing"
 import { present, type Presentation } from "./presentation";
 import { type Overlay, Renderer } from "./renderer";
 import { ATTACK_MOVE_HINT, attackMoveClick, type AttackMoveOutcome, canArmAttackMove } from "./attackMoveMode";
+import { groundTarget, rightClickCommands, unloadCommand } from "./commandChoice";
 import { backAction, keyAction, worksUnderScreen } from "./keys";
 import { type ScreenOverlay, screenOverlay } from "./screenOverlay";
 import {
   boxSelect,
   clickSelect,
-  enemyBuildingAt,
-  enemyUnitAt,
   isDoubleClick,
   isDrag,
   ownBuildingAt,
@@ -191,6 +190,12 @@ window.addEventListener("keydown", (e) => {
         sfx.play("commandAck");
       }
       return;
+    case "unload": {
+      const command = unloadCommand(view, selection);
+      // The Passengers' own sound comes with the next Tick's view, like every sound of the Match.
+      if (command && issue(command).ok) sfx.play("commandAck");
+      return;
+    }
     case "muteAll":
       // Works under the Paused screen too: silencing the game is never blocked.
       sfx.apply({ type: "muteAll" });
@@ -272,17 +277,18 @@ function issue(command: Command): CommandResult {
   return issueCommand(match, HUMAN, command);
 }
 
-/** Right-click: on Ore, selected Harvesters harvest it and everything else walks there. */
-function orderTo(cell: CellPos): void {
-  const ids = [...selection];
-  const onOre = (view.map.ore[cell.y * view.map.width + cell.x] ?? 0) > 0;
-  const harvesters = onOre
-    ? view.units.filter((u) => selection.has(u.id) && u.kind === "harvester").map((u) => u.id)
-    : [];
-  const others = ids.filter((id) => !harvesters.includes(id));
-  if (harvesters.length > 0) issue({ type: "harvest", unitIds: harvesters, target: cell });
-  if (others.length > 0) issue({ type: "move", unitIds: others, target: cell });
-  sfx.play("commandAck");
+/** Right-click with Units selected: issues what commandChoice.ts picks for the point, a Map position in Cell units. */
+function rightClickAt(point: { x: number; y: number }): void {
+  let heard = false;
+  for (const command of rightClickCommands(view, selection, point)) {
+    const accepted = issue(command).ok;
+    const ground = groundTarget(command);
+    if (ground) moveMarker = { cell: ground, at: performance.now(), kind: "move" };
+    // A click on the ground is always answered. An attack, a Tend or a Board the Simulation refuses did
+    // nothing (nobody selected is armed, say), so nothing is acknowledged.
+    if (accepted || ground) heard = true;
+  }
+  if (heard) sfx.play("commandAck");
 }
 
 /** The finished Building being placed, while the person picks a spot; null otherwise. */
@@ -410,18 +416,7 @@ canvas.addEventListener("mousedown", (e) => {
       sfx.play("commandAck");
     }
   } else if (e.button === 2 && selection.size > 0) {
-    const cell = screenToCell(camera, inView.x, inView.y);
-    if (cell.x < 0 || cell.y < 0 || cell.x >= mapSize.width || cell.y >= mapSize.height) return;
-    const point = screenToMap(camera, inView.x, inView.y);
-    // A Unit standing in front of a Building is the more urgent target.
-    const enemy = enemyUnitAt(view.units, point, HUMAN) ?? enemyBuildingAt(view.buildings, point, HUMAN);
-    if (enemy) {
-      // Refused when nobody selected is armed (Medics, Harvesters): then nothing happened, so nothing is acknowledged.
-      if (issue({ type: "attack", unitIds: [...selection], targetId: enemy.id }).ok) sfx.play("commandAck");
-      return;
-    }
-    orderTo(cell);
-    moveMarker = { cell, at: performance.now(), kind: "move" };
+    rightClickAt(screenToMap(camera, inView.x, inView.y));
   }
 });
 /** What stays put through a zoom: the point under the mouse when it is over the Map, otherwise the middle of the Map view. */

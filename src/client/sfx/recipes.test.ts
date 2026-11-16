@@ -20,6 +20,10 @@ describe("sound recipes", () => {
         "commandAck",
         "menuClick",
         "cantBuild",
+        "board",
+        "unload",
+        "heal",
+        "repair",
       ].sort(),
     );
     for (const name of SOUND_NAMES) expect(RECIPES[name].layers.length).toBeGreaterThan(0);
@@ -60,6 +64,40 @@ describe("sound recipes", () => {
   it("keeps interface sounds brief so they never trail behind the click", () => {
     for (const name of ["menuClick", "commandAck", "cantBuild"] as const) {
       expect(recipeDuration(RECIPES[name])).toBeLessThanOrEqual(0.3);
+    }
+  });
+
+  it("keeps the board and unload sounds short, and tells them apart: getting in falls in pitch, getting out rises", () => {
+    for (const name of ["board", "unload"] as const) {
+      expect(recipeDuration(RECIPES[name])).toBeLessThanOrEqual(0.3);
+      // Five get in or out within a Tick or two: the cap keeps that from stacking into one loud burst.
+      expect(RECIPES[name].cap).toBeLessThanOrEqual(2);
+    }
+    const tone = (name: "board" | "unload") => RECIPES[name].layers.find((layer) => layer.kind === "tone")!;
+    expect(tone("board").to).toBeLessThan(tone("board").from);
+    expect(tone("unload").to).toBeGreaterThan(tone("unload").from);
+  });
+
+  it("spaces the heal and repair sounds out, so steady work is a sound now and then and never a drone", () => {
+    for (const name of ["heal", "repair"] as const) {
+      const recipe = RECIPES[name];
+      // One at a time, and a good silence after each before the next may start.
+      expect(recipe.cap).toBe(1);
+      expect(recipe.gap).toBeGreaterThanOrEqual(recipeDuration(recipe) * 2);
+      expect(recipeDuration(recipe)).toBeLessThanOrEqual(0.4);
+    }
+    // Soft: the heal has no noise in it and comes in gently, and neither is as loud as a shot.
+    for (const layer of RECIPES.heal.layers) {
+      expect(layer.kind).toBe("tone");
+      expect(layer.attack).toBeGreaterThan(0);
+      expect(layer.gain).toBeLessThanOrEqual(0.2);
+    }
+    for (const layer of RECIPES.repair.layers) expect(layer.gain).toBeLessThanOrEqual(0.3);
+  });
+
+  it("gives no gap to the sounds of a fight, which must answer every shot", () => {
+    for (const name of ["rifle", "raiderGun", "turretCannon", "impact", "commandAck"] as const) {
+      expect(RECIPES[name].gap).toBeUndefined();
     }
   });
 

@@ -6,8 +6,8 @@ import { createPixelBuffer, type PixelBuffer, rgbOf, setPixel } from "./pixelBuf
 import { ART_CELL_PX } from "./terrainArt";
 import { paintUnit, UNIT_SPRITE_PX } from "./unitArt";
 
-// Combat effects, painted in code (ADR 0003): blasts, muzzle flashes, a
-// falling Rifleman, and what a fight leaves on the ground. Painted once by the
+// Effects, painted in code (ADR 0003): blasts, muzzle flashes, a falling
+// Rifleman, what a fight leaves on the ground, and a Heal and a Repair at work. Painted once by the
 // effect painter and kept; nothing here runs per frame. How long each one
 // shows is here too, with the other art constants, as it is presentation only.
 
@@ -22,6 +22,9 @@ export const EFFECT_SECONDS = {
   smallExplosion: 0.6,
   bigExplosion: 0.9,
   fall: 0.4,
+  // One round of each; while the work goes on, the next round starts as this one ends.
+  heal: 0.6,
+  repair: 0.45,
 } as const;
 export type EffectKind = keyof typeof EFFECT_SECONDS;
 
@@ -246,6 +249,95 @@ export function paintBody(owner: PlayerId, flip: boolean): PixelBuffer {
     if (lying.data[i + 3] === 0) continue;
     for (let c = 0; c < 3; c++) buf.data[i + c] = lying.data[i + c]! * 0.6 + dull[c]! * 0.4;
     buf.data[i + 3] = 255;
+  }
+  return buf;
+}
+
+/** Side of the heal effect's square sprite; the middle of its bottom row is the healed Unit's middle. */
+export const HEAL_PX = 13;
+export const HEAL_FRAMES = 6;
+
+/**
+ * The motes of a Heal: where each starts (from the sprite's left and bottom
+ * edges), and when in the effect's life it appears. One each side of the
+ * figure and one over it, so they frame the Unit instead of covering it.
+ */
+const HEAL_MOTES = [
+  { x: 2, up: 2, from: 0 },
+  { x: 10, up: 4, from: 0.15 },
+  { x: 6, up: 6, from: 0.3 },
+] as const;
+/** How far a mote drifts up over the whole effect, in art pixels. */
+const HEAL_RISE_PX = 5;
+
+/**
+ * One frame of a Heal: small pale motes drifting up round the Unit, each a
+ * point that opens into a little plus and closes again, trailing the
+ * Hospital's own green so the two read as one thing. Pale, as the green
+ * alone is lost on grass.
+ */
+export function paintHeal(frame: number): PixelBuffer {
+  const buf = createPixelBuffer(HEAL_PX, HEAL_PX);
+  const t = frame / (HEAL_FRAMES - 1);
+  for (const mote of HEAL_MOTES) {
+    // Each mote lives for the rest of the effect from when it appears, so the last frame still has one in the air.
+    const age = (t - mote.from) / (1 - mote.from + 0.2);
+    if (age < 0) continue;
+    const x = mote.x;
+    const y = Math.round(HEAL_PX - 1 - mote.up - t * HEAL_RISE_PX);
+    // The trail it leaves below it as it rises.
+    setPixel(buf, x, y + 2, ART.aid.mark);
+    // Open in the middle of its life, a point at either end.
+    const open = age > 0.1 && age < 0.75;
+    if (open) {
+      setPixel(buf, x, y + 3, ART.aid.shade);
+      for (const [dx, dy] of [[-1, 0], [1, 0], [0, -1], [0, 1]] as const) setPixel(buf, x + dx, y + dy, ART.aid.glow);
+    }
+    setPixel(buf, x, y, open ? ART.aid.core : ART.aid.glow);
+  }
+  return buf;
+}
+
+/** Side of the repair effect's square sprite; its middle is the place being worked on. */
+export const REPAIR_PX = 15;
+export const REPAIR_FRAMES = 5;
+const REPAIR_SPARKS = 9;
+const REPAIR_SALT = 61;
+
+/**
+ * One frame of a Repair: a weld point that flares and goes out, throwing
+ * sparks that fly out, fall and cool from white to orange.
+ */
+export function paintRepair(frame: number): PixelBuffer {
+  const buf = createPixelBuffer(REPAIR_PX, REPAIR_PX);
+  const mid = (REPAIR_PX - 1) / 2;
+  const t = frame / (REPAIR_FRAMES - 1);
+  for (let s = 0; s < REPAIR_SPARKS; s++) {
+    // Thrown upward and to the sides, like sparks off a grinder; gravity brings them down.
+    const angle = -Math.PI * (0.05 + 0.9 * hash2(s, 1, REPAIR_SALT));
+    const speed = 4 + 3.5 * hash2(s, 2, REPAIR_SALT);
+    // Every other one burns out before the end, so the spray thins instead of vanishing at once.
+    if (frame === REPAIR_FRAMES - 1 && s % 2 === 1) continue;
+    const x = Math.round(mid + Math.cos(angle) * speed * t);
+    const y = Math.round(mid + Math.sin(angle) * speed * t + 8 * t * t);
+    const colour = t < 0.3 ? fire[3] : t < 0.7 ? fire[2] : fire[1];
+    setPixel(buf, x, y, colour);
+    // A short streak behind the fast ones while they are hot.
+    if (t > 0 && t < 0.7 && s % 3 === 0) setPixel(buf, Math.round(x - Math.cos(angle)), Math.round(y - Math.sin(angle)), fire[2]);
+  }
+  // The weld point itself: a bright flare with arms, then a plus, then a single pixel, then out.
+  const arms = [[-1, 0], [1, 0], [0, -1], [0, 1]] as const;
+  if (frame === 0) {
+    for (const [dx, dy] of arms) {
+      setPixel(buf, mid + dx * 2, mid + dy * 2, fire[3]);
+      setPixel(buf, mid + dx, mid + dy, ART.weldSpark);
+    }
+    setPixel(buf, mid, mid, ART.weldSpark);
+  } else if (frame === 1) {
+    for (const [dx, dy] of arms) setPixel(buf, mid + dx, mid + dy, fire[3]);
+    setPixel(buf, mid, mid, ART.weldSpark);
+  } else if (frame === 2) {
+    setPixel(buf, mid, mid, fire[3]);
   }
   return buf;
 }

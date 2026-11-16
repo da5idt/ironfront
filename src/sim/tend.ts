@@ -92,7 +92,7 @@ function targetBox(t: TendTarget): { x: number; y: number; width: number; height
 }
 
 /** True when the Cell touches the target's Cell or footprint, corners included. */
-function isBeside(cell: CellPos, t: TendTarget): boolean {
+export function isBeside(cell: CellPos, t: TendTarget): boolean {
   const box = targetBox(t);
   return cell.x >= box.x - 1 && cell.x <= box.x + box.width && cell.y >= box.y - 1 && cell.y <= box.y + box.height;
 }
@@ -277,4 +277,9 @@ export function tendTargets(m: MatchState): void {
     }
     if (u.order.type === "tend") advanceTend(m, u, u.order);
   }
+}
+
+/** The nearest Cell beside the target the Unit could stand in, or null when there is none: Boarding walks to it as a Tend does. */
+export function standGoal(m: MatchState, u: UnitState, t: TendTarget): CellPos | null {
+  return standGoals(m, u, t)[0] ?? null;
 }

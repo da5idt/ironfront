@@ -2,7 +2,8 @@ import type { CommandResult } from "./commands";
 import { OK, reject } from "./commands";
 import { type BuildingSighting, isFootprintVisible, isVisible } from "./fog";
 import type { CommandHandler } from "./handlers";
-import { claimedCells, freeCellNear, freeCellsNear, groupMoveGoals, orderMoveTo, planMove, stepAlong, unitCell, walkingTo } from "./movement";
+import { moveBegins } from "./passengers";
+import { claimedCells, finishMove, freeCellNear, freeCellsNear, groupMoveGoals, orderMoveTo, planMove, stepAlong, unitCell, walkingTo } from "./movement";
 import type { BuildingState, MatchState, UnitState } from "./state";
 import { cellIndex, isUnit, ownUnits, removeBuilding } from "./state";
 import { BUILDING_STATS, isArmed, MOVEMENT, UNIT_STATS, type WeaponStats } from "./tuning";
@@ -145,6 +146,7 @@ function fire(m: MatchState, shooter: { cooldown: number }, from: Vec, weapon: W
   if (shooter.cooldown > 0) return;
   const p = aimPoint(t, from);
   t.hp -= weapon.damage;
+  m.damaged.add(t.id);
   shooter.cooldown = weapon.reloadTicks;
   m.shots.push({ fromX: from.x, fromY: from.y, toX: p.x, toY: p.y, tick: m.tick });
 }
@@ -207,6 +209,7 @@ export const handleAttackMove: CommandHandler<"attackMove"> = (m, player, comman
   for (const [u, goal] of goals) {
     if (canFight(u)) {
       u.order = { type: "attackMove", plan: planMove(m, u, goal), firing: false, spot: null, settled: false };
+      moveBegins(u);
     }
     else orderMoveTo(m, u, goal);
   }
@@ -223,7 +226,7 @@ function advanceAttackMove(m: MatchState, u: UnitState, order: Extract<UnitState
     order.firing = false;
     order.spot = null;
     order.settled = false;
-    if (stepAlong(m, u, order.plan) === "arrived") u.order = { type: "idle" };
+    if (stepAlong(m, u, order.plan) === "arrived") finishMove(u);
     return;
   }
   fire(m, u, u, UNIT_STATS[u.kind], target);
@@ -277,6 +280,7 @@ function pursue(m: MatchState, u: UnitState, order: Extract<UnitState["order"], 
 /** Per-Tick system: reloads, chases, walks Attack-moves and fires. */
 export function fight(m: MatchState): void {
   m.shots = [];
+  m.damaged.clear();
   for (const u of m.units.values()) {
     if (u.cooldown > 0) u.cooldown--;
   }

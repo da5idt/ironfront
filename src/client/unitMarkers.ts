@@ -1,5 +1,6 @@
 import { HEALTH_BAR_PX } from "./art/markerPainter";
 import { ART_CELL_PX } from "./art/terrainArt";
+import { passengerRoom, TROOP_CARRIER, type UnitView } from "../sim";
 import type { ZoomStepPx } from "./camera";
 
 // Where the markers round a Unit go: selection brackets, health bar, Control
@@ -24,6 +25,8 @@ export interface UnitMarkerBoxes {
   readonly groupDotPx: number;
   /** Room for a row of Passenger marks; nothing else is drawn here. */
   readonly passengerMarks: MarkerBox;
+  /** One Passenger mark and the gap to the next, in art pixels. */
+  readonly passengerMarkPx: { readonly width: number; readonly height: number; readonly gap: number };
 }
 
 /** Side of the bracket square round a selected Unit: wider than the Cell, so the brackets stand off the sprite. */
@@ -39,7 +42,17 @@ export const GROUP_DIGIT_DOTS = { width: 3, height: 5 } as const;
  */
 export const MIN_GROUP_DIGIT_SCREEN_PX = 10;
 
-/** The markers round a Unit at a zoom step. Only the Control Group number changes with the zoom. */
+/**
+ * The least size of a Passenger mark, and of the gap to the next, on the
+ * screen. Under this the row cannot be counted at a glance: at the widest zoom
+ * a mark two art pixels square with one between is a dotted line. They grow
+ * taller before wider, as five must fit over one Unit.
+ */
+export const MIN_PASSENGER_MARK_SCREEN_PX = { width: 2, height: 4, gap: 2 } as const;
+/** A Passenger mark and its gap in art pixels wherever the least screen size asks for no more. */
+const PASSENGER_MARK_PX = { width: 2, height: 2, gap: 1 } as const;
+
+/** The markers round a Unit at a zoom step. Only the Control Group number and the Passenger marks change with the zoom. */
 export function unitMarkerBoxes(cellPx: ZoomStepPx): UnitMarkerBoxes {
   const half = UNIT_BRACKET_PX / 2;
   const brackets = { x: -half, y: -half, width: UNIT_BRACKET_PX + 1, height: UNIT_BRACKET_PX + 1 };
@@ -60,9 +73,44 @@ export function unitMarkerBoxes(cellPx: ZoomStepPx): UnitMarkerBoxes {
     height,
   };
 
-  // Above the health bar with a row of ground between: the one side of a Unit with nothing else on it,
-  // and wide enough for five marks two art pixels wide.
-  const passengerMarks = { x: -half + 1, y: healthBar.y - 3, width: UNIT_BRACKET_PX - 2, height: 2 };
+  // Whole art pixels, as for the number's dots.
+  const artPx = (part: keyof typeof PASSENGER_MARK_PX): number =>
+    Math.max(PASSENGER_MARK_PX[part], Math.ceil(MIN_PASSENGER_MARK_SCREEN_PX[part] / screenPxPerArtPx));
+  const passengerMarkPx = { width: artPx("width"), height: artPx("height"), gap: artPx("gap") };
+  const places = TROOP_CARRIER.capacity;
+  const rowWidth = places * passengerMarkPx.width + (places - 1) * passengerMarkPx.gap;
+  // Above the health bar with a row of ground between: the one side of a Unit with nothing else on it.
+  // At the widest zoom the row is a little wider than the brackets, as the number's plate is.
+  const passengerMarks = {
+    x: -rowWidth / 2,
+    y: healthBar.y - 1 - passengerMarkPx.height,
+    width: rowWidth,
+    height: passengerMarkPx.height,
+  };
 
-  return { brackets, healthBar, groupNumber, groupDotPx, passengerMarks };
+  return { brackets, healthBar, groupNumber, groupDotPx, passengerMarks, passengerMarkPx };
+}
+
+/** One Passenger mark: a place for a Passenger in a Troop Carrier, bright when taken and dark when free. */
+export interface PassengerMark {
+  readonly box: MarkerBox;
+  readonly filled: boolean;
+}
+
+/**
+ * The Passenger marks over a Unit: one for every place it has, filled from
+ * the left for each Passenger inside, so a glance tells how full it is. None
+ * for a Unit that carries nobody, and none for the other Player's Units: the
+ * view lists no Passengers for those (null), and this reads nothing else, so
+ * what the other Player's Troop Carrier holds cannot show.
+ */
+export function passengerMarks(u: Pick<UnitView, "kind" | "passengers">, boxes: UnitMarkerBoxes): PassengerMark[] {
+  const places = passengerRoom(u.kind);
+  if (u.passengers === null || places === 0) return [];
+  const { passengerMarks: room, passengerMarkPx: size } = boxes;
+  const inside = u.passengers.length;
+  return Array.from({ length: places }, (_, i) => ({
+    box: { x: room.x + i * (size.width + size.gap), y: room.y, width: size.width, height: size.height },
+    filled: i < inside,
+  }));
 }

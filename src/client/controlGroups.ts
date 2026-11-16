@@ -36,7 +36,10 @@ export function saveGroup(groups: ControlGroups, group: number, selection: Selec
   return next;
 }
 
-/** The selection a group's key gives: its living Units, or null (leave the selection alone) when it has none. */
+/**
+ * The selection a group's key gives: its living Units on the Map, or null (leave the selection alone)
+ * when it has none. Those riding as Passengers take no Command, so they are left out until they get out.
+ */
 export function selectGroup(groups: ControlGroups, group: number, units: readonly UnitView[]): Selection | null {
   const ids = groups.get(group);
   if (!ids) return null;
@@ -44,10 +47,19 @@ export function selectGroup(groups: ControlGroups, group: number, units: readonl
   return living.length > 0 ? new Set(living) : null;
 }
 
-/** Drops Units that no longer exist. Returns `groups` itself when nothing was dropped. */
+/**
+ * Drops Units that no longer exist. Returns `groups` itself when nothing was dropped.
+ * A Passenger still exists: it is off the Map, so the view lists it only inside its
+ * Troop Carrier, and it keeps its group for when it gets out. One lost with its
+ * Troop Carrier is listed nowhere and is dropped like any other.
+ */
 export function pruneGroups(groups: ControlGroups, units: readonly UnitView[]): ControlGroups {
   if (groups.size === 0) return groups;
-  const alive = new Set(units.map((u) => u.id));
+  const alive = new Set<EntityId>();
+  for (const u of units) {
+    alive.add(u.id);
+    for (const p of u.passengers ?? []) alive.add(p.id);
+  }
   let dropped = false;
   const next = new Map<number, ReadonlySet<EntityId>>();
   for (const [n, ids] of groups) {

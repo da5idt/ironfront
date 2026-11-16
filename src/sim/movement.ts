@@ -4,6 +4,7 @@ import type { CommandHandler } from "./handlers";
 import { findPath, type Grid, nearbyCells } from "./pathfinding";
 import type { MatchState, UnitState } from "./state";
 import { cellIndex, inBounds, isWalkable, ownUnits, terrainAt } from "./state";
+import { moveBegins, moveEnds } from "./passengers";
 import { MOVEMENT, TICKS_PER_SECOND, UNIT_STATS } from "./tuning";
 import type { CellPos, EntityId, PlayerId } from "./types";
 
@@ -43,6 +44,7 @@ export function planMove(m: MatchState, u: UnitState, goal: CellPos): MovePlan {
 /** Sends one Unit walking to a Cell, replacing whatever it was doing. */
 export function orderMoveTo(m: MatchState, u: UnitState, goal: CellPos): void {
   u.order = { type: "move", plan: planMove(m, u, goal) };
+  moveBegins(u);
 }
 
 /**
@@ -115,7 +117,7 @@ export function walkingTo(u: UnitState): CellPos | null {
   // One stepping aside to a spot of its own is walking there, not to the end of its route.
   if (u.order.type === "attackMove") return u.order.firing ? null : (u.order.spot?.goal ?? u.order.plan.goal);
   if (u.order.type === "attack") return u.order.chase?.goal ?? null;
-  if (u.order.type === "tend") return u.order.walk?.goal ?? null;
+  if (u.order.type === "tend" || u.order.type === "board") return u.order.walk?.goal ?? null;
   return null;
 }
 
@@ -180,9 +182,19 @@ export const handleMove: CommandHandler<"move"> = (m, player, command): CommandR
   return OK;
 };
 
+/**
+ * The Unit has reached the end of a move or an Attack-move and stands idle.
+ * Every walk that counts as "finishing a move" ends here, so that none of them
+ * forgets to tell a Troop Carrier it may collect (passengers.ts).
+ */
+export function finishMove(u: UnitState): void {
+  u.order = { type: "idle" };
+  moveEnds(u);
+}
+
 /** Per-Tick system: walks every Unit with a move order, and idles it on arrival. */
 export function moveUnits(m: MatchState): void {
   for (const u of m.units.values()) {
-    if (u.order.type === "move" && stepAlong(m, u, u.order.plan) === "arrived") u.order = { type: "idle" };
+    if (u.order.type === "move" && stepAlong(m, u, u.order.plan) === "arrived") finishMove(u);
   }
 }

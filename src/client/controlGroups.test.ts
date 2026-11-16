@@ -14,7 +14,7 @@ import {
 
 /** A Unit as a PlayerView lists it (UnitView in src/sim/view.ts); only id and place are read here. */
 function u(id: number, x: number, y: number): UnitView {
-  return { id, kind: "rifleman", owner: 0, x, y, prevX: x, prevY: y, hp: 50, maxHp: 50, cargo: 0 };
+  return { id, kind: "rifleman", owner: 0, x, y, prevX: x, prevY: y, hp: 50, maxHp: 50, cargo: 0, passengers: [] };
 }
 
 const units = [u(1, 2.5, 2.5), u(2, 4.5, 2.5), u(3, 10.5, 8.5), u(4, 20.5, 20.5)];
@@ -98,6 +98,52 @@ describe("Units that die", () => {
   it("leave the same groups object when nobody died", () => {
     const groups = saveGroup(NO_GROUPS, 1, new Set([1, 2]));
     expect(pruneGroups(groups, units)).toBe(groups);
+  });
+});
+
+describe("Units inside an own Troop Carrier", () => {
+  /** An own Troop Carrier as its owner's view lists it, with these Units inside. */
+  const carrier = (id: number, inside: readonly number[]): UnitView => ({
+    ...u(id, 6.5, 6.5),
+    kind: "troopCarrier",
+    passengers: inside.map((p) => ({ id: p, kind: "rifleman" as const })),
+  });
+
+  it("stay in their group though the view's Units no longer list them", () => {
+    const groups = saveGroup(NO_GROUPS, 1, new Set([1, 2, 3]));
+    // 2 and 3 got in: they are off the Map and listed only as Passengers.
+    const riding = [u(1, 2.5, 2.5), carrier(9, [2, 3])];
+    expect(pruneGroups(groups, riding)).toBe(groups);
+  });
+
+  it("are not selected by the group's key, which takes only those who are out", () => {
+    const groups = saveGroup(NO_GROUPS, 1, new Set([1, 2, 3]));
+    const riding = [u(1, 2.5, 2.5), carrier(9, [2, 3])];
+    expect(selections(pruneGroups(groups, riding), riding)).toEqual({ 1: [1] });
+    expect(groupCentre(groups, 1, riding)).toEqual({ x: 2.5, y: 2.5 });
+  });
+
+  it("leave the selection alone when the whole group is inside", () => {
+    const groups = saveGroup(NO_GROUPS, 1, new Set([2, 3]));
+    const riding = [u(1, 2.5, 2.5), carrier(9, [2, 3])];
+    const kept = pruneGroups(groups, riding);
+    expect(kept).toBe(groups);
+    expect(selectGroup(kept, 1, riding)).toBeNull();
+  });
+
+  it("are selected by the group's key again once they are out", () => {
+    const groups = saveGroup(NO_GROUPS, 1, new Set([1, 2, 3]));
+    const kept = pruneGroups(groups, [u(1, 2.5, 2.5), carrier(9, [2, 3])]);
+    const out = [u(1, 2.5, 2.5), carrier(9, []), u(2, 5.5, 6.5), u(3, 7.5, 6.5)];
+    expect(selections(pruneGroups(kept, out), out)).toEqual({ 1: [1, 2, 3] });
+  });
+
+  it("drop out of their group when they are lost with their Troop Carrier", () => {
+    const groups = saveGroup(saveGroup(NO_GROUPS, 1, new Set([1, 2, 3])), 2, new Set([9]));
+    const kept = pruneGroups(groups, [u(1, 2.5, 2.5), carrier(9, [2, 3])]);
+    // The Troop Carrier is destroyed with both inside: none of the three is in the view any more.
+    const after = pruneGroups(kept, [u(1, 2.5, 2.5)]);
+    expect(groupNumbers(after)).toEqual(new Map([[1, 1]]));
   });
 });
 

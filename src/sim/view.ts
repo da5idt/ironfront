@@ -7,7 +7,7 @@ import {
   type Visibility,
   visibilityAt,
 } from "./fog";
-import { cellIndex, type MatchState } from "./state";
+import { cellIndex, type MatchState, type PassengerEvent } from "./state";
 import { type TrainingView, trainingView } from "./training";
 import { BUILDING_STATS, UNIT_STATS } from "./tuning";
 import type { BuildingKind, EntityId, PlayerId, Terrain, UnitKind } from "./types";
@@ -28,6 +28,21 @@ export interface UnitView {
   readonly maxHp: number;
   /** Ore carried; 0 for anything but a Harvester. */
   readonly cargo: number;
+  /**
+   * Who is inside one of the Player's own Units, in the order they got in:
+   * empty for anything but a Troop Carrier with Passengers. Null for the other
+   * Player's Units, whatever they hold: that is their owner's to know.
+   */
+  readonly passengers: readonly PassengerView[] | null;
+}
+
+/**
+ * A Passenger: a Unit inside a Troop Carrier. It is off the Map, so it is not
+ * in the view's `units`; its id is the one it had and will have when it gets out.
+ */
+export interface PassengerView {
+  readonly id: EntityId;
+  readonly kind: UnitKind;
 }
 
 export interface BuildingView {
@@ -72,7 +87,7 @@ export interface MapView {
 
 /**
  * Fog of War applies: `units` holds the Player's own Units and enemy Units in
- * Visible Cells only; `buildings` holds the Player's own Buildings plus enemy
+ * Visible Cells only, and never a Passenger (see UnitView.passengers); `buildings` holds the Player's own Buildings plus enemy
  * Buildings seen now or remembered (see BuildingView.remembered). Nothing in
  * Unexplored Cells is listed.
  */
@@ -98,6 +113,14 @@ export interface PlayerView {
    * always, the other Player's only where the target can be seen now.
    */
   readonly tends: readonly TendView[];
+  /**
+   * Units that got into or out of a Troop Carrier during the last Tick, or by
+   * a Command just before it, for drawing and sound, under Fog of War: the
+   * Player's own always, the other Player's only where the Cell the Unit stood
+   * in is Visible now. So of the other Player's Troop Carrier a Player learns
+   * what it sees walk in or out, and never who is still inside.
+   */
+  readonly passengerEvents: readonly PassengerEventView[];
   /** What this Player's HQ is building, or null when it is free. */
   readonly production: ProductionView | null;
 }
@@ -121,6 +144,9 @@ export interface TendView {
   /** The Tick it was worked on in. */
   readonly tick: number;
 }
+
+/** One Unit getting into or out of a Troop Carrier, as the Match notes it: nothing in it needs hiding once the event may be seen. */
+export type PassengerEventView = PassengerEvent;
 
 function buildingView(b: BuildingSighting, remembered: boolean, training: TrainingView | null = null): BuildingView {
   return {
@@ -166,6 +192,13 @@ function visibleTends(m: MatchState, playerId: PlayerId, fog: PlayerFog): TendVi
   return tends;
 }
 
+/** The Units getting in and out a Player may see; the rule is on PlayerView.passengerEvents. */
+function visiblePassengerEvents(m: MatchState, playerId: PlayerId, fog: PlayerFog): PassengerEventView[] {
+  return m.passengerEvents
+    .filter((e) => e.owner === playerId || isVisible(fog, cellIndex(m, Math.floor(e.x), Math.floor(e.y))))
+    .map((e) => ({ ...e }));
+}
+
 export function buildPlayerView(m: MatchState, playerId: PlayerId): PlayerView {
   const fog = m.fog[playerId];
   const units: UnitView[] = [];
@@ -182,6 +215,7 @@ export function buildPlayerView(m: MatchState, playerId: PlayerId): PlayerView {
       hp: u.hp,
       maxHp: UNIT_STATS[u.kind].maxHp,
       cargo: u.cargo,
+      passengers: u.owner === playerId ? u.passengers.map((p) => ({ id: p.id, kind: p.kind })) : null,
     });
   }
   const buildings: BuildingView[] = [];
@@ -209,6 +243,7 @@ export function buildPlayerView(m: MatchState, playerId: PlayerId): PlayerView {
     buildings,
     shots: visibleShots(m, fog),
     tends: visibleTends(m, playerId, fog),
+    passengerEvents: visiblePassengerEvents(m, playerId, fog),
     production: productionView(m, playerId),
   };
 }
