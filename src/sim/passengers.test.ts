@@ -460,7 +460,7 @@ describe("a Passenger", () => {
     expect(shotsBy(rifleman)).toBe(0);
   });
 
-  it("has forgotten, when it gets out, the Tend target it gave up on at the leash: a ride is a new start", () => {
+  it("goes by itself, when it gets out, to the Tend target it gave up on at the leash, now that it has stopped", () => {
     const match = stage();
     const medic = addTestUnit(match, 0, "medic", { x: 5, y: ROW });
     const patient = addTestUnit(match, 0, "rifleman", { x: 6, y: ROW });
@@ -485,8 +485,8 @@ describe("a Passenger", () => {
     const left = find(match, patient)!.hp;
     expect(unload(match, [carrier])).toEqual({ ok: true });
     expect(find(match, medic)).toMatchObject({ x: 35.5, y: ROW + 0.5 });
-    // At its first look: one that still remembered would only note, at that look, that the patient had moved.
-    run(match, TEND.seekTicks + 2);
+    // At its second look: the first finds the patient in a new place, the second finds it has not moved since.
+    run(match, 2 * TEND.seekTicks + 2);
     expect(find(match, patient)!.hp).toBeGreaterThan(left);
   });
 
@@ -507,8 +507,8 @@ describe("a Passenger", () => {
     const raider = addTestUnit(match, 0, "raider", centre);
     setTestUnitHp(match, raider, 30);
     const mechanic = addTestUnit(match, 0, "mechanic", { x: 17, y: 16 });
-    // One look: it stands as near as it can get already, so it gives up on the spot and backs off.
-    let ticks = TEND.seekTicks;
+    // Two looks, the first to see that the Raider stands still: it stands as near as it can get already, so it gives up on the spot and backs off.
+    let ticks = 2 * TEND.seekTicks;
     run(match, ticks);
     const carrier = addTestUnit(match, 0, "troopCarrier", { x: 17, y: 12 });
     issueCommand(match, 0, { type: "move", unitIds: [carrier], target: { x: 17, y: 15 } });

@@ -98,11 +98,11 @@ export interface UnitState {
    */
   readonly unreachable: Map<EntityId, number>;
   /**
-   * Tend targets this Unit gave up on at the leash, each with where it stood
-   * at the Unit's last look. While one keeps moving the Unit does not go to it
-   * by itself, or it would follow a marching target for ever, a leash at a time.
+   * Where each target this Unit could Tend within its seek radius stood at the
+   * Unit's last look. By itself it goes only to one that has not moved since,
+   * or it would trail a marching group across the Map, a leash at a time.
    */
-  readonly leftAtLeash: Map<EntityId, Vec>;
+  stoodAt: Map<EntityId, Vec>;
 }
 
 export interface BuildingState {
@@ -221,7 +221,7 @@ export function spawnUnit(m: MatchState, owner: PlayerId, kind: UnitKind, cell: 
     passengers: [],
     pickUp: "no",
     unreachable: new Map(),
-    leftAtLeash: new Map(),
+    stoodAt: new Map(),
   };
   m.units.set(unit.id, unit);
   return unit;

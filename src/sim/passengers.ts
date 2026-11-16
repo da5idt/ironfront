@@ -83,10 +83,9 @@ export function enterCarrier(m: MatchState, u: UnitState, carrier: UnitState): b
   if (u === carrier || !hasRoom(carrier) || m.units.get(u.id) !== u) return false;
   m.units.delete(u.id);
   u.order = { type: "idle" };
-  // A ride is a new start for what it remembers of Tend targets: no Command
-  // reaches a Passenger to clear that, and it will get out somewhere else.
+  // A ride is a new start for the Tend targets it found no way to: no look
+  // reaches a Passenger to end those waits, and it will get out somewhere else.
   // Its reload is left as it was, or getting in and out would be a way to fire faster.
-  u.leftAtLeash.clear();
   u.unreachable.clear();
   carrier.passengers.push(u);
   noPickUp(carrier);

@@ -313,7 +313,7 @@ describe("the Tend Command", () => {
     expect(Math.floor(at(match, medic).x)).toBe(44);
   });
 
-  it("lets the Medic set off after a target that is still marching once the Medic has been given any Command", () => {
+  it("does not set off by itself after a target that is still marching, whether or not the Medic has been given a Command since", () => {
     const follows = (command: boolean): number => {
       const match = stage();
       const medic = addTestUnit(match, 0, "medic", { x: 14, y: ROW });
@@ -328,10 +328,9 @@ describe("the Tend Command", () => {
       runUntil(match, () => at(match, patient).x === 45.5);
       return at(match, medic).x - stood.x;
     };
-    // Left to itself it stays where it gave up; given a Command it starts afresh, for one more leash.
+    // It stays where it gave up: by itself it goes only to a target that stands still.
     expect(follows(false)).toBe(0);
-    expect(follows(true)).toBeGreaterThan(2);
-    expect(follows(true)).toBeLessThan(TEND.leash + 2);
+    expect(follows(true)).toBe(0);
   });
 });
 
@@ -355,11 +354,12 @@ describe("a Medic with nothing to do", () => {
     const match = stage();
     const medic = addTestUnit(match, 0, "medic", { x: 16, y: ROW });
     const rifleman = hurt(match, 0, "rifleman", 19, ROW, 5);
-    // 9 Cells: a Cell beyond the leash, with the Medic three Cells behind all the way.
+    // The Medic is on its way without being told when the Rifleman sets off: 9 Cells, a Cell beyond the leash.
+    runUntil(match, () => at(match, medic).x > 16.5);
     issueCommand(match, 0, { type: "move", unitIds: [rifleman], target: { x: 28, y: ROW } });
     runUntil(match, () => at(match, rifleman).x === 28.5);
-    expect(hp(match, rifleman)).toBe(5);
-    // The Medic gave up about 4 Cells short; the Rifleman has stopped, so it is hurt and in reach like any other.
+    expect(hp(match, rifleman)).toBeLessThan(50);
+    // The Medic gave up short of it; the Rifleman has stopped, so it is hurt and in reach like any other.
     expect(at(match, rifleman).x - at(match, medic).x).toBeLessThan(TEND.seekRadius);
     runUntil(match, () => hp(match, rifleman) === 50);
     expect(Math.floor(at(match, medic).x)).toBe(27);

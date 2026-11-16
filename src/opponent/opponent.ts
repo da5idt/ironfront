@@ -7,8 +7,10 @@ import {
   type EntityId,
   isArmed,
   isPassableTerrain,
+  isTroopCarrier,
   nextInt,
   OPPONENT,
+  passengerRoom,
   type PlayerId,
   type PlayerView,
   type Rng,
@@ -16,10 +18,12 @@ import {
   type UnitView,
   type Vec,
 } from "../sim";
-import { hqCentre, ownBuildings } from "./base";
-import { buildCommands, rallyCommands, rallyPoint, trainCommands } from "./economy";
+import { hqCentre, isOpenGround, ownBuildings, ownPassengers, type Standing } from "./base";
+import { createCarrierMemory, driveToParking, isParked, ownCarriers, parkCommands } from "./carrier";
+import { buildCommands, rallyCommands, rallyPoint, trainCommands, type WaveNeeds } from "./economy";
 import { type DangerMemory, harvestCommands, rememberDanger } from "./harvesting";
-import { distanceTo, nearest, waveReady, waveThreshold } from "./tactics";
+import { type TendMemory, tendCommands } from "./support";
+import { DEFEND_RADIUS, distanceTo, nearest, STUCK_THINKS, waveReady, waveThreshold } from "./tactics";
 
 // The Computer Opponent. It plays by the person's rules: it reads only its own
 // PlayerView, so Fog of War applies, and answers with Commands the caller
@@ -48,10 +52,6 @@ interface UnitNotes {
   still: number;
 }
 
-/** How close to a Building an enemy Unit counts as attacking the base. */
-const DEFEND_RADIUS = 10;
-/** Thinks an attacker may stand still short of its target before the order is given again. */
-const STUCK_THINKS = 3;
 /** How near the gathering point a wave Unit counts as arrived. */
 const GATHER_RADIUS = 5;
 /** Share of a wave that must reach the gathering point before it attacks. */
@@ -66,11 +66,43 @@ const TURRET_REACH = 8;
 /** Cells short of the target where a wave gathers, so fast Raiders don't arrive alone. */
 const GATHER_DISTANCE = 14;
 
-interface Wave {
-  phase: "gather" | "attack";
-  gatherAt: CellPos;
-  thinks: number;
+/** How often a wave's Troop Carrier is aimed again at where the wave has got to, in thinks (2 seconds). */
+const FOLLOW_THINKS = 4;
+/** How near the Cell it would be aimed at the Troop Carrier needs no new Command. */
+const FOLLOW_SLACK = 1.5;
+
+/** A wave still at home, while some of its Units Board the Troop Carrier parked there. */
+interface BoardingWave {
+  readonly phase: "board";
+  readonly gatherAt: CellPos;
+  readonly carrierId: EntityId;
+  /** The wave's Units told to Board. */
+  readonly toBoard: readonly EntityId[];
+  /** Those of them seen inside at some think. */
+  readonly seenInside: Set<EntityId>;
+  /** The Tick by which the wave leaves home, whoever is aboard. */
+  readonly boardBy: number;
+  /** When the wave before this one set off, to go back to should this one be called off. */
+  readonly waveTickBefore: number | null;
 }
+
+/** The Troop Carrier that travels with a wave, until it is empty. */
+interface Ride {
+  readonly carrierId: EntityId;
+  /** The wave's Units inside it at the last think. */
+  inside: readonly EntityId[];
+}
+
+/** A wave that has left home: on the way to its gathering point, then attacking. */
+interface WaveOut {
+  phase: "gather" | "attack";
+  readonly gatherAt: CellPos;
+  /** Thinks since it set off. */
+  thinks: number;
+  ride: Ride | null;
+}
+
+type Wave = BoardingWave | WaveOut;
 
 export function createOpponent(playerId: PlayerId, seed: number): Opponent {
   const notes = new Map<EntityId, UnitNotes>();
@@ -89,6 +121,15 @@ export function createOpponent(playerId: PlayerId, seed: number): Opponent {
   let homeExplored = false;
   const danger: DangerMemory = new Map();
   const fields = new Map<EntityId, CellPos>();
+  const tendJobs: TendMemory = new Map();
+  const carriers = createCarrierMemory();
+  const standing: Standing = {
+    thinks: (id) => notes.get(id)?.still ?? 0,
+    restart: (id) => {
+      const n = notes.get(id);
+      if (n) n.still = 0;
+    },
+  };
 
   function note(u: UnitView): UnitNotes {
     let n = notes.get(u.id);
@@ -108,22 +149,45 @@ export function createOpponent(playerId: PlayerId, seed: number): Opponent {
   function think(view: PlayerView): Command[] {
     if (view.playerId !== playerId || ownBuildings(view).length === 0) return [];
     const own = view.units.filter((u) => u.owner === playerId);
-    const alive = new Set(own.map((u) => u.id));
+    // Passengers are off the Map but alive: their notes are kept for when they get out.
+    const alive = new Set([...own, ...ownPassengers(view)].map((u) => u.id));
     for (const id of notes.keys()) if (!alive.has(id)) notes.delete(id);
     for (const id of fields.keys()) if (!alive.has(id)) fields.delete(id);
     for (const u of own) note(u);
     rememberDanger(danger, view);
-    const army = own.filter((u) => isArmed(UNIT_STATS[u.kind]));
+    // A Troop Carrier is armed, but it is no fighter: it is led on its own, and
+    // a move home with the others would end among the Medics and Mechanics.
+    const army = own.filter((u) => isArmed(UNIT_STATS[u.kind]) && !isTroopCarrier(u.kind));
+
+    // Decided before the wave is led: a Troop Carrier the wave lets go in this think still
+    // shows its Passengers, and must not be taken for one at home that took in the wrong Units.
+    const parking = parkCommands(view, carriers, standing, waveCarrierId());
 
     return [
-      ...buildCommands(view, placeFailures),
-      ...trainCommands(view),
+      ...buildCommands(view, placeFailures, waveNeeds(army)),
+      ...trainCommands(view, waveNeeds(army)),
       ...rallyCommands(view),
-      ...harvestCommands(view, danger, fields, (u) => notes.get(u.id)!.still),
+      ...harvestCommands(view, danger, fields, (u) => standing.thinks(u.id)),
       ...defend(view, army),
       ...attack(view, army),
       ...scout(view, army),
+      ...parking,
+      ...tendCommands(view, tendJobs, standing),
     ];
+  }
+
+  /**
+   * What the waves can spare for support. Nothing before the first has set
+   * off; after that a support Unit goes ahead of more army only while the army
+   * at home is already enough for the next wave, so support is not paid for
+   * with that wave's Units, and a Player short of army (its wave out, or its
+   * base under attack) trains army first.
+   */
+  function waveNeeds(army: readonly UnitView[]): WaveNeeds {
+    return {
+      firstWaveSent: wavesSent > 0,
+      nextWaveCovered: withRole(army, "home").length >= waveThreshold(wavesSent),
+    };
   }
 
   function withRole(army: readonly UnitView[], role: Role): UnitView[] {
@@ -170,57 +234,184 @@ export function createOpponent(playerId: PlayerId, seed: number): Opponent {
     const threats = view.units.filter(
       (u) => u.owner !== playerId && own.some((b) => distanceTo(b, u) <= DEFEND_RADIUS),
     );
+    // A wave that has not left yet is still the army at home: it stays to defend, and leaves afterwards.
+    const calledOff = wave?.phase === "board" && (threats.length > 0 || hit.length > 0) ? callOff(view, wave) : [];
     const defenders = [...withRole(army, "home"), ...withRole(army, "defend")];
     if (threats.length === 0) {
       const beside = hit.length > 0 && defenders.length > 0 ? cellBeside(view, hit[0]!) : null;
       if (beside) {
         // Something unseen is shooting: walk over and let the Units return fire.
         for (const u of defenders) Object.assign(notes.get(u.id)!, { role: "defend", target: null });
-        return [{ type: "move", unitIds: defenders.map((u) => u.id), target: beside }];
+        return [...calledOff, { type: "move", unitIds: defenders.map((u) => u.id), target: beside }];
       }
       const idleDefenders = withRole(army, "defend").filter((u) => notes.get(u.id)!.still >= STUCK_THINKS);
-      return sendHome(view, idleDefenders);
+      return [...calledOff, ...sendHome(view, idleDefenders)];
     }
     for (const u of defenders) notes.get(u.id)!.role = "defend";
-    return attackOrders(view, defenders, (u) => nearest(threats, u)?.id ?? null);
+    return [...calledOff, ...attackOrders(view, defenders, (u) => nearest(threats, u)?.id ?? null)];
   }
 
-  /** Launches a wave once enough Units wait at home, then leads it: gather short of the target, then attack. */
+  /**
+   * Ends a wave that is still boarding as if it had not been sent: its Units
+   * are the army at home again, those inside get out, and the next wave is due
+   * when this one was.
+   */
+  function callOff(view: PlayerView, w: BoardingWave): Command[] {
+    standDown();
+    wavesSent--;
+    lastWaveTick = w.waveTickBefore;
+    const carrier = ownCarriers(view).find((c) => c.id === w.carrierId);
+    return carrier?.passengers?.length ? [{ type: "unload", unitIds: [carrier.id] }] : [];
+  }
+
+  /** The Troop Carrier with the wave, which is not one at home. */
+  function waveCarrierId(): EntityId | null {
+    if (!wave) return null;
+    return wave.phase === "board" ? wave.carrierId : (wave.ride?.carrierId ?? null);
+  }
+
+  /**
+   * Launches a wave once enough Units wait at home, then leads it: gather short
+   * of the target, then attack. With a Troop Carrier parked at home, up to as
+   * many of the wave's Riflemen as it holds Board it first.
+   */
   function attack(view: PlayerView, army: readonly UnitView[]): Command[] {
-    const commands: Command[] = [];
-    const home = withRole(army, "home");
     const hasTarget = view.buildings.some((b) => b.owner !== playerId);
-    const ready = waveReady({ wave: wavesSent, army: home.length, tick: view.tick, lastWaveTick });
-    if (!wave && hasTarget && ready) {
-      // The wave is just the threshold's worth, oldest Units first; the rest stay to defend.
-      const sent = [...home].sort((a, b) => a.id - b.id).slice(0, waveThreshold(wavesSent));
-      const target = nearestEnemyBuilding(view, hqCentre(view))!;
-      wave = { phase: "gather", gatherAt: stepToward(target, hqCentre(view), GATHER_DISTANCE), thinks: 0 };
-      wavesSent++;
-      lastWaveTick = view.tick;
-      for (const u of sent) notes.get(u.id)!.role = "wave";
-      // An Attack-move, so a wave met on its way out fights back instead of walking on under fire.
-      commands.push({ type: "attackMove", unitIds: sent.map((u) => u.id), target: wave.gatherAt });
-    }
-    const inWave = withRole(army, "wave");
+    const commands = !wave && hasTarget ? launch(view, withRole(army, "home")) : [];
     if (!wave) return commands;
-    if (inWave.length === 0) {
+    const inWave = withRole(army, "wave");
+    const carrier = ownCarriers(view).find((c) => c.id === waveCarrierId());
+    const riding = (carrier?.passengers ?? []).some((p) => notes.get(p.id)?.role === "wave");
+    if (inWave.length === 0 && !riding) {
+      // Left at the front it would stand alone in the other Player's way, and the next wave looks for it at home.
+      if (carrier && wave.phase !== "board") commands.push(driveToParking(view, carriers, standing, carrier));
       wave = null;
       return commands;
     }
-    wave.thinks++;
-    if (wave.phase === "gather") {
-      const gathered = inWave.filter(
-        (u) => Math.hypot(u.x - wave!.gatherAt.x, u.y - wave!.gatherAt.y) <= GATHER_RADIUS,
-      );
-      if (gathered.length < inWave.length * GATHER_SHARE && wave.thinks < GATHER_THINKS) return commands;
-      wave.phase = "attack";
+    if (wave.phase === "board") return [...commands, ...boardOrSetOff(view, wave, carrier, inWave)];
+    const out = wave;
+    out.thinks++;
+    commands.push(...leadCarrier(view, out, carrier, inWave));
+    if (out.phase === "gather") {
+      const gathered = inWave.filter((u) => isGathered(out, u));
+      // Passengers still on their way count as not gathered, whatever share of the others has arrived.
+      const waiting = gathered.length < inWave.length * GATHER_SHARE || out.ride !== null;
+      if (waiting && out.thinks < GATHER_THINKS) return commands;
+      out.phase = "attack";
+      // Out of time with the Troop Carrier still on its way: its Passengers get out where it is and walk.
+      if (out.ride && carrier) commands.push({ type: "unload", unitIds: [carrier.id] });
     }
     if (!hasTarget) {
-      wave = null;
+      standDown();
       return [...commands, ...sendHome(view, inWave)];
     }
     return [...commands, ...waveCommands(view, inWave)];
+  }
+
+  /**
+   * Ends the wave with Units left: all of them are the army at home again.
+   * Those inside its Troop Carrier are not on the Map to be sent anywhere; the
+   * Troop Carrier is one at home from now on, which puts them out and sends them back.
+   */
+  function standDown(): void {
+    for (const n of notes.values()) if (n.role === "wave") Object.assign(n, { role: "home", target: null });
+    wave = null;
+  }
+
+  /** Sends the next wave, if one is due: straight off, or first to Board a Troop Carrier parked at home. */
+  function launch(view: PlayerView, home: readonly UnitView[]): Command[] {
+    if (!waveReady({ wave: wavesSent, army: home.length, tick: view.tick, lastWaveTick })) return [];
+    // The wave is just the threshold's worth, oldest Units first; the rest stay to defend.
+    const sent = [...home].sort((a, b) => a.id - b.id).slice(0, waveThreshold(wavesSent));
+    const target = nearestEnemyBuilding(view, hqCentre(view))!;
+    const gatherAt = stepToward(target, hqCentre(view), GATHER_DISTANCE);
+    const waveTickBefore = lastWaveTick;
+    wavesSent++;
+    lastWaveTick = view.tick;
+    for (const u of sent) notes.get(u.id)!.role = "wave";
+    // One Troop Carrier at most, and only one waiting at home: the wave is never held up for one.
+    const carrier = ownCarriers(view).find((c) => isParked(carriers, c));
+    const toBoard = carrier
+      ? sent.filter((u) => UNIT_STATS[u.kind].class === "infantry").slice(0, passengerRoom(carrier.kind))
+      : [];
+    if (!carrier || toBoard.length === 0) {
+      wave = { phase: "gather", gatherAt, thinks: 0, ride: null };
+      // An Attack-move, so a wave met on its way out fights back instead of walking on under fire.
+      return [{ type: "attackMove", unitIds: sent.map((u) => u.id), target: gatherAt }];
+    }
+    const unitIds = toBoard.map((u) => u.id);
+    // They have stood at the rally point: counted from now, standing means the Board has ended.
+    for (const id of unitIds) standing.restart(id);
+    wave = {
+      phase: "board",
+      gatherAt,
+      carrierId: carrier.id,
+      toBoard: unitIds,
+      seenInside: new Set(),
+      boardBy: view.tick + OPPONENT.boardTicks,
+      waveTickBefore,
+    };
+    return [{ type: "board", unitIds, targetId: carrier.id }];
+  }
+
+  /**
+   * A wave at home while its Units Board: it sets off when nobody is still on
+   * the way to the Troop Carrier, when the time allowed is up, or at once when
+   * the Troop Carrier is gone or has put out someone it held (it was hit).
+   */
+  function boardOrSetOff(
+    view: PlayerView,
+    w: BoardingWave,
+    carrier: UnitView | undefined,
+    inWave: readonly UnitView[],
+  ): Command[] {
+    const inside = w.toBoard.filter((id) => carrier?.passengers?.some((p) => p.id === id));
+    const putOut = inWave.some((u) => w.seenInside.has(u.id));
+    for (const id of inside) w.seenInside.add(id);
+    // One that stands on the Map is not coming: its Board ended without it getting in.
+    const coming = w.toBoard.filter((id) => inWave.some((u) => u.id === id) && standing.thinks(id) < STUCK_THINKS);
+    if (carrier && !putOut && coming.length > 0 && view.tick < w.boardBy) return [];
+    // An empty Troop Carrier stays parked: it would bring nobody.
+    const ride = carrier && inside.length > 0 ? { carrierId: carrier.id, inside } : null;
+    wave = { phase: "gather", gatherAt: w.gatherAt, thinks: 0, ride };
+    // The Troop Carrier is not sent with them: it is led after them, or it would be there long before them.
+    return inWave.length > 0 ? [{ type: "attackMove", unitIds: inWave.map((u) => u.id), target: w.gatherAt }] : [];
+  }
+
+  /**
+   * The wave's Troop Carrier on the way: every few thinks it is sent by
+   * Attack-move to where the wave's foremost Unit is, so it arrives with the
+   * wave and not alone ahead of it. At the gathering point it Unloads, again
+   * at each think while a Passenger has no free Cell to get out onto. Once it
+   * is empty, there or because it was hit on the way, it leaves the wave and
+   * drives home: at the front it would stand alone in the other Player's
+   * way, and the next wave looks for it parked at home. (Nothing else calls
+   * for the drive: a move on which it held or put out a Passenger ends
+   * without a pick-up, so it would not take the wave's Riflemen back in.)
+   */
+  function leadCarrier(
+    view: PlayerView,
+    w: WaveOut,
+    carrier: UnitView | undefined,
+    inWave: readonly UnitView[],
+  ): Command[] {
+    const ride = w.ride;
+    if (!ride) return [];
+    const commands: Command[] = [];
+    // Out short of the gathering point (it was hit, or is gone): they go on by foot, and are not told to Board again.
+    const short = inWave.filter((u) => ride.inside.includes(u.id) && !isGathered(w, u)).map((u) => u.id);
+    if (short.length > 0 && w.phase === "gather") commands.push({ type: "attackMove", unitIds: short, target: w.gatherAt });
+    ride.inside = ride.inside.filter((id) => carrier?.passengers?.some((p) => p.id === id));
+    if (!carrier || ride.inside.length === 0) {
+      w.ride = null;
+      if (carrier) commands.push(driveToParking(view, carriers, standing, carrier));
+      return commands;
+    }
+    if (isGathered(w, carrier) || w.phase === "attack") return [...commands, { type: "unload", unitIds: [carrier.id] }];
+    if (w.thinks % FOLLOW_THINKS !== 0) return commands;
+    const next = foremostCell(w.gatherAt, inWave);
+    if (Math.hypot(carrier.x - (next.x + 0.5), carrier.y - (next.y + 0.5)) <= FOLLOW_SLACK) return commands;
+    return [...commands, { type: "attackMove", unitIds: [carrier.id], target: next }];
   }
 
   /**
@@ -311,6 +502,30 @@ export function createOpponent(playerId: PlayerId, seed: number): Opponent {
   return { think };
 }
 
+/** Whether a Unit of the wave has reached its gathering point. */
+function isGathered(w: { readonly gatherAt: CellPos }, u: UnitView): boolean {
+  return Math.hypot(u.x - w.gatherAt.x, u.y - w.gatherAt.y) <= GATHER_RADIUS;
+}
+
+/**
+ * The Cell of the Unit nearest the gathering point (the lowest id among those
+ * as near), or the gathering point itself once that Unit has gathered or no
+ * Unit is left on the Map.
+ */
+function foremostCell(gatherAt: CellPos, units: readonly UnitView[]): CellPos {
+  let foremost: UnitView | null = null;
+  let left = Infinity;
+  for (const u of units) {
+    const d = Math.hypot(u.x - gatherAt.x, u.y - gatherAt.y);
+    if (d < left || (d === left && foremost !== null && u.id < foremost.id)) {
+      foremost = u;
+      left = d;
+    }
+  }
+  if (!foremost || left <= GATHER_RADIUS) return gatherAt;
+  return { x: Math.floor(foremost.x), y: Math.floor(foremost.y) };
+}
+
 function inRange(view: PlayerView, u: UnitView, targetId: EntityId): boolean {
   const t = view.units.find((x) => x.id === targetId) ?? view.buildings.find((b) => b.id === targetId);
   return t !== undefined && distanceTo(t, u) <= UNIT_STATS[u.kind].range;
@@ -357,14 +572,6 @@ function cellBeside(view: PlayerView, b: BuildingView): CellPos | null {
     }
   }
   return ring.find((c) => isOpenGround(view, c)) ?? null;
-}
-
-/** On the Map, passable, and not under a Building the Player knows of. */
-function isOpenGround(view: PlayerView, c: CellPos): boolean {
-  const { width, height, terrain } = view.map;
-  if (c.x < 0 || c.y < 0 || c.x >= width || c.y >= height) return false;
-  if (!isPassableTerrain(terrain[cellIndexIn(view.map, c.x, c.y)]!)) return false;
-  return !view.buildings.some((o) => c.x >= o.x && c.x < o.x + o.width && c.y >= o.y && c.y < o.y + o.height);
 }
 
 function explored(view: PlayerView, c: CellPos): boolean {

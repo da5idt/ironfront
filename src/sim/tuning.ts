@@ -216,7 +216,7 @@ export function tendRate(kind: UnitKind, target: TendTargetClass): number {
 export const TEND = {
   /** How far an idle support Unit looks for something of its own Player's to help. */
   seekRadius: 6,
-  /** How far a target may move from where it was when the Tend began before the Unit gives up on it. */
+  /** How far a target may move from the line between where it and the Unit were when the Tend began before the Unit gives up on it. */
   leash: 8,
   /** How often an idle support Unit looks: slow enough to be cheap, quick enough to feel willing. */
   seekTicks: Math.ceil(TICKS_PER_SECOND / 2),
@@ -290,6 +290,13 @@ export const OPPONENT = {
   mostHarvesters: 5,
   /** Army size (Riflemen and Raiders) the Opponent stops training at. */
   mostArmy: 40,
+  /** Medics kept at the rally point and Mechanics kept for the base; a loss is trained again. */
+  mostMedics: 2,
+  mostMechanics: 2,
+  /** Troop Carriers kept for the attack waves: one, as a wave takes one at most. */
+  mostTroopCarriers: 1,
+  /** Longest a wave waits at home for its Riflemen to Board; then it leaves with whoever is aboard. */
+  boardTicks: 12 * TICKS_PER_SECOND,
   /** Units each training Building keeps queued; a short queue keeps Credits free for the build order. */
   queueDepth: 2,
   /** Ore within this many Cells of an enemy fighter seen lately is unsafe for Harvesters. */

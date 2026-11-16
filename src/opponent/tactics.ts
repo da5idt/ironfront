@@ -3,6 +3,11 @@ import { type BuildingView, OPPONENT, type UnitView, type Vec } from "../sim";
 // The Computer Opponent's fighting decisions that are worth testing on their own:
 // how big an attack wave must be, and which of several candidates is nearest.
 
+/** How close to a Building one of the other Player's Units counts as attacking the base. */
+export const DEFEND_RADIUS = 10;
+/** Thinks a Unit may stand still short of its target before its Command is given again. */
+export const STUCK_THINKS = 3;
+
 /** Idle army Units the Opponent waits for before sending wave `wave` (counting from 0). */
 export function waveThreshold(wave: number): number {
   return Math.min(OPPONENT.waveCap, OPPONENT.firstWave + OPPONENT.waveGrowth * wave);

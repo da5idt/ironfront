@@ -10,12 +10,12 @@ import {
   UNIT_STATS,
   type UnitKind,
 } from "../sim";
-import { hqCentre, ownBuildings } from "./base";
+import { hqCentre, ownBuildings, ownPassengers } from "./base";
 import { findBuildSite } from "./buildSite";
 import { chooseOre, type DangerMemory } from "./harvesting";
 
 // The Computer Opponent's base and economy: what the HQ builds next, where it
-// goes, what the Barracks and Vehicle Factory train, and keeping Harvesters busy.
+// goes, what the Barracks, Vehicle Factory and Hospital train, and keeping Harvesters busy.
 
 /**
  * The fixed build order, as how many of each kind should stand once that step
@@ -51,17 +51,44 @@ function nextExtra(own: readonly BuildingView[]): BuildingKind | null {
   return null;
 }
 
-function nextBuilding(own: readonly BuildingView[]): BuildingKind | null {
-  return nextInOrder(own) ?? nextExtra(own);
+/**
+ * What the attack waves can spare for support (the Hospital, Medics, Mechanics
+ * and the Troop Carrier), as the Opponent leading the waves tells it.
+ */
+export interface WaveNeeds {
+  /**
+   * Whether the first wave has set off. Until then nothing is spent on
+   * support, so the first wave finds the base and the army exactly as large as
+   * they were before the Opponent kept any.
+   */
+  readonly firstWaveSent: boolean;
+  /** Whether the army at home is already enough for the next wave. */
+  readonly nextWaveCovered: boolean;
+}
+
+/** Before the first wave: nothing for support. */
+export const NOTHING_TO_SPARE: WaveNeeds = { firstWaveSent: false, nextWaveCovered: false };
+
+/**
+ * The one Hospital, wanted once the build order stands and the first wave has
+ * set off, and then before the extras still to come: those go on for most of
+ * a Match, and behind them it would come too late to Heal anyone who comes home hurt.
+ */
+function nextSupport(own: readonly BuildingView[], waves: WaveNeeds): BuildingKind | null {
+  return waves.firstWaveSent && count(own, "hospital") === 0 ? "hospital" : null;
+}
+
+function nextBuilding(own: readonly BuildingView[], waves: WaveNeeds): BuildingKind | null {
+  return nextInOrder(own) ?? nextSupport(own, waves) ?? nextExtra(own);
 }
 
 /**
  * Credits to hold back while the HQ saves for its next Building, so training
  * never starves the base. Once the HQ is busy (already paid) training gets the lot.
  */
-function buildReserve(view: PlayerView): number {
+function buildReserve(view: PlayerView, waves: WaveNeeds): number {
   if (view.production) return 0;
-  const next = nextBuilding(ownBuildings(view));
+  const next = nextBuilding(ownBuildings(view), waves);
   return next ? BUILDING_STATS[next].cost : 0;
 }
 
@@ -97,7 +124,11 @@ const NO_DANGER: DangerMemory = new Map();
 const PLACE_ATTEMPTS = 30;
 
 /** The HQ's next step: place what is finished, or start what comes next. */
-export function buildCommands(view: PlayerView, placeFailures: { count: number }): Command[] {
+export function buildCommands(
+  view: PlayerView,
+  placeFailures: { count: number },
+  waves: WaveNeeds = NOTHING_TO_SPARE,
+): Command[] {
   const production = view.production;
   if (production?.ready) {
     const at = findBuildSite(view, production.kind, siteWanted(view, production.kind));
@@ -113,7 +144,7 @@ export function buildCommands(view: PlayerView, placeFailures: { count: number }
     return [{ type: "cancelBuilding" }];
   }
   if (production || !ownBuildings(view).some((b) => b.kind === "hq")) return [];
-  const kind = nextBuilding(ownBuildings(view));
+  const kind = nextBuilding(ownBuildings(view), waves);
   if (!kind) return [];
   // Short of Harvesters, the HQ leaves enough for one: Ore pays for everything else.
   const held = kind === "vehicleFactory" || kind === "refinery" ? 0 : harvesterHoldBack(view);
@@ -134,10 +165,32 @@ function harvesterHoldBack(view: PlayerView): number {
   return short && count(ownBuildings(view), "vehicleFactory") > 0 ? UNIT_STATS.harvester.cost : 0;
 }
 
-/** Units of a kind the Player has, counting those queued. */
+/** Units of a kind the Player has, counting those queued and those inside its Troop Carriers. */
 function owned(view: PlayerView, kind: UnitKind): number {
   const queued = ownBuildings(view).reduce((n, b) => n + (b.training?.queue.filter((k) => k === kind).length ?? 0), 0);
-  return view.units.filter((u) => u.owner === view.playerId && u.kind === kind).length + queued;
+  const onMap = view.units.filter((u) => u.owner === view.playerId && u.kind === kind).length;
+  return onMap + ownPassengers(view).filter((p) => p.kind === kind).length + queued;
+}
+
+/** The kinds kept for support and how many of each, in the order they are wanted when equally short. */
+const SUPPORT_KEPT: readonly (readonly [UnitKind, number])[] = [
+  ["medic", OPPONENT.mostMedics],
+  ["mechanic", OPPONENT.mostMechanics],
+  ["troopCarrier", OPPONENT.mostTroopCarriers],
+];
+
+/**
+ * The support Units and the Troop Carrier the Player is short of, the kind
+ * with the smallest share of its number first, so one of each comes before a
+ * second of any. A kind nothing standing can train is left out, so waiting
+ * for the Hospital holds nothing else up.
+ */
+function supportWanted(view: PlayerView): UnitKind[] {
+  const own = ownBuildings(view);
+  return SUPPORT_KEPT.map(([kind, most], turn) => ({ kind, share: owned(view, kind) / most, turn }))
+    .filter(({ kind, share }) => share < 1 && own.some((b) => b.training && TRAINS[b.kind]?.includes(kind)))
+    .sort((a, b) => a.share - b.share || a.turn - b.turn)
+    .map(({ kind }) => kind);
 }
 
 /**
@@ -146,17 +199,28 @@ function owned(view: PlayerView, kind: UnitKind): number {
  * Raider to two Riflemen. When the most needed Unit can't be paid for yet the
  * Opponent saves for it rather than spending on the next, so Raiders and
  * Harvesters aren't crowded out by cheap Riflemen.
+ *
+ * Medics, Mechanics and the Troop Carrier are wanted only once the build order
+ * stands and the first wave has set off, so the early game is what it was
+ * without them. From then on, while the army at home covers the next wave,
+ * the one most wanted of them goes ahead of the army: behind the army, which
+ * is short of its number for most of a Match, they came too late to matter or
+ * never. Otherwise, and for the others, they come last, from what the army
+ * leaves over.
  */
-export function trainCommands(view: PlayerView): Command[] {
+export function trainCommands(view: PlayerView, waves: WaveNeeds = NOTHING_TO_SPARE): Command[] {
   const own = ownBuildings(view);
   const riflemen = owned(view, "rifleman");
   const raiders = owned(view, "raider");
+  const support = waves.firstWaveSent && nextInOrder(own) === null ? supportWanted(view) : [];
   const wants: UnitKind[] = [];
   if (owned(view, "harvester") < harvestersWanted(view)) wants.push("harvester");
+  if (waves.nextWaveCovered) wants.push(...support.splice(0, 1));
   if (riflemen + raiders < OPPONENT.mostArmy) wants.push(...(raiders * 2 < riflemen ? RAIDER_FIRST : RIFLEMAN_FIRST));
+  wants.push(...support);
   // A Harvester pays for itself, so it may spend what the build order holds back;
   // everything else leaves a Harvester's worth while Harvesters are short.
-  const reserve = buildReserve(view) + harvesterHoldBack(view);
+  const reserve = buildReserve(view, waves) + harvesterHoldBack(view);
   let spent = 0;
   const commands: Command[] = [];
   for (const kind of wants) {
