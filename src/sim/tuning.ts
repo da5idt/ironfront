@@ -219,7 +219,7 @@ export const TEND = {
   /** How far a target may move from where it was when the Tend began before the Unit gives up on it. */
   leash: 8,
   /** How often an idle support Unit looks: slow enough to be cheap, quick enough to feel willing. */
-  seekTicks: TICKS_PER_SECOND / 2,
+  seekTicks: Math.ceil(TICKS_PER_SECOND / 2),
   /** How long an idle support Unit leaves alone a target it found no way to, before it looks at it again. */
   retryTicks: 5 * TICKS_PER_SECOND,
 } as const;

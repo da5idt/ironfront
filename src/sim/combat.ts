@@ -4,7 +4,7 @@ import { type BuildingSighting, isFootprintVisible, isVisible } from "./fog";
 import type { CommandHandler } from "./handlers";
 import { claimedCells, freeCellNear, freeCellsNear, groupMoveGoals, orderMoveTo, planMove, stepAlong, unitCell, walkingTo } from "./movement";
 import type { BuildingState, MatchState, UnitState } from "./state";
-import { cellIndex, ownUnits, removeBuilding } from "./state";
+import { cellIndex, isUnit, ownUnits, removeBuilding } from "./state";
 import { BUILDING_STATS, isArmed, MOVEMENT, UNIT_STATS, type WeaponStats } from "./tuning";
 import type { CellPos, EntityId, PlayerId, Vec } from "./types";
 
@@ -37,10 +37,6 @@ type Target = UnitState | BuildingState;
 
 /** A target as a Player knows it: a remembered Building may already be gone. */
 type KnownTarget = Target | BuildingSighting;
-
-function isUnit(t: KnownTarget): t is UnitState {
-  return !("width" in t);
-}
 
 function canSeeUnit(m: MatchState, player: PlayerId, u: UnitState): boolean {
   return isVisible(m.fog[player], cellIndex(m, Math.floor(u.x), Math.floor(u.y)));

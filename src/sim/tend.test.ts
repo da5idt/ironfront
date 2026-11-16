@@ -64,6 +64,14 @@ function damagedBuilding(match: Match, owner: PlayerId, x: number, y: number, he
 const buildingHp = (match: Match, owner: PlayerId, id: number): number =>
   getPlayerView(match, owner).buildings.find((b) => b.id === id)!.hp;
 
+/** Marches the patient 30 Cells along the row and returns where the Medic stands once it is there. */
+function marchAway(match: Match, medic: number, patient: number): { x: number; y: number } {
+  const from = at(match, patient).x;
+  issueCommand(match, 0, { type: "move", unitIds: [patient], target: { x: Math.floor(from) + 30, y: ROW } });
+  runUntil(match, () => at(match, patient).x === from + 30);
+  return at(match, medic);
+}
+
 describe("the Tend Command", () => {
   it("sends a Medic to a hurt Rifleman, heals it to full health at 8 a second, and leaves the Medic idle", () => {
     const match = stage();
@@ -247,9 +255,69 @@ describe("the Tend Command", () => {
     expect(at(match, medic)).toEqual(stood);
     expect(hp(match, patient)).toBe(10);
   });
+
+  it("holds to the leash when it starts beside a target that marches off: it stops within 8 Cells and stays there", () => {
+    const match = stage();
+    const medic = addTestUnit(match, 0, "medic", { x: 14, y: ROW });
+    const patient = hurt(match, 0, "rifleman", 15, ROW, 1);
+    tend(match, [medic], patient);
+    const stood = marchAway(match, medic, patient);
+    // The patient's start was 15.5; the Medic walks a Cell behind it and stops once the patient is 8 Cells out.
+    expect(stood.x).toBeLessThan(15.5 + 8);
+    expect(hp(match, patient)).toBeLessThan(50);
+    const left = hp(match, patient);
+    run(match, 10 * TICKS_PER_SECOND);
+    expect(at(match, medic)).toEqual(stood);
+    expect(hp(match, patient)).toBe(left);
+  });
+
+  it("is obeyed again for a target the Medic gave up on at the leash", () => {
+    const match = stage();
+    const medic = addTestUnit(match, 0, "medic", { x: 14, y: ROW });
+    const patient = hurt(match, 0, "rifleman", 15, ROW, 1);
+    tend(match, [medic], patient);
+    const stood = marchAway(match, medic, patient);
+    run(match, 2 * TICKS_PER_SECOND);
+    expect(at(match, medic)).toEqual(stood);
+    expect(tend(match, [medic], patient)).toEqual({ ok: true });
+    runUntil(match, () => hp(match, patient) === 50);
+    expect(Math.floor(at(match, medic).x)).toBe(44);
+  });
+
+  it("lets the Medic go back to that target by itself once the Medic has been given any Command", () => {
+    const match = stage();
+    const medic = addTestUnit(match, 0, "medic", { x: 14, y: ROW });
+    const patient = hurt(match, 0, "rifleman", 15, ROW, 1);
+    tend(match, [medic], patient);
+    const stood = marchAway(match, medic, patient);
+    // The patient comes back and stops 3 Cells from the Medic, well inside the seek radius: still left alone.
+    issueCommand(match, 0, { type: "move", unitIds: [patient], target: { x: Math.floor(stood.x) + 3, y: ROW } });
+    runUntil(match, () => at(match, patient).x === Math.floor(stood.x) + 3.5);
+    const left = hp(match, patient);
+    run(match, 5 * TICKS_PER_SECOND);
+    expect(hp(match, patient)).toBe(left);
+    expect(at(match, medic)).toEqual(stood);
+    expect(issueCommand(match, 0, { type: "stop", unitIds: [medic] })).toEqual({ ok: true });
+    runUntil(match, () => hp(match, patient) === 50);
+  });
 });
 
 describe("a Medic with nothing to do", () => {
+  it("holds to the leash on a target it went to by itself: it stops within 8 Cells and stays there", () => {
+    const match = stage();
+    const medic = addTestUnit(match, 0, "medic", { x: 14, y: ROW });
+    const patient = hurt(match, 0, "rifleman", 15, ROW, 1);
+    // Long enough for a look: the Medic is at work without being told.
+    runUntil(match, () => hp(match, patient) > 1);
+    const stood = marchAway(match, medic, patient);
+    expect(stood.x).toBeLessThan(15.5 + 8);
+    expect(hp(match, patient)).toBeLessThan(50);
+    const left = hp(match, patient);
+    run(match, 10 * TICKS_PER_SECOND);
+    expect(at(match, medic)).toEqual(stood);
+    expect(hp(match, patient)).toBe(left);
+  });
+
   it("walks to a hurt Infantry Unit within 6 Cells and heals it to full health by itself", () => {
     const match = stage();
     const medic = addTestUnit(match, 0, "medic", { x: 14, y: ROW });

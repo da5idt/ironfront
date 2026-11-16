@@ -3,7 +3,7 @@ import { OK, reject } from "./commands";
 import type { CommandHandler } from "./handlers";
 import { claimedCells, type MovePlan, planMove, stepAlong, unitCell } from "./movement";
 import type { BuildingState, MatchState, UnitState } from "./state";
-import { cellIndex, isWalkable, ownUnits } from "./state";
+import { cellIndex, isUnit, isWalkable, ownUnits } from "./state";
 import { BUILDING_STATS, TEND, TEND_RATES, tendRate, TICKS_PER_SECOND, UNIT_STATS } from "./tuning";
 import type { CellPos, EntityId, PlayerId, TendTargetClass, Vec } from "./types";
 
@@ -23,10 +23,14 @@ import type { CellPos, EntityId, PlayerId, TendTargetClass, Vec } from "./types"
 //   target below full health it can help within the seek radius, and Tends it
 //   as if told to. Idle means no Command in progress, so a Unit on a move, or
 //   on a Tend it was given, is never pulled away.
+// - A Unit that gave up on a target at the leash does not go to it by itself
+//   again until it is given a Command, whatever the Command. Without that it
+//   would start afresh at its next look and follow a marching target across
+//   the Map, a leash at a time. A Tend Command on that target is always obeyed.
 // - A Unit that finds no way to a target leaves that one alone for a while when
 //   it looks by itself, so a walled-in target costs a route now and then, not
-//   on every look, and does not keep the Unit from others it can reach. A
-//   Tend Command is always tried.
+//   on every look, and does not keep the Unit from others it can reach. Each
+//   such target has its own wait. A Tend Command is always tried.
 // - Health comes back in whole points, at the Unit's rate a second.
 // - Health never goes above full, and nothing is paid.
 // - Only own targets: a Player always sees its own Units and Buildings, so
@@ -43,18 +47,12 @@ export interface Tending {
   readonly from: Vec;
   /** The walk to a Cell beside the target, or null while standing. */
   walk: MovePlan | null;
-  /** True when the last route planned stopped short of its goal: there is no way to the target, as against a target that has moved on. */
-  cutShort: boolean;
   /** Ticks spent at work beside the target, which sets how many whole health points are due. */
   workedTicks: number;
 }
 
 function startTend(u: UnitState, t: TendTarget): void {
-  u.order = { type: "tend", targetId: t.id, from: { x: t.x, y: t.y }, walk: null, cutShort: false, workedTicks: 0 };
-}
-
-function isUnit(t: TendTarget): t is UnitState {
-  return !("width" in t);
+  u.order = { type: "tend", targetId: t.id, from: { x: t.x, y: t.y }, walk: null, workedTicks: 0 };
 }
 
 function targetClass(t: TendTarget): TendTargetClass {
@@ -88,6 +86,9 @@ function isBeside(cell: CellPos, t: TendTarget): boolean {
   return cell.x >= box.x - 1 && cell.x <= box.x + box.width && cell.y >= box.y - 1 && cell.y <= box.y + box.height;
 }
 
+/** Added to the distance of a Cell another own Unit holds: more than any Map is wide. */
+const HELD_CELL_PENALTY = 1e6;
+
 /**
  * The Cell beside the target the Unit walks to: the nearest one to it that no
  * other own Unit holds, so two Units on one target take a side each. With every
@@ -114,9 +115,6 @@ function standGoal(m: MatchState, u: UnitState, t: TendTarget): CellPos | null {
   return best;
 }
 
-/** Added to the distance of a Cell another own Unit holds: more than any Map is wide. */
-const HELD_CELL_PENALTY = 1e6;
-
 export const handleTend: CommandHandler<"tend"> = (m, player, command): CommandResult => {
   const units = ownUnits(m, player, command.unitIds);
   if (units.length === 0) return reject("no own Units selected");
@@ -128,12 +126,22 @@ export const handleTend: CommandHandler<"tend"> = (m, player, command): CommandR
   return OK;
 };
 
+/** A Player's Units that were given a Command may again go, by themselves, to the targets they gave up on at the leash. */
+export function forgetLeftAtLeash(m: MatchState, player: PlayerId, unitIds: readonly EntityId[]): void {
+  for (const u of ownUnits(m, player, unitIds)) u.leftAtLeash.clear();
+}
+
 /** One Tick of a Tend: walk until beside the target, and restore health while beside it. */
 function advanceTend(m: MatchState, u: UnitState, tending: Tending): void {
   const target = ownTarget(m, u.owner, tending.targetId);
   const full = target ? maxHp(target) : 0;
-  if (!target || target.hp >= full || Math.hypot(target.x - tending.from.x, target.y - tending.from.y) > TEND.leash) {
+  if (!target || target.hp >= full) {
     u.order = { type: "idle" };
+    return;
+  }
+  if (Math.hypot(target.x - tending.from.x, target.y - tending.from.y) > TEND.leash) {
+    u.order = { type: "idle" };
+    u.leftAtLeash.add(target.id);
     return;
   }
   if (!isBeside(unitCell(u), target) && !(tending.walk && isBeside(tending.walk.goal, target))) {
@@ -143,15 +151,17 @@ function advanceTend(m: MatchState, u: UnitState, tending: Tending): void {
       return;
     }
     tending.walk = planMove(m, u, goal);
-    const end = tending.walk.path.at(-1) ?? unitCell(u);
-    tending.cutShort = end.x !== goal.x || end.y !== goal.y;
   }
-  if (tending.walk && stepAlong(m, u, tending.walk) === "arrived") tending.walk = null;
+  // Judged where the walk ends, not when it is planned: a route planned again on the way (a Building went up) may stop short too.
+  let stoppedShort = false;
+  if (tending.walk && stepAlong(m, u, tending.walk) === "arrived") {
+    const cell = unitCell(u);
+    stoppedShort = cell.x !== tending.walk.goal.x || cell.y !== tending.walk.goal.y;
+    tending.walk = null;
+  }
   if (!isBeside(unitCell(u), target)) {
-    // The walk is over and the target is not beside the Unit: either no route reaches it, or it moved on meanwhile.
-    if (tending.walk) return;
-    if (tending.cutShort) giveUpOnUnreachable(m, u, target);
-    else u.order = { type: "idle" };
+    // Still on the way, or the target moved on as the Unit arrived (a new route next Tick), unless no route reaches it.
+    if (stoppedShort) giveUpOnUnreachable(m, u, target);
     return;
   }
   // The rate is spread over the Ticks of a second in whole points (8 a second is
@@ -168,11 +178,25 @@ function advanceTend(m: MatchState, u: UnitState, tending: Tending): void {
 /** Ends a Tend whose target cannot be reached, and notes it so the Unit does not come straight back by itself. */
 function giveUpOnUnreachable(m: MatchState, u: UnitState, t: TendTarget): void {
   u.order = { type: "idle" };
-  u.unreachable = { targetId: t.id, untilTick: m.tick + TEND.retryTicks };
+  u.unreachable.set(t.id, m.tick + TEND.retryTicks);
+}
+
+/**
+ * Drops what the Unit remembers of targets that are gone, and of waits that are
+ * over, so neither memory grows through a long Match.
+ */
+function forgetStale(m: MatchState, u: UnitState): void {
+  const gone = (id: EntityId): boolean => !m.units.has(id) && !m.buildings.has(id);
+  for (const [id, untilTick] of u.unreachable) {
+    if (m.tick >= untilTick || gone(id)) u.unreachable.delete(id);
+  }
+  for (const id of u.leftAtLeash) {
+    if (gone(id)) u.leftAtLeash.delete(id);
+  }
 }
 
 /** How far the target is from `from`: to a Unit's position, or to the nearest point of a Building's footprint. */
-function distanceTo(t: TendTarget, from: Vec): number {
+function gapTo(t: TendTarget, from: Vec): number {
   if (isUnit(t)) return Math.hypot(t.x - from.x, t.y - from.y);
   const dx = Math.max(t.x - from.x, 0, from.x - (t.x + t.width));
   const dy = Math.max(t.y - from.y, 0, from.y - (t.y + t.height));
@@ -188,9 +212,9 @@ function seekTarget(m: MatchState, u: UnitState): TendTarget | undefined {
   let best: TendTarget | undefined;
   let bestD = Infinity;
   const consider = (t: TendTarget): void => {
-    if (u.unreachable?.targetId === t.id && m.tick < u.unreachable.untilTick) return;
+    if (m.tick < (u.unreachable.get(t.id) ?? 0) || u.leftAtLeash.has(t.id)) return;
     if (t.owner !== u.owner || t.hp <= 0 || t.hp >= maxHp(t) || rateFor(u, t) <= 0) return;
-    const d = distanceTo(t, u);
+    const d = gapTo(t, u);
     if (d > TEND.seekRadius) return;
     if (d < bestD || (d === bestD && best !== undefined && t.id < best.id)) {
       best = t;
@@ -212,8 +236,9 @@ export function tendTargets(m: MatchState): void {
   m.tends = [];
   for (const u of m.units.values()) {
     // Offset by id so the Units of a group do not all look on the same Tick.
-    if (u.order.type === "idle" && canTend(u) && (m.tick + u.id) % TEND.seekTicks === 0) {
-      const target = seekTarget(m, u);
+    if (canTend(u) && (m.tick + u.id) % TEND.seekTicks === 0) {
+      forgetStale(m, u);
+      const target = u.order.type === "idle" ? seekTarget(m, u) : undefined;
       if (target) startTend(u, target);
     }
     if (u.order.type === "tend") advanceTend(m, u, u.order);
