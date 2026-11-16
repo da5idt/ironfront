@@ -62,6 +62,7 @@ describe("Unit classes", () => {
       mechanic: "infantry",
       raider: "vehicle",
       harvester: "vehicle",
+      troopCarrier: "vehicle",
     };
     expect(Object.fromEntries(Object.entries(UNIT_STATS).map(([kind, stats]) => [kind, stats.class]))).toEqual(classes);
   });

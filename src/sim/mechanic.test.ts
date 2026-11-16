@@ -171,6 +171,25 @@ describe("a Mechanic told to Tend", () => {
     expect(hp(match, harvester)).toBe(300);
   });
 
+  it("repairs a Troop Carrier to full health, when told to and by itself", () => {
+    const match = stage();
+    const mechanic = addTestUnit(match, 0, "mechanic", { x: 18, y: ROW });
+    const carrier = hurt(match, 0, "troopCarrier", 20, ROW, 100);
+    expect(tend(match, [mechanic], carrier)).toEqual({ ok: true });
+    runUntil(match, () => hp(match, carrier) > 100);
+    const before = hp(match, carrier);
+    run(match, TICKS_PER_SECOND);
+    expect(hp(match, carrier) - before).toBe(10);
+    runUntil(match, () => hp(match, carrier) === UNIT_STATS.troopCarrier.maxHp);
+    run(match, 2 * TICKS_PER_SECOND);
+    expect(hp(match, carrier)).toBe(220);
+
+    const alone = stage();
+    addTestUnit(alone, 0, "mechanic", { x: 15, y: ROW });
+    const damaged = hurt(alone, 0, "troopCarrier", 20, ROW, 150);
+    runUntil(alone, () => hp(alone, damaged) === 220);
+  });
+
   it.each(BUILDING_KINDS)("repairs a %s from under half health to full at 15 a second, and no further", (kind) => {
     const match = stage();
     const { maxHp, width, height } = BUILDING_STATS[kind];

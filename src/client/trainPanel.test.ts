@@ -28,7 +28,7 @@ describe("train buttons", () => {
   it("lists what the Building trains, one button each, inside the area", () => {
     expect(trainButtons(AREA, "barracks").map((b) => b.kind)).toEqual(["rifleman"]);
     const buttons = trainButtons(AREA, "vehicleFactory");
-    expect(buttons.map((b) => b.kind).slice(0, 3)).toEqual(["raider", "harvester", "mechanic"]);
+    expect(buttons.map((b) => b.kind)).toEqual(["raider", "harvester", "mechanic", "troopCarrier"]);
     expect(buttons[1]!.rect.y).toBeGreaterThanOrEqual(buttons[0]!.rect.y + buttons[0]!.rect.height);
     // Room for the Unit's picture: the same button as in the build menu.
     expect(buttons.map((b) => b.rect)).toEqual(buildButtons(AREA).slice(0, buttons.length).map((b) => b.rect));
@@ -45,6 +45,8 @@ describe("train buttons", () => {
     expect(trainButtonAt(buttons, r.x + 3, r.y - 1)).toBeNull();
     const third = buttons[2]!.rect;
     expect(trainButtonAt(buttons, third.x + 3, third.y + 3)).toBe("mechanic");
+    const last = buttons.at(-1)!.rect;
+    expect(trainButtonAt(buttons, last.x + 3, last.y + last.height - 3)).toBe("troopCarrier");
     expect(trainButtonAt(buttons, 5, 5)).toBeNull();
   });
 });

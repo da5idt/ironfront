@@ -80,7 +80,7 @@ The Building where Harvesters unload Ore for Credits.
 The Building that trains Riflemen.
 
 **Vehicle Factory**:
-The Building that trains Raiders, Harvesters and Mechanics.
+The Building that trains Raiders, Harvesters, Mechanics and Troop Carriers.
 _Avoid_: War factory, factory
 
 **Turret**:
@@ -101,7 +101,7 @@ The class of Units that go on foot: the Rifleman, the Medic and the Mechanic. It
 _Avoid_: Foot soldiers, footmen, grunts
 
 **Vehicle**:
-The class of Units that drive: the Raider and the Harvester.
+The class of Units that drive: the Raider, the Harvester and the Troop Carrier.
 _Avoid_: Machine, mech, car
 
 **Rifleman**:
@@ -131,6 +131,10 @@ _Avoid_: Buggy, jeep, light tank
 **Harvester**:
 The Vehicle that collects Ore from Ore Fields and carries it to a Refinery. It is unarmed.
 _Avoid_: Collector, miner, worker
+
+**Troop Carrier**:
+A fast armoured Vehicle with a light gun, trained at the Vehicle Factory. It is built to carry Infantry.
+_Avoid_: APC, transport, personnel carrier, truck
 
 ## Controls
 
