@@ -19,8 +19,9 @@ describe("what a menu button shows at its height", () => {
     });
   });
 
-  it("still fits the name, the key with the cost, one line of hint and the bar on the short windows' buttons", () => {
-    for (const windowHeight of [657, 600]) {
+  it("still fits the name, the key with the cost, one line of hint and the bar on a laptop window's buttons", () => {
+    // With five buttons a 600 pixel window's are too short for the hint; the next test covers what they keep.
+    for (const windowHeight of [657]) {
       const { height } = buildButtons(computeLayout({ width: 1366, height: windowHeight }).buttons)[0]!.rect;
       const parts = menuButtonParts(height);
       expect(parts.hintYs).toHaveLength(1);
@@ -40,6 +41,9 @@ describe("what a menu button shows at its height", () => {
 
   it("keeps the name, the key with the cost and the bar clear of each other on the smallest button the layout makes", () => {
     // 42 pixels: what the layout holds the buttons to while it can (layout.test.ts).
+    const at600 = buildButtons(computeLayout({ width: 1366, height: 600 }).buttons)[0]!.rect.height;
+    expect(at600).toBeGreaterThanOrEqual(42);
+    expect(at600).toBeLessThan(52);
     for (let height = 42; height < 52; height++) {
       const parts = menuButtonParts(height);
       expect(parts.hintYs).toEqual([]);

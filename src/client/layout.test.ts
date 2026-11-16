@@ -5,6 +5,8 @@ import {
   contains,
   EDGE_PX,
   edgeScroll,
+  MENU_SLOTS,
+  menuRoomNeeded,
   PANEL_EDGE_SCROLL_PX,
   PANEL_WIDTH,
   SOUND_STRIP_COMPACT_HEIGHT,
@@ -17,17 +19,52 @@ describe("the side panel on a short window", () => {
   // 657 is a 1366x768 laptop less the browser's own bars; 600 is the shortest window the game is laid out for.
   const HEIGHTS = [1080, 800, 720, 706, 657, 600, 540, 480, 360, 260];
 
-  it("keeps all four build buttons between the minimap and the sound strip, one under the other", () => {
+  it("keeps all five build buttons between the minimap and the sound strip, one under the other", () => {
     for (const height of HEIGHTS) {
       const l = computeLayout({ width: 1366, height });
       const rects = buildButtons(l.buttons).map((b) => b.rect);
-      expect(rects).toHaveLength(4);
+      expect(rects).toHaveLength(5);
       expect(rects[0]!.y).toBeGreaterThanOrEqual(l.minimap.y + l.minimap.height);
       for (let i = 1; i < rects.length; i++) {
         expect(rects[i]!.y).toBeGreaterThanOrEqual(rects[i - 1]!.y + rects[i - 1]!.height);
       }
-      expect(rects[3]!.y + rects[3]!.height, `window height ${height}`).toBeLessThanOrEqual(l.soundStrip.y);
+      expect(rects[4]!.y + rects[4]!.height, `window height ${height}`).toBeLessThanOrEqual(l.soundStrip.y);
     }
+  });
+
+  it("fits five buttons, the minimap and the whole sound strip on a laptop window, none over another or cut off", () => {
+    for (const screen of [{ width: 1366, height: 657 }, { width: 1280, height: 800 }]) {
+      const at = `${screen.width}x${screen.height}`;
+      const l = computeLayout(screen);
+      const rects = buildButtons(l.buttons).map((b) => b.rect);
+      expect(rects.map((r) => r.height > 0), at).toEqual([true, true, true, true, true]);
+      expect(l.soundStrip.height, at).toBe(SOUND_STRIP_HEIGHT);
+      // Top to bottom: minimap, the five buttons, the strip, the window's end.
+      const parts = [l.minimap, ...rects, l.soundStrip];
+      for (let i = 1; i < parts.length; i++) {
+        expect(parts[i]!.y, `${at} part ${i}`).toBeGreaterThanOrEqual(parts[i - 1]!.y + parts[i - 1]!.height);
+      }
+      expect(l.soundStrip.y + l.soundStrip.height, at).toBe(screen.height);
+      for (const r of parts) {
+        expect(r.x, at).toBeGreaterThanOrEqual(l.panel.x);
+        expect(r.x + r.width, at).toBeLessThanOrEqual(l.panel.x + l.panel.width);
+      }
+    }
+  });
+
+  it("works out the menu's least room from the number of buttons", () => {
+    // A heading of 20, then each button 42 tall with 4 between: four buttons took 200 before the fifth came.
+    expect(menuRoomNeeded(4)).toBe(200);
+    expect(menuRoomNeeded(5)).toBe(246);
+    expect(menuRoomNeeded(1)).toBe(62);
+    // The longest menu is the HQ's five, and the layout plans for it unless told otherwise.
+    expect(MENU_SLOTS).toBe(5);
+    const strip = (height: number, buttons?: number) => computeLayout({ width: 1024, height }, buttons).soundStrip.height;
+    // 220 pixels of minimap and margins, the menu's least room, and the strip.
+    expect(strip(220 + 246 + SOUND_STRIP_HEIGHT)).toBe(SOUND_STRIP_HEIGHT);
+    expect(strip(220 + 246 + SOUND_STRIP_HEIGHT - 1)).toBe(SOUND_STRIP_COMPACT_HEIGHT);
+    expect(strip(220 + 246 + SOUND_STRIP_HEIGHT - 1, 4)).toBe(SOUND_STRIP_HEIGHT);
+    expect(strip(220 + 200 + SOUND_STRIP_HEIGHT - 1, 4)).toBe(SOUND_STRIP_COMPACT_HEIGHT);
   });
 
   it("gives every part of a button to the buttons and none of it to the sound strip", () => {
@@ -48,8 +85,9 @@ describe("the side panel on a short window", () => {
     expect(heightAt(800)).toBe(BUILD_BUTTON_HEIGHT);
     expect(heightAt(1080)).toBe(BUILD_BUTTON_HEIGHT);
     // Name, key with cost and one line of hint take about 50 pixels.
-    expect(heightAt(657)).toBeGreaterThanOrEqual(60);
-    expect(heightAt(600)).toBeGreaterThanOrEqual(50);
+    expect(heightAt(657)).toBeGreaterThanOrEqual(50);
+    // Name, key with cost and progress bar, clear of each other, take 42.
+    expect(heightAt(600)).toBeGreaterThanOrEqual(42);
   });
 
   it("gives up the sound strip, in two steps, before the buttons get too small to use", () => {
@@ -59,17 +97,17 @@ describe("the side panel on a short window", () => {
       return { strip: l.soundStrip.height, button: buildButtons(l.buttons)[0]!.rect.height };
     };
     // The whole strip while the buttons keep their least height beside it...
-    for (const height of [800, 600, 560, 548]) {
+    for (const height of [800, 657, 600, 594]) {
       expect(at(height).strip, `window height ${height}`).toBe(SOUND_STRIP_HEIGHT);
       expect(at(height).button, `window height ${height}`).toBeGreaterThanOrEqual(42);
     }
     // ...then only its mute-all button...
-    for (const height of [547, 520, 480, 454]) {
+    for (const height of [593, 560, 520, 500]) {
       expect(at(height).strip, `window height ${height}`).toBe(SOUND_STRIP_COMPACT_HEIGHT);
       expect(at(height).button, `window height ${height}`).toBeGreaterThanOrEqual(42);
     }
     // ...then none of it (the M key still mutes).
-    for (const height of [453, 440, 420]) {
+    for (const height of [499, 480, 466]) {
       expect(at(height).strip, `window height ${height}`).toBe(0);
       expect(at(height).button, `window height ${height}`).toBeGreaterThanOrEqual(42);
     }
@@ -81,7 +119,8 @@ describe("the side panel on a short window", () => {
       const rects = buildButtons(l.buttons).map((b) => b.rect);
       expect(l.buttons.y, `window height ${height}`).toBeGreaterThanOrEqual(l.minimap.y + l.minimap.height);
       expect(l.buttons.height, `window height ${height}`).toBeGreaterThanOrEqual(0);
-      expect(rects[3]!.y + rects[3]!.height, `window height ${height}`).toBeLessThanOrEqual(l.soundStrip.y);
+      expect(rects).toHaveLength(5);
+      expect(rects[4]!.y + rects[4]!.height, `window height ${height}`).toBeLessThanOrEqual(l.soundStrip.y);
       expect(l.soundStrip.y, `window height ${height}`).toBe(l.buttons.y + l.buttons.height);
       // A strip that shows at all shows whole: it never hangs off the bottom of the window.
       if (l.soundStrip.height > 0) {

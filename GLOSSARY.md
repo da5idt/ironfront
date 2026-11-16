@@ -83,6 +83,10 @@ _Avoid_: War factory, factory
 A defensive Building that attacks enemy Units in range by itself.
 _Avoid_: Tower, defense
 
+**Hospital**:
+A Building the HQ builds, for the care of hurt Units. It trains nothing yet.
+_Avoid_: Infirmary, clinic, med bay, field hospital
+
 ## Units
 
 **Unit**:

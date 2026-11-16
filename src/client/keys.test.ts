@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { HQ_BUILDS } from "../sim";
 import { backAction, heldScroll, keyAction, type KeyPress, menuKeyLabel, worksUnderScreen } from "./keys";
 
 /** A key press as the browser reports it: the fields of a DOM KeyboardEvent that keys.ts reads (code and the modifier flags). */
@@ -7,18 +8,24 @@ function press(code: string, held: Partial<KeyPress> = {}): KeyPress {
 }
 
 describe("menu keys", () => {
-  it("Z, X, C and V press the side panel's buttons from the top", () => {
-    expect(["KeyZ", "KeyX", "KeyC", "KeyV"].map((code) => keyAction(press(code)))).toEqual([
+  it("Z, X, C, V and B press the side panel's buttons from the top", () => {
+    expect(["KeyZ", "KeyX", "KeyC", "KeyV", "KeyB"].map((code) => keyAction(press(code)))).toEqual([
       { type: "menuButton", index: 0 },
       { type: "menuButton", index: 1 },
       { type: "menuButton", index: 2 },
       { type: "menuButton", index: 3 },
+      { type: "menuButton", index: 4 },
     ]);
   });
 
-  it("are shown as their letters on the first four buttons only", () => {
-    expect([0, 1, 2, 3].map(menuKeyLabel)).toEqual(["Z", "X", "C", "V"]);
-    expect(menuKeyLabel(4)).toBeNull();
+  it("are shown as their letters on the first five buttons only", () => {
+    expect([0, 1, 2, 3, 4].map(menuKeyLabel)).toEqual(["Z", "X", "C", "V", "B"]);
+    expect(menuKeyLabel(5)).toBeNull();
+  });
+
+  it("reach every button of the longest menu, the HQ's", () => {
+    expect(HQ_BUILDS.map((_, index) => menuKeyLabel(index))).not.toContain(null);
+    expect(keyAction(press("KeyB"))).toEqual({ type: "menuButton", index: HQ_BUILDS.indexOf("hospital") });
   });
 
   it("number keys 1 to 4 no longer press buttons", () => {
