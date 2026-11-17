@@ -433,7 +433,7 @@ describe("a Troop Carrier that has stopped and stands", () => {
     expect(find(match, rifleman)).toBeDefined();
   });
 
-  it("is Collecting only where it stops at least the least drive from where the move began", () => {
+  it("is Collecting only where it stops at least TROOP_CARRIER.collectAfterCells from where the move began", () => {
     const match = stage();
     const least = TROOP_CARRIER.collectAfterCells;
     const carrier = addTestUnit(match, 0, "troopCarrier", at(-least - 1, 0));
@@ -442,7 +442,7 @@ describe("a Troop Carrier that has stopped and stands", () => {
     moveTo(match, [carrier], at(-least, 0));
     run(match, A_WHILE);
     expect(passengerIds(match, carrier)).toEqual([]);
-    // The least drive exactly, measured from where this move began, and he is still within its reach.
+    // Exactly collectAfterCells, measured from where this move began, and he is still within its reach.
     const waiting = addTestUnit(match, 0, "rifleman", at(1, 0));
     moveTo(match, [carrier], STOP);
     expect(passengerIds(match, carrier)).toEqual([waiting]);
@@ -463,7 +463,35 @@ describe("a Troop Carrier that has stopped and stands", () => {
     expect(isAt(match, rifleman, at(-1, 0))).toBe(true);
   });
 
-  it("takes nobody when, on its way, it is sent to the Cell it has just reached", () => {
+  it("is Collecting where a long drive ends although it was sent there again, by either Command, a little before the stop", () => {
+    for (const again of ["move", "attackMove"] as const) {
+      const match = stage();
+      const rifleman = addTestUnit(match, 0, "rifleman", at(1, 0));
+      const carrier = addTestUnit(match, 0, "troopCarrier", at(-10, 0));
+      expect(issueCommand(match, 0, { type: "move", unitIds: [carrier], target: STOP })).toEqual({ ok: true });
+      // A second click on the same Cell, nearer the stop than collectAfterCells: the drive is still the one from ten Cells off.
+      runUntil(match, () => COL + 0.5 - find(match, carrier)!.x <= 1.3);
+      expect(COL + 0.5 - find(match, carrier)!.x).toBeLessThan(TROOP_CARRIER.collectAfterCells);
+      expect(issueCommand(match, 0, { type: again, unitIds: [carrier], target: STOP })).toEqual({ ok: true });
+      runUntil(match, () => isAt(match, carrier, STOP));
+      expect(passengerIds(match, carrier), again).toEqual([rifleman]);
+    }
+  });
+
+  it("measures a drive from where it last stood: a stop Command on the way ends the drive", () => {
+    const match = stage();
+    const rifleman = addTestUnit(match, 0, "rifleman", at(1, 0));
+    const carrier = addTestUnit(match, 0, "troopCarrier", at(-10, 0));
+    expect(issueCommand(match, 0, { type: "move", unitIds: [carrier], target: STOP })).toEqual({ ok: true });
+    runUntil(match, () => COL + 0.5 - find(match, carrier)!.x <= 1.3);
+    expect(issueCommand(match, 0, { type: "stop", unitIds: [carrier] })).toEqual({ ok: true });
+    moveTo(match, [carrier], STOP);
+    run(match, A_WHILE);
+    expect(passengerIds(match, carrier)).toEqual([]);
+    expect(isAt(match, rifleman, at(1, 0))).toBe(true);
+  });
+
+  it("is Collecting when, on a long enough drive, it is sent to the Cell it has just reached", () => {
     const match = stage();
     const rifleman = addTestUnit(match, 0, "rifleman", at(-3, 1));
     const carrier = addTestUnit(match, 0, "troopCarrier", at(-8, 0));
@@ -471,9 +499,9 @@ describe("a Troop Carrier that has stopped and stands", () => {
     runUntil(match, () => Math.floor(find(match, carrier)!.x) === COL - 3);
     expect(issueCommand(match, 0, { type: "move", unitIds: [carrier], target: at(-3, 0) })).toEqual({ ok: true });
     run(match, A_WHILE);
-    expect(Math.floor(find(match, carrier)!.x)).toBe(COL - 3);
-    expect(passengerIds(match, carrier)).toEqual([]);
-    expect(isAt(match, rifleman, at(-3, 1))).toBe(true);
+    expect(isAt(match, carrier, at(-3, 0))).toBe(true);
+    // The drive began five Cells back, where it last stood, not where the second Command found it.
+    expect(passengerIds(match, carrier)).toEqual([rifleman]);
   });
 
   it("takes nobody who walks up after a Command that leaves it standing", () => {

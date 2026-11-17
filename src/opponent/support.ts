@@ -28,10 +28,11 @@ import { DEFEND_RADIUS, distanceTo, distanceToCell, STUCK_THINKS } from "./tacti
 type LeftAlone = Map<EntityId, Map<EntityId, number>>;
 
 function leaveAlone(leftAlone: LeftAlone, unit: EntityId, target: EntityId, tick: number): void {
-  leftAlone.set(unit, new Map(leftAlone.get(unit)).set(target, tick + OPPONENT.leaveAloneTicks));
+  const targets = leftAlone.get(unit) ?? new Map<EntityId, number>();
+  leftAlone.set(unit, targets.set(target, tick + OPPONENT.leaveAloneTicks));
 }
 
-/** Drops the Leave-alone times that are over. */
+/** Run before each think's choices, so a way that has opened since is tried again. */
 function endLeaveAlone(leftAlone: LeftAlone, tick: number): void {
   for (const [id, targets] of leftAlone) {
     for (const [target, until] of targets) if (tick >= until) targets.delete(target);
@@ -88,7 +89,7 @@ export function tendCommands(view: PlayerView, memory: TendMemory, standing: Sta
       continue;
     }
     const target = damaged.find((b) => b.id === job);
-    const gaveUp = target && standing.thinks(u.id) >= STUCK_THINKS && distanceTo(target, u) > OPPONENT.atWorkCells;
+    const gaveUp = target && standing.thinks(u.id) >= STUCK_THINKS && distanceTo(target, u) > OPPONENT.besideCells;
     if (target && !gaveUp) continue;
     if (target) leaveAlone(leftAlone, u.id, target.id, view.tick);
     jobs.delete(u.id);
@@ -151,28 +152,35 @@ function neediest(
 export interface MedicMemory {
   readonly onTheWay: Set<EntityId>;
   readonly stoppedAt: Map<EntityId, Vec>;
+  /** The Tick each Medic was last seen Healing or moving: since then it has had nothing to do but look for someone hurt. */
+  readonly lastBusy: Map<EntityId, number>;
+  /** The Tick each hurt Unit was first seen hurt and standing still, which is when a Medic could first set off to it. */
+  readonly hurtAndStillSince: Map<EntityId, number>;
   /** The hurt Units that do not keep each Medic away from the rally point until the Leave-alone time is over. */
   readonly leftAlone: LeftAlone;
 }
 
 export function createMedicMemory(): MedicMemory {
-  return { onTheWay: new Set(), stoppedAt: new Map(), leftAlone: new Map() };
+  return { onTheWay: new Set(), stoppedAt: new Map(), lastBusy: new Map(), hurtAndStillSince: new Map(), leftAlone: new Map() };
 }
 
 /**
  * A move back to the rally point for Medics that Healing has led away from
  * it: each walk to someone hurt can end a few Cells farther off, and over a
  * long Match that adds up to a Medic out of reach of the Units that come home.
- * A Medic is left alone while a move would end a Tend: while it is Healing,
- * and while a hurt Infantry Unit stands still within its seek radius, which
- * it goes to by itself. One that is hurt but on the move it never goes to, so
+ * A Medic gets no move while one would end a Tend: while it is Healing, and
+ * while a hurt Infantry Unit stands still within its seek radius, which it
+ * goes to by itself. One that is hurt but on the move it never goes to, so
  * that one does not keep it out. Nor does one it has no way to, across water
- * say: the view does not show that, but an idle Medic with a way sets off
- * within a think or two, so when the Medic and the hurt Unit have both stood
- * for a few thinks, the Opponent takes it that there is none and leaves that
- * Unit alone for a while. The Medic is also left where it stopped the last
- * time it was sent, if that was not at the rally point, since the Units
- * crowding it let the Medic no nearer.
+ * say. The view does not show that, but an idle Medic with a way sets off
+ * within a think or two. So once the Medic has had nothing else to do, and
+ * the Unit has been hurt and standing still, for `OPPONENT.medicGiveUpTicks`,
+ * the Opponent takes it that there is no way and starts that Unit's
+ * Leave-alone time. The wait is counted from the later of the two, not from
+ * how long each has stood: a Medic stands while it Heals, and the Unit it
+ * turns to next may have stood hurt all that time. A Medic sent back also
+ * stays where it stopped the last time it was sent, if that was not at the
+ * rally point, since the Units crowding it let the Medic no nearer.
  */
 export function medicCommands(view: PlayerView, memory: MedicMemory, standing: Standing): Command[] {
   const own = view.units.filter((u) => u.owner === view.playerId);
@@ -180,6 +188,7 @@ export function medicCommands(view: PlayerView, memory: MedicMemory, standing: S
   const isMedic = (id: EntityId): boolean => medics.some((u) => u.id === id);
   forgetGone(memory.onTheWay, isMedic);
   forgetGone(memory.stoppedAt, isMedic);
+  forgetGone(memory.lastBusy, isMedic);
   forgetGone(memory.leftAlone, isMedic);
   endLeaveAlone(memory.leftAlone, view.tick);
 
@@ -189,19 +198,27 @@ export function medicCommands(view: PlayerView, memory: MedicMemory, standing: S
   const hurtAndStill = canHeal.filter((u) => u.hp < u.maxHp && standing.thinks(u.id) > 0);
   // The view names the target of a Tend, not who works on it: a Medic beside a Unit being Healed is taken to be at it.
   const beingHealed = view.tends.filter((t) => canHeal.some((u) => u.id === t.targetId));
+  const { hurtAndStillSince } = memory;
+  forgetGone(hurtAndStillSince, (id) => hurtAndStill.some((h) => h.id === id));
+  for (const h of hurtAndStill) if (!hurtAndStillSince.has(h.id)) hurtAndStillSince.set(h.id, view.tick);
   const back: EntityId[] = [];
   for (const u of medics) {
+    const healing = beingHealed.some((t) => t.targetId !== u.id && distanceTo(u, t) <= OPPONENT.besideCells);
+    if (healing || standing.thinks(u.id) === 0) memory.lastBusy.set(u.id, view.tick);
     if (standing.thinks(u.id) < STUCK_THINKS) continue;
     if (memory.onTheWay.delete(u.id)) memory.stoppedAt.set(u.id, { x: u.x, y: u.y });
     if (distanceToCell(rally, u) <= OPPONENT.medicStrayCells) continue;
-    if (beingHealed.some((t) => t.targetId !== u.id && distanceTo(u, t) <= OPPONENT.healingWithinCells)) continue;
+    if (healing) continue;
     const leftAlone = memory.leftAlone.get(u.id);
     const mayGoTo = hurtAndStill.filter(
       (h) => h.id !== u.id && distanceTo(h, u) <= TEND.seekRadius && !leftAlone?.has(h.id),
     );
-    const stoodBy = (h: UnitView): boolean => Math.min(standing.thinks(u.id), standing.thinks(h.id)) >= OPPONENT.medicNoWayThinks;
-    for (const h of mayGoTo.filter(stoodBy)) leaveAlone(memory.leftAlone, u.id, h.id, view.tick);
-    if (mayGoTo.some((h) => !stoodBy(h))) continue;
+    const idleSince = memory.lastBusy.get(u.id) ?? view.tick;
+    /** Whether the Medic has had long enough, with nothing else to do, to set off to this Unit if it had a way. */
+    const hadTimeToSetOff = (h: UnitView): boolean =>
+      view.tick - Math.max(idleSince, hurtAndStillSince.get(h.id) ?? view.tick) >= OPPONENT.medicGiveUpTicks;
+    for (const h of mayGoTo.filter(hadTimeToSetOff)) leaveAlone(memory.leftAlone, u.id, h.id, view.tick);
+    if (mayGoTo.some((h) => !hadTimeToSetOff(h))) continue;
     const last = memory.stoppedAt.get(u.id);
     if (last && distanceTo(u, last) <= OPPONENT.medicSamePlaceCells) continue;
     memory.onTheWay.add(u.id);

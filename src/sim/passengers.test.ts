@@ -22,6 +22,7 @@ import {
   runUntil,
   setTestBuildingHp,
   setTestUnitHp,
+  snapshot,
   stage,
 } from "./testing/setup";
 import { TEND } from "./tuning";
@@ -48,9 +49,6 @@ const board = (match: Match, unitIds: number[], targetId: number, player: Player
   issueCommand(match, player, { type: "board", unitIds, targetId });
 const unload = (match: Match, unitIds: number[], player: PlayerId = 0) =>
   issueCommand(match, player, { type: "unload", unitIds });
-
-/** Everything either Player can see, to show that a rejected Command changed nothing. */
-const snapshot = (match: Match): string => JSON.stringify([getPlayerView(match, 0), getPlayerView(match, 1)]);
 
 /** The eight Cells beside (COL, ROW), the two to the left and right first. */
 const BESIDE = [

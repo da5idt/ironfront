@@ -231,11 +231,14 @@ export const TEND = {
   standTries: 16,
 } as const;
 
+/** Named apart from TROOP_CARRIER because two of its numbers are this one reach. */
+const COLLECT_RADIUS = 2;
+
 export const TROOP_CARRIER = {
   /** Most Passengers a Troop Carrier holds. */
   capacity: 5,
   /** How far, in Cells, a Troop Carrier reaches for idle Infantry of its own Player when it is Collecting. */
-  collectRadius: 2,
+  collectRadius: COLLECT_RADIUS,
   /**
    * Most steps on foot, Cell to Cell, between a Unit it takes when Collecting and a Cell touching its own.
    * On open ground a Unit within the radius is one step away at most. Three lets it round the corner of a wall or a
@@ -247,7 +250,7 @@ export const TROOP_CARRIER = {
    * to where it stopped, to be Collecting there. Its own reach, so a nudge among Units that got out does not gather
    * them up again: a stop that far off is among other Units, or was meant.
    */
-  collectAfterCells: 2,
+  collectAfterCells: COLLECT_RADIUS,
 } as const;
 
 /**
@@ -335,8 +338,12 @@ export const OPPONENT = {
    * as ways open rarely (a Building sold or lost), and each try walks the Unit off and back.
    */
   leaveAloneTicks: 60 * TICKS_PER_SECOND,
-  /** How near its Building, in Cells, a Mechanic standing still counts as at work on it and not stopped on the way: beside it, as a Tend needs. */
-  atWorkCells: 1.5,
+  /**
+   * How near its target, in Cells, a support Unit standing still counts as at work on it: beside it, as a Tend
+   * needs, and a Cell on the diagonal is still beside. A Mechanic farther from its Building has stopped on the
+   * way, and a Medic this near a Unit being Healed is taken to be the one Healing it.
+   */
+  besideCells: 1.5,
   /**
    * How far from the rally point, in Cells, a Medic may stand before it is sent back: half the seek radius, so
    * the Units that come home and stop round the rally point are still within the reach it looks for work in.
@@ -344,19 +351,18 @@ export const OPPONENT = {
   medicStrayCells: TEND.seekRadius / 2,
   /** How near where it last stopped, in Cells, a Medic sent back counts as not having left since: it is not sent again into the same crowd. */
   medicSamePlaceCells: 0.5,
-  /** How near a Unit being Healed, in Cells, a Medic counts as the one Healing it: beside it, as a Tend needs. */
-  healingWithinCells: 1.5,
   /**
-   * Thinks a strayed Medic and a hurt Unit near it must both have stood still before the Opponent takes it that
-   * the Medic has no way there. An idle Medic looks for work more often than that (TEND.seekTicks), so one with a
-   * way has set off by then.
+   * How long a strayed Medic must have had nothing else to do, with a hurt Unit standing still near it, before
+   * the Opponent takes it that the Medic cannot get there and starts that Unit's Leave-alone time. Several times
+   * how often an idle Medic looks for work, so one that can get there has set off well before, whichever Tick
+   * its last Heal ended on and however the Opponent's thinks fall between its looks.
    */
-  medicNoWayThinks: 4,
+  medicGiveUpTicks: 8 * TEND.seekTicks,
   /**
    * How near its Parking Cell, in Cells, a Troop Carrier that stopped on its first drive there counts as parked:
    * other Units may stand on the Cell itself, and this near is as good.
    */
-  parkedOnCells: 3,
+  parkedWithinCells: 3,
   /**
    * How near its Parking Cell, in Cells, a Troop Carrier that found no way onto it still counts as parked where it
    * stopped: about as far as the rally point is, so the Riflemen who Board it have a short walk and it is still at home.

@@ -16,7 +16,9 @@ import { isPassableTerrain } from "./types";
  * How a move or an Attack-move began, which is what decides whether a Troop
  * Carrier is Collecting where it ends (passengers.ts). Both orders must carry
  * one, so no new way of setting a Unit off can leave it out; `moveStart` in
- * movement.ts makes it.
+ * movement.ts makes it. A Unit sent on again while it is on either order
+ * keeps the one it has, so it tells of the whole drive since the Unit last
+ * stood or did anything else.
  */
 export interface MoveStart {
   /** Where the Unit stood when it set off, which need not be a Cell's centre. */
@@ -26,10 +28,13 @@ export interface MoveStart {
 }
 
 /** The orders that carry a `MoveStart`: a move and an Attack-move. */
-export type MovingOrder = Extract<UnitOrder, { readonly type: "move" | "attackMove" }>;
+export type MoveOrAttackMoveOrder = Extract<UnitOrder, { readonly type: "move" | "attackMove" }>;
 
-/** True for a move or an Attack-move, the two orders a Troop Carrier is Collecting at the end of. */
-export function isMoving(order: UnitOrder): order is MovingOrder {
+/**
+ * True for a move or an Attack-move, the two orders a Troop Carrier is Collecting at the end of.
+ * Not for the other orders that take a Unit somewhere (an attack, a Board, a Tend, harvesting).
+ */
+export function isMoveOrAttackMove(order: UnitOrder): order is MoveOrAttackMoveOrder {
   return order.type === "move" || order.type === "attackMove";
 }
 
@@ -110,7 +115,7 @@ export interface UnitState {
    */
   readonly passengers: UnitState[];
   /**
-   * The move or Attack-move the Unit was on when the current Tick began, or
+   * How the move or Attack-move the Unit was on when the current Tick began had begun, or
    * null when it was on neither. Standing idle later in the same Tick, it has
    * just finished that move, which is when a Troop Carrier is Collecting.
    * While the Unit is still on that order this is the order's own `start`,

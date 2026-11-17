@@ -56,24 +56,27 @@ interface AtTheFront {
 }
 
 /**
- * A first wave that has set off and cannot gather: all but one of its Riflemen
- * are inside the Troop Carrier, which waits beside the sixth, who is shut in.
+ * A first wave that has set off and cannot gather: as many of its Riflemen as
+ * the Troop Carrier holds are inside it, and it waits beside one more, who is shut in.
  */
 function waveStuckGathering(map: MapDef): AtTheFront {
   const match = base(BUILD_ORDER_DONE, SITES, map);
   // The only Building of the other Player the Opponent ever knows: its scout stays near home once one is known.
   addTestBuilding(match, 1, "barracks", OUTPOST);
-  // The first wave is the six oldest army Units at home: the two starting Riflemen and three more Board,
-  // and the sixth, who can never leave its Cell, is the wave's only Unit on foot. The Troop Carrier is led
-  // to where the wave's foremost Unit on foot is, so it waits beside that Cell, full, and never gathers.
+  // The first wave is the oldest army Units at home: the starting Riflemen and enough more to fill the Troop
+  // Carrier Board, and the next, who can never leave its Cell, is the wave's only Unit on foot. The Troop Carrier
+  // is led to where the wave's foremost Unit on foot is, so it waits beside that Cell, full, and never gathers.
+  const starting = getPlayerView(match, 0)
+    .units.filter((u) => u.owner === 0 && u.kind === "rifleman")
+    .map((u) => u.id);
   const boarding = [
-    ...getPlayerView(match, 0)
-      .units.filter((u) => u.owner === 0 && u.kind === "rifleman")
-      .map((u) => u.id),
-    ...[0, 1, 2].map((i) => addTestUnit(match, 0, "rifleman", { x: RALLY.x - 1 + i, y: RALLY.y + 1 })),
+    ...starting,
+    ...Array.from({ length: TROOP_CARRIER.capacity - starting.length }, (_, i) =>
+      addTestUnit(match, 0, "rifleman", { x: RALLY.x - 1 + i, y: RALLY.y + 1 }),
+    ),
   ];
   const shutIn = addTestUnit(match, 0, "rifleman", SHUT_IN);
-  // The seventh stays behind and sees the Barracks. It is all that is left at home to scout, and it cannot move.
+  // One more than the wave takes stays behind and sees the Barracks. It is all that is left at home to scout, and it cannot move.
   addTestUnit(match, 0, "rifleman", LOOKOUT);
   const carrier = addTestUnit(match, 0, "troopCarrier", { x: 12, y: 12 });
   // Nothing to spend and nothing coming in, so the Opponent trains nobody who could go and find another Building.

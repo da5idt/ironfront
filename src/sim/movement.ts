@@ -3,7 +3,7 @@ import { OK, reject } from "./commands";
 import type { CommandHandler } from "./handlers";
 import { findPath, type Grid, nearbyCells } from "./pathfinding";
 import type { MatchState, MoveStart, UnitState } from "./state";
-import { cellIndex, inBounds, isMoving, isWalkable, ownUnits, terrainAt } from "./state";
+import { cellIndex, inBounds, isMoveOrAttackMove, isWalkable, ownUnits, terrainAt } from "./state";
 import { MOVEMENT, TICKS_PER_SECOND, UNIT_STATS } from "./tuning";
 import type { CellPos, EntityId, PlayerId } from "./types";
 
@@ -45,8 +45,14 @@ export function planMove(m: MatchState, u: UnitState, goal: CellPos): MovePlan {
   return { goal, path: findPath(matchGrid(m), at, goal) ?? [] };
 }
 
-/** The start of a move or an Attack-move the Unit is being set on now. */
+/**
+ * The start of a move or an Attack-move the Unit is being set on now. One already on either keeps the start it
+ * has, the same object: a second Command on the way, to the same Cell or another, is the same drive, and a
+ * Troop Carrier is Collecting by how far it stops from where it last stood. Any other order between them,
+ * a stop included, ends the drive.
+ */
 export function moveStart(u: UnitState): MoveStart {
+  if (isMoveOrAttackMove(u.order)) return u.order.start;
   return { from: { x: u.x, y: u.y }, empty: u.passengers.length === 0 };
 }
 
@@ -62,7 +68,7 @@ export function orderMoveTo(m: MatchState, u: UnitState, goal: CellPos): void {
  * has to say so itself.
  */
 export function noteMoves(m: MatchState): void {
-  for (const u of m.units.values()) u.moveAtTickStart = isMoving(u.order) ? u.order.start : null;
+  for (const u of m.units.values()) u.moveAtTickStart = isMoveOrAttackMove(u.order) ? u.order.start : null;
 }
 
 /**

@@ -4,7 +4,7 @@ import type { CommandHandler } from "./handlers";
 import { matchGrid, type MovePlan, planMove, stepAlong, unitCell } from "./movement";
 import { cellsWithinSteps } from "./pathfinding";
 import type { MatchState, PassengerEvent, UnitState } from "./state";
-import { cellIndex, isMoving, isWalkable, ownUnits } from "./state";
+import { cellIndex, isMoveOrAttackMove, isWalkable, ownUnits } from "./state";
 import { isBeside, standGoal } from "./tend";
 import { isInfantry, isTroopCarrier, passengerRoom, TROOP_CARRIER } from "./tuning";
 import type { CellPos, EntityId, PlayerId } from "./types";
@@ -25,28 +25,31 @@ import type { CellPos, EntityId, PlayerId } from "./types";
 // - A Troop Carrier that loses health Unloads on that Tick, before the dead are
 //   removed: if it was destroyed, its Passengers get out first and only those
 //   with no free Cell are lost with it.
-// - Collecting happens once, on the Tick a Troop Carrier finishes a move or an
-//   Attack-move that took it far enough, in a straight line, from where it
-//   began (TROOP_CARRIER.collectAfterCells), that it began with no Passengers
-//   and had none on since: idle Infantry of its own Player within the
-//   Collecting radius get in from where they stand, nearest first and lowest
-//   id first among those as near as each other, while there is room. Idle is
-//   the test used everywhere: no Command in progress, and a Tend a support
-//   Unit began by itself counts as one.
+// - Collecting happens once, on the Tick a Troop Carrier finishes a drive that
+//   took it far enough, in a straight line, from where it began
+//   (TROOP_CARRIER.collectAfterCells), that it began with no Passengers and
+//   had none on since. A drive is every move and Attack-move since it last
+//   stood or was on any other order: a Command that sends it on while it is
+//   on its way does not begin a new one. Then idle Infantry of its own Player
+//   within the Collecting radius get in from where they stand, nearest first
+//   and lowest id first among those as near as each other, while there is
+//   room. Idle is the test used everywhere: no Command in progress, and a
+//   Tend a support Unit began by itself counts as one.
 // - It takes only those with a short way on foot to a Cell touching its own
 //   (or already in one): a Board Command would have had them walk, so a Unit
 //   across water or behind a wall is no more taken than it could have Boarded.
 // - That is all of it. One that stands takes nobody, so a Unit sent beside a
 //   parked Troop Carrier stays on the Map, and so do those that got out; a
-//   move that ends nearer than that to where it began (sent to
-//   where it stands, nudged a Cell along, or with no way to go) is standing. A move on which it held a Passenger, or put one
-//   out, ends without Collecting (Units Unloaded a step from the stop are not
-//   gathered up again), and so does a stop on a Tick it lost health (what it
-//   took would be out again at the next hit). It is Collecting again once it
-//   is sent off empty and stops that far from where it set off.
+//   drive that ends nearer than that to where it began (sent to where it
+//   stands, nudged a Cell along, or with no way to go) is standing. A drive
+//   on which it held a Passenger, or put one out, ends without Collecting
+//   (Units Unloaded a step from the stop are not gathered up again), and so
+//   does a stop on a Tick it lost health (what it took would be out again at
+//   the next hit). It is Collecting again once it is sent off empty and stops
+//   that far from where it set off.
 // - Nothing tells this file that a move began or ended. Each move and
-//   Attack-move order carries how it began (`MoveStart`, which the order types
-//   require), and movement.ts notes the one a Unit begins each Tick on.
+//   Attack-move order carries how its drive began (`MoveStart`, which the order
+//   types require), and movement.ts notes the one a Unit begins each Tick on.
 // - Every Unit that gets in or out is noted for the Player views (drawing and
 //   sound), by the two functions every way in and out goes through.
 // - Only own Units and an own target: a Player always sees those, so whether a
@@ -85,7 +88,7 @@ function getIn(m: MatchState, u: UnitState, carrier: UnitState): boolean {
   u.tendBackOff.clear();
   carrier.passengers.push(u);
   // Whatever move the Troop Carrier is on no longer ends in Collecting, even if this one is out again before the stop.
-  if (isMoving(carrier.order)) carrier.order.start.empty = false;
+  if (isMoveOrAttackMove(carrier.order)) carrier.order.start.empty = false;
   note(m, "board", u);
   return true;
 }
@@ -236,8 +239,8 @@ function idleInfantryNear(m: MatchState, carrier: UnitState): UnitState[] {
 
 /**
  * Per-Tick system, after the fight: Collecting. Each Troop Carrier that began
- * the Tick on a move and now stands idle has just finished it, and takes
- * the idle Infantry near it if the move ended far enough from where it began,
+ * the Tick on a move and now stands idle has just finished its drive, and takes
+ * the idle Infantry near it if the drive ended far enough from where it began,
  * it has been empty since it set off, and it lost no health on this Tick. It runs
  * before idle support Units look for work, so one that is only about to is
  * taken.

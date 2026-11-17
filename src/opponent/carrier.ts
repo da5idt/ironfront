@@ -32,8 +32,8 @@ export function createCarrierMemory(): CarrierMemory {
 
 /**
  * Where to look for a Parking Cell, in the order tried, as Cells along the
- * line from the HQ to the Map's middle and Cells across it: about eight Cells
- * out, a little past the rally point so base Buildings rarely take it, and far
+ * line from the HQ to the Map's middle and Cells across it: each a little
+ * farther out than the rally point, so base Buildings rarely take it, and far
  * enough round that the Units crowding the rally point are out of reach.
  */
 const PARKING_OFFSETS: readonly (readonly [along: number, across: number])[] = [
@@ -125,25 +125,40 @@ export function parkCommands(
       for (const p of inside) memory.putOut.add(p.id);
     }
     const parking = memory.parking.get(carrier.id);
-    if (parking?.state === "parked" || (parking !== undefined && standing.thinks(carrier.id) < STUCK_THINKS)) continue;
-    if (parking?.state === "farOff" && view.tick < parking.sendAgainAt) continue;
+    if (parking === undefined) {
+      commands.push(driveToParking(view, memory, standing, carrier));
+      continue;
+    }
+    // Still on its way, or only just stopped.
+    if (parking.state !== "parked" && standing.thinks(carrier.id) < STUCK_THINKS) continue;
     const fromParkingCell = distanceToCell(parkingCell(view), carrier);
-    // Stopped short twice, it has no way there. Sent a third time at once it would stop short again, think
-    // after think. Near home it waits where it is, where a wave can still Board it; far off it waits to be sent.
-    if (
-      (parking?.state === "driving" && fromParkingCell <= OPPONENT.parkedOnCells) ||
-      (parking?.state === "drivingAgain" && fromParkingCell <= OPPONENT.parkedNearCells)
-    ) {
-      memory.parking.set(carrier.id, { state: "parked" });
-      continue;
+    switch (parking.state) {
+      case "parked":
+        break;
+      case "driving":
+        if (fromParkingCell <= OPPONENT.parkedWithinCells) {
+          memory.parking.set(carrier.id, { state: "parked" });
+          break;
+        }
+        // Stopped somewhere else on its way: it is sent once more.
+        commands.push(driveToParking(view, memory, standing, carrier));
+        memory.parking.set(carrier.id, { state: "drivingAgain" });
+        break;
+      case "drivingAgain":
+        // Stopped short twice, it has no way there. Sent a third time at once it would stop short again, think
+        // after think. Near home it waits where it is, where a wave can still Board it; far off it waits to be sent.
+        memory.parking.set(
+          carrier.id,
+          fromParkingCell <= OPPONENT.parkedNearCells
+            ? { state: "parked" }
+            : { state: "farOff", sendAgainAt: view.tick + OPPONENT.parkAgainTicks },
+        );
+        break;
+      case "farOff":
+        // Due again: it is sent, and once more if it stops short.
+        if (view.tick >= parking.sendAgainAt) commands.push(driveToParking(view, memory, standing, carrier));
+        break;
     }
-    if (parking?.state === "drivingAgain") {
-      memory.parking.set(carrier.id, { state: "farOff", sendAgainAt: view.tick + OPPONENT.parkAgainTicks });
-      continue;
-    }
-    // New, stopped somewhere else on its way, or far off and due again: it is sent, and once more if it stops short.
-    commands.push(driveToParking(view, memory, standing, carrier));
-    if (parking?.state === "driving") memory.parking.set(carrier.id, { state: "drivingAgain" });
   }
   if (unloading.length > 0) commands.unshift({ type: "unload", unitIds: unloading });
   return commands;
