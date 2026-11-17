@@ -25,13 +25,15 @@ import {
   snapshot,
   stage,
 } from "./testing/setup";
-import { TEND } from "./tuning";
+import { TEND, TROOP_CARRIER } from "./tuning";
 
 // Staged round Cell (20, 8) of a wide open Map, far from both starting bases in
 // the corners, so only the Units put there take part.
 const ROW = 8;
 const COL = 20;
 const cellOf = (u: UnitView) => ({ x: Math.floor(u.x), y: Math.floor(u.y) });
+/** The fewest whole Cells along a row or a column that make a drive long enough to end in Collecting. */
+const LONG_ENOUGH = Math.ceil(TROOP_CARRIER.collectAfterCells);
 
 /** True when the Unit stands in a Cell touching the other's Cell, corners included, and not in it. */
 function isBeside(match: Match, id: number, otherId: number): boolean {
@@ -467,7 +469,7 @@ describe("a Passenger", () => {
     run(match, 1);
     expect(find(match, medic)).toMatchObject({ x: stood.x, y: stood.y });
     // An empty Troop Carrier stops beside the Medic and Collects it while the patient still marches: no Command names the Medic.
-    const carrier = addTestUnit(match, 0, "troopCarrier", { x: Math.floor(stood.x), y: ROW + 5 });
+    const carrier = addTestUnit(match, 0, "troopCarrier", { x: Math.floor(stood.x), y: ROW + 1 + LONG_ENOUGH });
     issueCommand(match, 0, { type: "move", unitIds: [carrier], target: { x: Math.floor(stood.x), y: ROW + 1 } });
     runUntil(match, () => passengerIds(match, carrier).length === 1);
     expect(passengerIds(match, carrier)).toEqual([medic]);
@@ -504,7 +506,7 @@ describe("a Passenger", () => {
     // Two looks, the first to see that the Raider stands still: it stands as near as it can get already, so it gives up on the spot and backs off.
     let ticks = 2 * TEND.seekTicks;
     run(match, ticks);
-    const carrier = addTestUnit(match, 0, "troopCarrier", { x: 17, y: 12 });
+    const carrier = addTestUnit(match, 0, "troopCarrier", { x: 17, y: 15 - LONG_ENOUGH });
     issueCommand(match, 0, { type: "move", unitIds: [carrier], target: { x: 17, y: 15 } });
     ticks += runUntil(match, () => passengerIds(match, carrier).length === 1);
     expect(passengerIds(match, carrier)).toEqual([mechanic]);

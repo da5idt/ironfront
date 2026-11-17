@@ -13,17 +13,18 @@ import { isPassableTerrain } from "./types";
 // outside reads a PlayerView (view.ts). Tests use the public seam in index.ts.
 
 /**
- * How a move or an Attack-move began, which is what decides whether a Troop
- * Carrier is Collecting where it ends (passengers.ts). Both orders must carry
- * one, so no new way of setting a Unit off can leave it out; `moveStart` in
- * movement.ts makes it. A Unit sent on again while it is on either order
- * keeps the one it has, so it tells of the whole drive since the Unit last
- * stood or did anything else.
+ * How the drive a move or an Attack-move belongs to began, which is what
+ * decides whether a Troop Carrier is Collecting where it ends (passengers.ts).
+ * Both orders must carry one, so no new way of setting a Unit off can leave
+ * it out; `moveStart` in movement.ts makes it. A Unit sent on again while it
+ * is on either order keeps the one it has, so it tells of the whole drive
+ * since the Unit last stood or did anything else. `beginDriveHere` in
+ * movement.ts is the one place that begins a drive without the Unit standing.
  */
 export interface MoveStart {
-  /** Where the Unit stood when it set off, which need not be a Cell's centre. */
-  readonly from: Vec;
-  /** True while the Unit has had no Passenger inside since it set off. */
+  /** Where the Unit was when the drive began, which need not be a Cell's centre. */
+  from: Vec;
+  /** True while the Unit has had no Passenger inside since the drive began. */
   empty: boolean;
 }
 

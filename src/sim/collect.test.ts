@@ -11,9 +11,8 @@ import {
   type UnitView,
 } from "./index";
 import { openMap, testMap } from "./testing/maps";
-import { TROOP_CARRIER } from "./tuning";
 import { addTestBuilding, addTestUnit, find, run, runUntil, setTestCredits, setTestUnitHp, stage } from "./testing/setup";
-import { TEND } from "./tuning";
+import { BUILDING_STATS, TEND, TROOP_CARRIER } from "./tuning";
 
 // Staged round Cell (20, 8) of a wide open Map, far from both starting bases in
 // the corners, so only the Units put there take part.
@@ -26,6 +25,10 @@ function stageWithWater(water: readonly CellPos[]): Match {
   for (const cell of water) rows[cell.y]![cell.x] = "~";
   return createMatch(testMap(rows.map((r) => r.join(""))), 1);
 }
+/** The fewest whole Cells along a row that make a drive long enough to end in Collecting. */
+const LONG_ENOUGH = Math.ceil(TROOP_CARRIER.collectAfterCells);
+/** How many Cells before a stop the Troop Carriers staged here set off: a drive well over long enough. */
+const FAR_OFF = 2 * LONG_ENOUGH;
 /** Long enough to show that a Troop Carrier which stands is not Collecting. */
 const A_WHILE = 3 * TICKS_PER_SECOND;
 
@@ -56,16 +59,26 @@ function runToTheTickBeforeItStops(match: Match, carrier: number, stop: CellPos 
 
 /** An empty Troop Carrier that has driven to `stop` from far enough off to be Collecting there, and stands, with whoever it Collected on stopping. */
 function driveUp(match: Match, stop: CellPos = STOP): number {
-  const carrier = addTestUnit(match, 0, "troopCarrier", { x: stop.x - 8, y: stop.y });
+  const carrier = addTestUnit(match, 0, "troopCarrier", { x: stop.x - FAR_OFF, y: stop.y });
   moveTo(match, [carrier], stop);
   return carrier;
+}
+
+/**
+ * Sends the Troop Carrier along its row to STOP and runs until it is on its way and nearer the stop than a drive
+ * that ends in Collecting is long.
+ */
+function driveToShortOfStop(match: Match, carrier: number): void {
+  expect(issueCommand(match, 0, { type: "move", unitIds: [carrier], target: STOP })).toEqual({ ok: true });
+  runUntil(match, () => COL + 0.5 - find(match, carrier)!.x < TROOP_CARRIER.collectAfterCells);
+  expect(isAt(match, carrier, STOP)).toBe(false);
 }
 
 describe("an empty Troop Carrier that finishes a move", () => {
   it("tells its Player of each Unit it takes when Collecting, where that Unit stood, as a Board by Command does", () => {
     const match = stage();
     const rifleman = addTestUnit(match, 0, "rifleman", at(2, 0));
-    const carrier = addTestUnit(match, 0, "troopCarrier", { x: STOP.x - 8, y: STOP.y });
+    const carrier = addTestUnit(match, 0, "troopCarrier", at(-FAR_OFF, 0));
     expect(issueCommand(match, 0, { type: "move", unitIds: [carrier], target: STOP })).toEqual({ ok: true });
     runUntil(match, () => passengerIds(match, carrier).length === 1);
     expect(getPlayerView(match, 0).passengerEvents).toMatchObject([
@@ -96,7 +109,7 @@ describe("an empty Troop Carrier that finishes a move", () => {
   it("takes the lowest id first of two as near as each other, whatever order the Match keeps them in", () => {
     const match = stage();
     // Far enough below where it will stop for the drive there to end in Collecting.
-    const carrier = addTestUnit(match, 0, "troopCarrier", at(1, -1 + TROOP_CARRIER.collectAfterCells));
+    const carrier = addTestUnit(match, 0, "troopCarrier", at(1, -1 + LONG_ENOUGH));
     const low = addTestUnit(match, 0, "rifleman", at(0, -1));
     const high = addTestUnit(match, 0, "rifleman", at(2, -1));
     // Boarding and getting out again puts the lower id after the higher one among the Match's Units.
@@ -113,7 +126,7 @@ describe("an empty Troop Carrier that finishes a move", () => {
     const match = stage();
     const raider = addTestUnit(match, 0, "raider", at(-1, 0));
     const medic = addTestUnit(match, 0, "medic", at(0, 2));
-    const carrier = addTestUnit(match, 0, "troopCarrier", at(-8, 0));
+    const carrier = addTestUnit(match, 0, "troopCarrier", at(-FAR_OFF, 0));
     expect(issueCommand(match, 0, { type: "move", unitIds: [carrier], target: STOP })).toEqual({ ok: true });
     runToTheTickBeforeItStops(match, carrier);
     // Nearer than the own Medic, and put there this late so that it outlasts the Raider's fire to the stop.
@@ -147,7 +160,7 @@ describe("an empty Troop Carrier that finishes a move", () => {
   it("leaves a Unit that has a Command in progress on the Tick it stops, though it stands within reach", () => {
     const match = stage();
     const rifleman = addTestUnit(match, 0, "rifleman", at(1, 0));
-    const carrier = addTestUnit(match, 0, "troopCarrier", at(-8, 0));
+    const carrier = addTestUnit(match, 0, "troopCarrier", at(-FAR_OFF, 0));
     expect(issueCommand(match, 0, { type: "move", unitIds: [carrier], target: STOP })).toEqual({ ok: true });
     runToTheTickBeforeItStops(match, carrier);
     expect(issueCommand(match, 0, { type: "move", unitIds: [rifleman], target: at(1, 6) })).toEqual({ ok: true });
@@ -199,7 +212,7 @@ describe("an empty Troop Carrier that finishes a move", () => {
       const medic = addTestUnit(match, 0, "medic", at(1, 0));
       // In the Medic's sight and out of the Troop Carrier's reach.
       const rifleman = addTestUnit(match, 0, "rifleman", at(4, 0));
-      const carrier = addTestUnit(match, 0, "troopCarrier", at(-8, 0));
+      const carrier = addTestUnit(match, 0, "troopCarrier", at(-FAR_OFF, 0));
       run(match, wait);
       expect(issueCommand(match, 0, { type: "move", unitIds: [carrier], target: STOP })).toEqual({ ok: true });
       runToTheTickBeforeItStops(match, carrier);
@@ -251,7 +264,7 @@ describe("an empty Troop Carrier that finishes a move", () => {
     const match = stage();
     // Within its reach, and out of the attacker's.
     const medic = addTestUnit(match, 0, "medic", at(-2, 0));
-    const carrier = addTestUnit(match, 0, "troopCarrier", at(-8, 0));
+    const carrier = addTestUnit(match, 0, "troopCarrier", at(-FAR_OFF, 0));
     expect(issueCommand(match, 0, { type: "move", unitIds: [carrier], target: STOP })).toEqual({ ok: true });
     runToTheTickBeforeItStops(match, carrier);
     addTestUnit(match, 1, "rifleman", at(3, 0));
@@ -267,7 +280,7 @@ describe("an empty Troop Carrier that finishes a move", () => {
   it("collects at the end of an Attack-move too", () => {
     const match = stage();
     const rifleman = addTestUnit(match, 0, "rifleman", at(1, 0));
-    const carrier = addTestUnit(match, 0, "troopCarrier", at(-8, 0));
+    const carrier = addTestUnit(match, 0, "troopCarrier", at(-FAR_OFF, 0));
     expect(issueCommand(match, 0, { type: "attackMove", unitIds: [carrier], target: STOP })).toEqual({ ok: true });
     runUntil(match, () => isAt(match, carrier, STOP));
     expect(passengerIds(match, carrier)).toEqual([rifleman]);
@@ -275,8 +288,8 @@ describe("an empty Troop Carrier that finishes a move", () => {
 
   it("does not collect when it finishes the move with a Passenger inside, nor after that Passenger gets out", () => {
     const match = stage();
-    const carrier = addTestUnit(match, 0, "troopCarrier", at(-8, 0));
-    const passenger = addTestUnit(match, 0, "rifleman", at(-9, 0));
+    const carrier = addTestUnit(match, 0, "troopCarrier", at(-FAR_OFF, 0));
+    const passenger = addTestUnit(match, 0, "rifleman", at(-FAR_OFF - 1, 0));
     expect(issueCommand(match, 0, { type: "board", unitIds: [passenger], targetId: carrier })).toEqual({ ok: true });
     run(match, 1);
     const waiting = addTestUnit(match, 0, "rifleman", at(1, 0));
@@ -291,8 +304,8 @@ describe("an empty Troop Carrier that finishes a move", () => {
 
   it("does not collect at the end of a move it began empty when a Unit Boarded it on the way", () => {
     const match = stage();
-    const carrier = addTestUnit(match, 0, "troopCarrier", at(-8, 0));
-    const passenger = addTestUnit(match, 0, "rifleman", at(-9, 0));
+    const carrier = addTestUnit(match, 0, "troopCarrier", at(-FAR_OFF, 0));
+    const passenger = addTestUnit(match, 0, "rifleman", at(-FAR_OFF - 1, 0));
     const waiting = addTestUnit(match, 0, "rifleman", at(1, 0));
     // The move first: it sets off empty, and the Rifleman beside it gets in on the first Tick of the drive.
     expect(issueCommand(match, 0, { type: "move", unitIds: [carrier], target: STOP })).toEqual({ ok: true });
@@ -303,10 +316,10 @@ describe("an empty Troop Carrier that finishes a move", () => {
     expect(isAt(match, waiting, at(1, 0))).toBe(true);
   });
 
-  it("does not collect at the end of a move during which it Unloaded:neither those it put out nor anyone else", () => {
+  it("does not collect at the end of a move on which it Unloaded just before the stop: neither those it put out nor anyone else", () => {
     const match = stage();
-    const carrier = addTestUnit(match, 0, "troopCarrier", at(-8, 0));
-    const passenger = addTestUnit(match, 0, "rifleman", at(-9, 0));
+    const carrier = addTestUnit(match, 0, "troopCarrier", at(-FAR_OFF, 0));
+    const passenger = addTestUnit(match, 0, "rifleman", at(-FAR_OFF - 1, 0));
     expect(issueCommand(match, 0, { type: "board", unitIds: [passenger], targetId: carrier })).toEqual({ ok: true });
     run(match, 1);
     const waiting = addTestUnit(match, 0, "rifleman", at(1, 0));
@@ -324,17 +337,17 @@ describe("an empty Troop Carrier that finishes a move", () => {
     expect(isAt(match, waiting, at(1, 0))).toBe(true);
   });
 
-  it("does not collect at the end of a move during which its Passengers got out because it was hit", () => {
+  it("does not collect at the end of a move on which its Passengers got out near the stop because it was hit", () => {
     const match = stage();
-    const carrier = addTestUnit(match, 0, "troopCarrier", at(-8, 0));
-    const passenger = addTestUnit(match, 0, "medic", at(-9, 0));
+    const carrier = addTestUnit(match, 0, "troopCarrier", at(-FAR_OFF, 0));
+    const passenger = addTestUnit(match, 0, "medic", at(-FAR_OFF - 1, 0));
     expect(issueCommand(match, 0, { type: "board", unitIds: [passenger], targetId: carrier })).toEqual({ ok: true });
     run(match, 1);
     // Unarmed, so nobody at the stop shoots back and the fight cannot change who stands there.
     const waiting = addTestUnit(match, 0, "medic", at(1, 0));
     expect(issueCommand(match, 0, { type: "move", unitIds: [carrier], target: STOP })).toEqual({ ok: true });
-    // Hit two Cells short of the stop, and the attacker walks off: the stop itself is quiet.
-    runUntil(match, () => find(match, carrier)!.x >= COL - 2);
+    // Hit too near the stop for the drive from there to end in Collecting, and the attacker walks off: the stop itself is quiet.
+    runUntil(match, () => COL + 0.5 - find(match, carrier)!.x < TROOP_CARRIER.collectAfterCells - 1);
     const attacker = addTestUnit(match, 1, "rifleman", at(-2, 3));
     run(match, 1);
     expect(find(match, carrier)!.hp).toBeLessThan(UNIT_STATS.troopCarrier.maxHp);
@@ -346,6 +359,47 @@ describe("an empty Troop Carrier that finishes a move", () => {
     expect(passengerIds(match, carrier)).toEqual([]);
     expect(find(match, passenger)).toBeDefined();
     expect(isAt(match, waiting, at(1, 0))).toBe(true);
+  });
+
+  it("is Collecting where it stops when an Unload on the way left it empty and it was sent on far enough from there", () => {
+    const match = stage();
+    const carrier = addTestUnit(match, 0, "troopCarrier", at(-FAR_OFF, 0));
+    const passenger = addTestUnit(match, 0, "rifleman", at(-FAR_OFF - 1, 0));
+    expect(issueCommand(match, 0, { type: "board", unitIds: [passenger], targetId: carrier })).toEqual({ ok: true });
+    run(match, 1);
+    // Beside the Cell it is sent on to, which is off its row and far from where it Unloads.
+    const end = at(FAR_OFF, FAR_OFF);
+    const waiting = addTestUnit(match, 0, "rifleman", { x: end.x + 1, y: end.y });
+    // Unloaded about half way, with no stop Command, and sent on at once.
+    expect(issueCommand(match, 0, { type: "move", unitIds: [carrier], target: STOP })).toEqual({ ok: true });
+    runUntil(match, () => find(match, carrier)!.x >= COL - FAR_OFF / 2);
+    expect(issueCommand(match, 0, { type: "unload", unitIds: [carrier] })).toEqual({ ok: true });
+    expect(passengerIds(match, carrier)).toEqual([]);
+    moveTo(match, [carrier], end);
+    expect(passengerIds(match, carrier)).toEqual([waiting]);
+    expect(find(match, passenger)).toBeDefined();
+  });
+
+  it("is Collecting where it stops when a hit on the way emptied it far enough before the stop", () => {
+    const match = stage();
+    const carrier = addTestUnit(match, 0, "troopCarrier", at(-FAR_OFF, 0));
+    const passenger = addTestUnit(match, 0, "medic", at(-FAR_OFF - 1, 0));
+    expect(issueCommand(match, 0, { type: "board", unitIds: [passenger], targetId: carrier })).toEqual({ ok: true });
+    run(match, 1);
+    // Unarmed, so nobody at the stop shoots back and the fight cannot change who stands there.
+    const waiting = addTestUnit(match, 0, "medic", at(1, 0));
+    expect(issueCommand(match, 0, { type: "move", unitIds: [carrier], target: STOP })).toEqual({ ok: true });
+    // Hit more than a long enough drive before the stop, and the attacker walks off: the stop itself is quiet.
+    runUntil(match, () => find(match, carrier)!.x >= COL - LONG_ENOUGH - 1);
+    const attacker = addTestUnit(match, 1, "rifleman", at(-LONG_ENOUGH - 1, 3));
+    run(match, 1);
+    expect(find(match, carrier)!.hp).toBeLessThan(UNIT_STATS.troopCarrier.maxHp);
+    expect(COL + 0.5 - find(match, carrier)!.x).toBeGreaterThan(TROOP_CARRIER.collectAfterCells);
+    expect(find(match, passenger)).toBeDefined();
+    expect(issueCommand(match, 1, { type: "move", unitIds: [attacker], target: at(-LONG_ENOUGH - 1, 20) })).toEqual({ ok: true });
+    runUntil(match, () => isAt(match, carrier, STOP));
+    expect(passengerIds(match, carrier)).toEqual([waiting]);
+    expect(find(match, passenger)).toBeDefined();
   });
 });
 
@@ -367,7 +421,7 @@ describe("a Troop Carrier that has stopped and stands", () => {
     run(match, A_WHILE);
     expect(passengerIds(match, carrier)).toEqual([]);
     // Off and back: all three are within the Collecting radius of where it stops again.
-    moveTo(match, [carrier], at(0, 8));
+    moveTo(match, [carrier], at(0, FAR_OFF));
     expect(passengerIds(match, carrier)).toEqual([]);
     moveTo(match, [carrier], STOP);
     expect(passengerIds(match, carrier).sort()).toEqual([first, second, third]);
@@ -433,20 +487,70 @@ describe("a Troop Carrier that has stopped and stands", () => {
     expect(find(match, rifleman)).toBeDefined();
   });
 
+  describe("never takes back a Unit that has just got out, whichever way and however far one move takes it", () => {
+    const WAYS = [[1, 0], [1, 1], [0, 1], [-1, 1], [-1, 0], [-1, -1], [0, -1], [1, -1]] as const;
+    /** A Troop Carrier with a full load, so that some get out onto the Cells touching its corners, the farthest there are. */
+    function full(match: Match, cell: CellPos): number {
+      const carrier = addTestUnit(match, 0, "troopCarrier", cell);
+      const riflemen = Array.from({ length: TROOP_CARRIER.capacity }, (_, i) =>
+        addTestUnit(match, 0, "rifleman", { x: cell.x + i - 2, y: cell.y + 2 }),
+      );
+      expect(issueCommand(match, 0, { type: "board", unitIds: riflemen, targetId: carrier })).toEqual({ ok: true });
+      runUntil(match, () => passengerIds(match, carrier).length === riflemen.length);
+      return carrier;
+    }
+    /** Unloads it where `staged` leaves it, sends it each way by each number of Cells, and expects it to stand empty. */
+    function expectNobodyTakenBack(staged: (match: Match) => number): void {
+      for (const [dx, dy] of WAYS) {
+        for (let cells = 1; cells <= LONG_ENOUGH + 1; cells++) {
+          const match = stage();
+          const carrier = staged(match);
+          expect(issueCommand(match, 0, { type: "unload", unitIds: [carrier] })).toEqual({ ok: true });
+          expect(passengerIds(match, carrier)).toEqual([]);
+          const from = find(match, carrier)!;
+          const target = { x: Math.floor(from.x) + dx * cells, y: Math.floor(from.y) + dy * cells };
+          // Round those standing in its way, so it may stop a Cell or two off; it stands again all the same.
+          expect(issueCommand(match, 0, { type: "move", unitIds: [carrier], target })).toEqual({ ok: true });
+          run(match, 1);
+          runUntil(match, () => {
+            const u = find(match, carrier)!;
+            return u.x === u.prevX && u.y === u.prevY;
+          });
+          expect(passengerIds(match, carrier), `${cells} Cells by (${dx}, ${dy})`).toEqual([]);
+        }
+      }
+    }
+
+    it("when it Unloads standing on its Cell's centre", () => {
+      expectNobodyTakenBack((match) => full(match, STOP));
+    });
+
+    it("when it Unloads on its way, at the corner of its Cell farthest from one of those who get out", () => {
+      expectNobodyTakenBack((match) => {
+        const carrier = full(match, STOP);
+        // Cornerwise, so it leaves each Cell by its corner; caught on the last Tick before it does.
+        const target = at(LONG_ENOUGH, LONG_ENOUGH);
+        expect(issueCommand(match, 0, { type: "move", unitIds: [carrier], target })).toEqual({ ok: true });
+        const step = UNIT_STATS.troopCarrier.speed / TICKS_PER_SECOND / Math.SQRT2;
+        runUntil(match, () => find(match, carrier)!.x % 1 >= 1 - step);
+        return carrier;
+      });
+    });
+  });
+
   it("is Collecting only where it stops at least TROOP_CARRIER.collectAfterCells from where the move began", () => {
     const match = stage();
-    const least = TROOP_CARRIER.collectAfterCells;
-    const carrier = addTestUnit(match, 0, "troopCarrier", at(-least - 1, 0));
-    const rifleman = addTestUnit(match, 0, "rifleman", at(-least, 1));
-    // One Cell along: the Rifleman is beside it at both ends.
-    moveTo(match, [carrier], at(-least, 0));
+    const carrier = addTestUnit(match, 0, "troopCarrier", at(-LONG_ENOUGH - (LONG_ENOUGH - 1), 0));
+    // Beside where the first move ends, which is one Cell too short a drive.
+    const rifleman = addTestUnit(match, 0, "rifleman", at(-LONG_ENOUGH, 1));
+    moveTo(match, [carrier], at(-LONG_ENOUGH, 0));
     run(match, A_WHILE);
     expect(passengerIds(match, carrier)).toEqual([]);
-    // Exactly collectAfterCells, measured from where this move began, and he is still within its reach.
+    // Long enough by less than a Cell, measured from where this move began.
     const waiting = addTestUnit(match, 0, "rifleman", at(1, 0));
     moveTo(match, [carrier], STOP);
     expect(passengerIds(match, carrier)).toEqual([waiting]);
-    expect(isAt(match, rifleman, at(-least, 1))).toBe(true);
+    expect(isAt(match, rifleman, at(-LONG_ENOUGH, 1))).toBe(true);
   });
 
   it("takes nobody when it is sent somewhere it has no way to and cannot leave its Cell", () => {
@@ -467,11 +571,9 @@ describe("a Troop Carrier that has stopped and stands", () => {
     for (const again of ["move", "attackMove"] as const) {
       const match = stage();
       const rifleman = addTestUnit(match, 0, "rifleman", at(1, 0));
-      const carrier = addTestUnit(match, 0, "troopCarrier", at(-10, 0));
-      expect(issueCommand(match, 0, { type: "move", unitIds: [carrier], target: STOP })).toEqual({ ok: true });
-      // A second click on the same Cell, nearer the stop than collectAfterCells: the drive is still the one from ten Cells off.
-      runUntil(match, () => COL + 0.5 - find(match, carrier)!.x <= 1.3);
-      expect(COL + 0.5 - find(match, carrier)!.x).toBeLessThan(TROOP_CARRIER.collectAfterCells);
+      const carrier = addTestUnit(match, 0, "troopCarrier", at(-FAR_OFF, 0));
+      // A second click on the same Cell, nearer the stop than collectAfterCells: the drive is still the one from far off.
+      driveToShortOfStop(match, carrier);
       expect(issueCommand(match, 0, { type: again, unitIds: [carrier], target: STOP })).toEqual({ ok: true });
       runUntil(match, () => isAt(match, carrier, STOP));
       expect(passengerIds(match, carrier), again).toEqual([rifleman]);
@@ -481,9 +583,8 @@ describe("a Troop Carrier that has stopped and stands", () => {
   it("measures a drive from where it last stood: a stop Command on the way ends the drive", () => {
     const match = stage();
     const rifleman = addTestUnit(match, 0, "rifleman", at(1, 0));
-    const carrier = addTestUnit(match, 0, "troopCarrier", at(-10, 0));
-    expect(issueCommand(match, 0, { type: "move", unitIds: [carrier], target: STOP })).toEqual({ ok: true });
-    runUntil(match, () => COL + 0.5 - find(match, carrier)!.x <= 1.3);
+    const carrier = addTestUnit(match, 0, "troopCarrier", at(-FAR_OFF, 0));
+    driveToShortOfStop(match, carrier);
     expect(issueCommand(match, 0, { type: "stop", unitIds: [carrier] })).toEqual({ ok: true });
     moveTo(match, [carrier], STOP);
     run(match, A_WHILE);
@@ -491,16 +592,31 @@ describe("a Troop Carrier that has stopped and stands", () => {
     expect(isAt(match, rifleman, at(1, 0))).toBe(true);
   });
 
+  it("takes nobody at the end of a drive out and back that ends a Cell from where it began, however far it went", () => {
+    const match = stage();
+    const carrier = addTestUnit(match, 0, "troopCarrier", STOP);
+    const rifleman = addTestUnit(match, 0, "rifleman", at(1, 1));
+    expect(issueCommand(match, 0, { type: "move", unitIds: [carrier], target: at(2 * FAR_OFF, 0) })).toEqual({ ok: true });
+    // Turned round by a Command, with no stop, once it is far out.
+    runUntil(match, () => find(match, carrier)!.x >= COL + FAR_OFF);
+    moveTo(match, [carrier], at(1, 0));
+    run(match, A_WHILE);
+    expect(passengerIds(match, carrier)).toEqual([]);
+    expect(isAt(match, rifleman, at(1, 1))).toBe(true);
+  });
+
   it("is Collecting when, on a long enough drive, it is sent to the Cell it has just reached", () => {
     const match = stage();
-    const rifleman = addTestUnit(match, 0, "rifleman", at(-3, 1));
-    const carrier = addTestUnit(match, 0, "troopCarrier", at(-8, 0));
+    // A long enough drive short of the Cell it was first sent to.
+    const reached = at(LONG_ENOUGH - FAR_OFF, 0);
+    const rifleman = addTestUnit(match, 0, "rifleman", { x: reached.x, y: reached.y + 1 });
+    const carrier = addTestUnit(match, 0, "troopCarrier", at(-FAR_OFF, 0));
     expect(issueCommand(match, 0, { type: "move", unitIds: [carrier], target: STOP })).toEqual({ ok: true });
-    runUntil(match, () => Math.floor(find(match, carrier)!.x) === COL - 3);
-    expect(issueCommand(match, 0, { type: "move", unitIds: [carrier], target: at(-3, 0) })).toEqual({ ok: true });
+    runUntil(match, () => Math.floor(find(match, carrier)!.x) === reached.x);
+    expect(issueCommand(match, 0, { type: "move", unitIds: [carrier], target: reached })).toEqual({ ok: true });
     run(match, A_WHILE);
-    expect(isAt(match, carrier, at(-3, 0))).toBe(true);
-    // The drive began five Cells back, where it last stood, not where the second Command found it.
+    expect(isAt(match, carrier, reached)).toBe(true);
+    // The drive began where it last stood, not where the second Command found it.
     expect(passengerIds(match, carrier)).toEqual([rifleman]);
   });
 
@@ -518,7 +634,7 @@ describe("a Troop Carrier that has stopped and stands", () => {
   it("still collects where it stops after a Command on the way that was rejected", () => {
     const match = stage();
     const rifleman = addTestUnit(match, 0, "rifleman", at(1, 0));
-    const carrier = addTestUnit(match, 0, "troopCarrier", at(-8, 0));
+    const carrier = addTestUnit(match, 0, "troopCarrier", at(-FAR_OFF, 0));
     expect(issueCommand(match, 0, { type: "move", unitIds: [carrier], target: STOP })).toEqual({ ok: true });
     run(match, 10);
     expect(issueCommand(match, 0, { type: "move", unitIds: [carrier], target: { x: 999, y: 0 } }).ok).toBe(false);
@@ -586,11 +702,13 @@ describe("a Troop Carrier that has stopped and stands", () => {
 describe("a newly trained Troop Carrier", () => {
   it("collects at its rally point like any other", () => {
     const match = createMatch(openMap(30, 30), 1);
-    addTestBuilding(match, 0, "vehicleFactory", { x: 10, y: 10 });
+    const site = { x: 10, y: 10 };
+    addTestBuilding(match, 0, "vehicleFactory", site);
     const factory = getPlayerView(match, 0).buildings.find((b) => b.kind === "vehicleFactory")!.id;
-    const rally = { x: 20, y: 14 };
-    const beside = addTestUnit(match, 0, "rifleman", { x: 21, y: 14 });
-    const below = addTestUnit(match, 0, "rifleman", { x: 20, y: 16 });
+    // Farther from the Factory's far edge than a drive that ends in Collecting is long, wherever beside it the new Unit appears.
+    const rally = { x: site.x + BUILDING_STATS.vehicleFactory.width + LONG_ENOUGH + 1, y: site.y + LONG_ENOUGH };
+    const beside = addTestUnit(match, 0, "rifleman", { x: rally.x + 1, y: rally.y });
+    const below = addTestUnit(match, 0, "rifleman", { x: rally.x, y: rally.y + TROOP_CARRIER.collectRadius });
     setTestCredits(match, 0, UNIT_STATS.troopCarrier.cost);
     expect(issueCommand(match, 0, { type: "setRallyPoint", buildingId: factory, target: rally })).toEqual({ ok: true });
     expect(issueCommand(match, 0, { type: "train", buildingId: factory, kind: "troopCarrier" })).toEqual({ ok: true });

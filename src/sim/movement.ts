@@ -56,6 +56,18 @@ export function moveStart(u: UnitState): MoveStart {
   return { from: { x: u.x, y: u.y }, empty: u.passengers.length === 0 };
 }
 
+/**
+ * Begins a new drive where the Unit is, without it standing: for a Troop Carrier whose last Passenger has just got
+ * out on its way. From here it is as one sent off empty from this spot, so it is Collecting again where it stops,
+ * but only far enough off to leave those it put out behind. The start it carries is changed, not replaced: the note
+ * of the move it began the Tick on is the same object and must tell the same.
+ */
+export function beginDriveHere(u: UnitState): void {
+  if (!isMoveOrAttackMove(u.order)) return;
+  u.order.start.from = { x: u.x, y: u.y };
+  u.order.start.empty = u.passengers.length === 0;
+}
+
 /** Sends one Unit walking to a Cell, replacing whatever it was doing. */
 export function orderMoveTo(m: MatchState, u: UnitState, goal: CellPos): void {
   u.order = { type: "move", plan: planMove(m, u, goal), start: moveStart(u) };

@@ -1,7 +1,7 @@
 import type { CommandResult } from "./commands";
 import { OK, reject } from "./commands";
 import type { CommandHandler } from "./handlers";
-import { matchGrid, type MovePlan, planMove, stepAlong, unitCell } from "./movement";
+import { beginDriveHere, matchGrid, type MovePlan, planMove, stepAlong, unitCell } from "./movement";
 import { cellsWithinSteps } from "./pathfinding";
 import type { MatchState, PassengerEvent, UnitState } from "./state";
 import { cellIndex, isMoveOrAttackMove, isWalkable, ownUnits } from "./state";
@@ -30,7 +30,9 @@ import type { CellPos, EntityId, PlayerId } from "./types";
 //   (TROOP_CARRIER.collectAfterCells), that it began with no Passengers and
 //   had none on since. A drive is every move and Attack-move since it last
 //   stood or was on any other order: a Command that sends it on while it is
-//   on its way does not begin a new one. Then idle Infantry of its own Player
+//   on its way does not begin a new one. An Unload on the way that leaves it
+//   empty does, from where it is, whether by a Command or because it lost
+//   health. Then idle Infantry of its own Player
 //   within the Collecting radius get in from where they stand, nearest first
 //   and lowest id first among those as near as each other, while there is
 //   room. Idle is the test used everywhere: no Command in progress, and a
@@ -42,11 +44,13 @@ import type { CellPos, EntityId, PlayerId } from "./types";
 //   parked Troop Carrier stays on the Map, and so do those that got out; a
 //   drive that ends nearer than that to where it began (sent to where it
 //   stands, nudged a Cell along, or with no way to go) is standing. A drive
-//   on which it held a Passenger, or put one out, ends without Collecting
-//   (Units Unloaded a step from the stop are not gathered up again), and so
-//   does a stop on a Tick it lost health (what it took would be out again at
-//   the next hit). It is Collecting again once it is sent off empty and stops
-//   that far from where it set off.
+//   that ends with a Passenger inside, or on which one got in, ends without
+//   Collecting; so does one that ends nearer than that to where its last
+//   Passenger got out (those Unloaded near the stop are not gathered up
+//   again: the distance is the radius and the farthest they stand from it,
+//   together), and so does a stop on a Tick it lost health (what it took
+//   would be out again at the next hit). The distance is a straight line, so
+//   a drive out and back to about where it began ends without it too.
 // - Nothing tells this file that a move began or ended. Each move and
 //   Attack-move order carries how its drive began (`MoveStart`, which the order
 //   types require), and movement.ts notes the one a Unit begins each Tick on.
@@ -87,7 +91,7 @@ function getIn(m: MatchState, u: UnitState, carrier: UnitState): boolean {
   // Its reload is left as it was, or getting in and out would be a way to fire faster.
   u.tendBackOff.clear();
   carrier.passengers.push(u);
-  // Whatever move the Troop Carrier is on no longer ends in Collecting, even if this one is out again before the stop.
+  // The drive the Troop Carrier is on no longer ends in Collecting, unless an Unload on the way begins another.
   if (isMoveOrAttackMove(carrier.order)) carrier.order.start.empty = false;
   note(m, "board", u);
   return true;
@@ -110,6 +114,8 @@ export function unloadPassengers(m: MatchState, carrier: UnitState): number {
     m.units.set(p.id, p);
     note(m, "unload", p);
   });
+  // Empty on its way, by a Command or a hit: the drive to the stop is counted from here.
+  if (carrier.passengers.length === 0) beginDriveHere(carrier);
   return out.length;
 }
 

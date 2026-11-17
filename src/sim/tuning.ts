@@ -231,8 +231,15 @@ export const TEND = {
   standTries: 16,
 } as const;
 
-/** Named apart from TROOP_CARRIER because two of its numbers are this one reach. */
+/** Named apart from TROOP_CARRIER because another of its numbers is worked out from this one. */
 const COLLECT_RADIUS = 2;
+
+/**
+ * The farthest from a Troop Carrier, in Cells, that a Unit getting out of it can stand: on the centre of the Cell
+ * touching the corner of its own, seen from the far corner of its own Cell, where a Troop Carrier that Unloads on
+ * its way may be. One standing on its Cell's centre puts nobody out as far as that.
+ */
+const GET_OUT_REACH = Math.hypot(1.5, 1.5);
 
 export const TROOP_CARRIER = {
   /** Most Passengers a Troop Carrier holds. */
@@ -245,12 +252,15 @@ export const TROOP_CARRIER = {
    * Building that stands between them, and is too few to get round a river or a long wall.
    */
   collectWalk: 3,
+  /** How far from it, in Cells, a Unit that gets out can stand at the farthest. */
+  getOutReachCells: GET_OUT_REACH,
   /**
-   * The least a Troop Carrier must have driven, in Cells in a straight line from where its move or Attack-move began
-   * to where it stopped, to be Collecting there. Its own reach, so a nudge among Units that got out does not gather
-   * them up again: a stop that far off is among other Units, or was meant.
+   * The least a Troop Carrier must have driven, in Cells in a straight line from where its drive began to where it
+   * stopped, to be Collecting there. Its Collecting radius and the farthest a Unit that got out stands from it,
+   * together: whichever way it drives that far from where it put its Passengers out, even straight over one of
+   * them, every one is left beyond its reach, so no nudge among them gathers any up again.
    */
-  collectAfterCells: COLLECT_RADIUS,
+  collectAfterCells: COLLECT_RADIUS + GET_OUT_REACH,
 } as const;
 
 /**
@@ -299,6 +309,12 @@ export const ECONOMY = {
   harvestRetryTicks: TICKS_PER_SECOND,
 } as const;
 
+/**
+ * The most, in Cells, between two Units standing on the centres of Cells that touch, rounded up: a little over the
+ * distance cornerwise. The Opponent measures with it because its view gives positions, not who is working on what.
+ */
+const IN_TOUCHING_CELL = 1.5;
+
 /** How hard the Computer Opponent plays. */
 export const OPPONENT = {
   /** Units in the first attack wave; each wave after asks for waveGrowth more, up to waveCap. */
@@ -339,14 +355,19 @@ export const OPPONENT = {
    */
   leaveAloneTicks: 60 * TICKS_PER_SECOND,
   /**
-   * How near its target, in Cells, a support Unit standing still counts as at work on it: beside it, as a Tend
-   * needs, and a Cell on the diagonal is still beside. A Mechanic farther from its Building has stopped on the
-   * way, and a Medic this near a Unit being Healed is taken to be the one Healing it.
+   * How near its Building, in Cells from the nearest point of the footprint, a Mechanic standing still counts as
+   * at work on it: in a Cell touching it, as a Tend needs, and the centre of one touching it cornerwise is this
+   * near. One farther off has stopped on the way.
    */
-  besideCells: 1.5,
+  mechanicAtWorkCells: IN_TOUCHING_CELL,
+  /**
+   * How near a Unit being Healed, in Cells, a Medic counts as near enough to be the one Healing it: in a Cell
+   * touching that Unit's.
+   */
+  medicHealingCells: IN_TOUCHING_CELL,
   /**
    * How far from the rally point, in Cells, a Medic may stand before it is sent back: half the seek radius, so
-   * the Units that come home and stop round the rally point are still within the reach it looks for work in.
+   * the Units that come home and stop round the rally point are still within its seek radius.
    */
   medicStrayCells: TEND.seekRadius / 2,
   /** How near where it last stopped, in Cells, a Medic sent back counts as not having left since: it is not sent again into the same crowd. */
@@ -367,7 +388,7 @@ export const OPPONENT = {
    * How near its Parking Cell, in Cells, a Troop Carrier that found no way onto it still counts as parked where it
    * stopped: about as far as the rally point is, so the Riflemen who Board it have a short walk and it is still at home.
    */
-  parkedNearCells: 8,
+  parkedNoWayCells: 8,
   /** How long a Troop Carrier that stopped farther from its Parking Cell than that waits before it is sent there again. */
   parkAgainTicks: 30 * TICKS_PER_SECOND,
 } as const;
