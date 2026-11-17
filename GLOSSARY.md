@@ -16,6 +16,10 @@ _Avoid_: Team, faction, army, side
 The Player whose decisions are made by the game.
 _Avoid_: AI, bot, enemy, CPU
 
+**Parking Cell**:
+The Cell near its HQ, to one side of where its new Units gather, on which the Computer Opponent keeps a Troop Carrier that is not out with an attack. Standing there it is out of reach of the Medics and Mechanics it would otherwise Collect, and it is where Riflemen about to attack Board it. A Troop Carrier that cannot get there waits where it stopped.
+_Avoid_: Garage, depot, bay, parking spot
+
 **Tick**:
 One fixed step of game time. The Match advances only in whole Ticks, at a fixed rate.
 _Avoid_: Frame, turn, update
