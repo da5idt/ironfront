@@ -64,12 +64,12 @@ A two-way PR merges only when all of these hold: the `two-way-door` label, `**Do
 
 ## Scheduled jobs
 - **auto-merge** (GitHub Actions): every 30 minutes, and on each new PR comment.
-- **Hourly pickup** (Claude scheduled task): at :20 past each hour Central, starts the next approved spec (one at a time) from the build step, in a new thread.
+- **Daily pickup** (Claude scheduled task): once a day at midnight Central (hourly at :20 until 2026-11-16), starts the next approved spec (one at a time) from the build step, in a new thread.
 - **PR watch** (Claude scheduled task): every 2 hours at :50 Central, fixes failing CI and review comments on agent PRs.
 - **Retro check** (Claude scheduled task): every 4 hours at :50 Central (1:50, 5:50, 9:50 and so on, the hours the PR watch skips), runs the retro for the oldest closed spec without the `retro` label. A run with nothing to do resolves its thread.
 - **Daily digest** (Claude scheduled task): 7:50 PM Central, opens a `digest` issue only on days with auto-merges.
 
-The Claude tasks sit at :20 and :50 so they never share a 15-minute slot with the auto-merge runs at :00 and :30.
+The PR watch, retro check and digest sit at :50 so they never share a 15-minute slot with the auto-merge runs at :00 and :30. The daily pickup runs at :00; it only starts a build, which takes far longer than one auto-merge run, so the shared slot costs nothing.
 
 ## Where things live
 | What | Where |

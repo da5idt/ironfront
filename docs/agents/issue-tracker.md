@@ -14,6 +14,19 @@ Issues and specs for this repo live as GitHub issues. Use the `gh` CLI for all o
 - **Apply / remove labels**: `gh issue edit <number> --add-label "..."` / `--remove-label "..."`
 - **Close**: post the explanation with `gh issue comment <number> --body "..."`, then `gh issue close <number>`. On an already-closed issue, `gh issue close --comment` drops the comment and still exits 0.
 
+### Cloud sessions: REST only
+
+GraphQL is blocked in cloud sessions, and every `gh issue ...` command above uses it (they fail with 403). Use these instead:
+
+- **Read**: `gh api repos/<owner>/<repo>/issues/<n>` (add `--jq .body` for the text), and `gh api repos/<owner>/<repo>/issues/<n>/comments` for its comments.
+- **List**: `gh api "repos/<owner>/<repo>/issues?state=open&labels=<name>"`. It also returns pull requests: drop entries that have a `pull_request` field.
+- **Create**: `gh api -X POST repos/<owner>/<repo>/issues -f title="..." -f body="..." -f 'labels[]=<name>'`.
+- **Comment**: `gh api -X POST repos/<owner>/<repo>/issues/<n>/comments -f body="..."`. The path ends in `/comments`: a POST or PATCH to `issues/<n>` itself replaces the issue's text.
+- **Add labels**: `gh api -X POST repos/<owner>/<repo>/issues/<n>/labels -f 'labels[]=<name>'`. **Remove one**: `gh api -X DELETE repos/<owner>/<repo>/issues/<n>/labels/<name>`.
+- **Assign**: `gh api -X POST repos/<owner>/<repo>/issues/<n>/assignees -f 'assignees[]=<login>'`.
+- **Close**: comment first, then `gh api -X PATCH repos/<owner>/<repo>/issues/<n> -f state=closed -f state_reason=completed`.
+- **Change an issue's text** on purpose: save the current body to a file first (`gh api repos/<owner>/<repo>/issues/<n> --jq .body > body.md`), edit the file, then `gh api -X PATCH repos/<owner>/<repo>/issues/<n> -F body=@body.md`.
+
 Infer the repo from `git remote -v`; `gh` does this automatically when run inside a clone.
 
 File issues only into the user's own repo. Never file into `mattpocock/skills` (the repo these skills come from) unless the user owns it. In a fork, `gh` can default to the upstream parent, so before the first `gh issue create` of a session, check the target with `gh repo view --json nameWithOwner` and confirm it with the user if it is not their repo.
