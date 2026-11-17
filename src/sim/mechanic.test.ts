@@ -445,7 +445,7 @@ describe("what a Player view shows of a repair", () => {
     const watcher = addTestUnit(match, 1, "harvester", { x: 21, y: ROW + 3 });
     issueCommand(match, 1, { type: "stop", unitIds: [watcher] });
     run(match, 3);
-    // The Mechanic on the far side is out of its sight, so the repair is shown with nobody named at work on it.
+    // The Mechanic on the far side is out of its sight, so the Repair is shown with nobody named at work on it.
     expect(getPlayerView(match, 0).tends).toMatchObject([{ targetId: barracks, unitIds: [mechanic] }]);
     expect(getPlayerView(match, 1).tends).toEqual(getPlayerView(match, 0).tends.map((t) => ({ ...t, unitIds: [] })));
     expect(getPlayerView(match, 1).tends).toHaveLength(1);

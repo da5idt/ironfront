@@ -131,7 +131,7 @@ export interface UnitState {
   /**
    * The places a Troop Carrier put Passengers out that it has not yet left
    * behind: it is not Collecting at a stop too near any of them, whatever it
-   * has done between. A place is dropped when a Drive of its own ends far
+   * has done between. A place is dropped once it is off its Drive far
    * enough from it (`collectPassengers` in passengers.ts), so the list stays
    * as short as the Unloads round where it is.
    */

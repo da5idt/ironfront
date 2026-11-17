@@ -315,7 +315,7 @@ export const ECONOMY = {
  * The most, in Cells, between two Units standing on the centres of Cells that touch, rounded up: a little over the
  * distance cornerwise. The Opponent tells with it whether a Mechanic stopped where it can be at work on its Building.
  */
-const IN_TOUCHING_CELL = 1.5;
+export const IN_TOUCHING_CELL = 1.5;
 
 /** How hard the Computer Opponent plays. */
 export const OPPONENT = {

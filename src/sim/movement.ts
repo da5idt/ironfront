@@ -53,7 +53,7 @@ function driveFromHere(u: UnitState): DriveStart {
 /**
  * The start of the Drive a move or an Attack-move the Unit is being set on now belongs to. One already on either
  * keeps the start it has: a second Command on the way, to the same Cell or another, is the same Drive, and a
- * Troop Carrier is Collecting by how far it stops from where its Drive began. Any other order between them,
+ * Troop Carrier is Collecting by how far it stops from where its Drive began. Any other Command between them,
  * a stop included, ends the Drive, and an Unload on the way that leaves it empty begins a new one (`beginDriveHere`).
  */
 export function driveStart(u: UnitState): DriveStart {

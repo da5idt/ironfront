@@ -20,6 +20,7 @@ import {
 import { RIVERFORD } from "../game/maps/riverford";
 import { testMap } from "../sim/testing/maps";
 import { addTestUnit, setTestBuildingHp, setTestCredits, setTestUnitHp } from "../sim/testing/setup";
+import { IN_TOUCHING_CELL } from "../sim/tuning";
 import { createOpponent, type Opponent, THINK_EVERY_TICKS } from "./opponent";
 import { distanceToCell } from "./tactics";
 import { BUILD_ORDER_DONE, opponentPastItsFirstWave, PLENTY, SECONDS, base as stagedBase, play as stagedPlay } from "./testing/stage";
@@ -233,8 +234,6 @@ describe("Computer Opponent's Medics and the rally point", () => {
   const unit = (match: Match, id: number) => getPlayerView(match, 0).units.find((u) => u.id === id)!;
   /** The staged Map is this many Cells each way: the size `base` stages unless given a Map, and the one `mapWithIsland` is drawn at. */
   const MAP_CELLS = 40;
-  /** No farther than the centre of a Cell touching: the most between the centres of two Cells that touch, rounded up. */
-  const IN_TOUCHING_CELL = 1.5;
   /** Long enough for a Medic to walk the length of one side of the staged Map: farther than any Medic here is staged from the rally point. */
   const WALK_HOME = Math.ceil(MAP_CELLS / UNIT_STATS.medic.speed) * SECONDS;
   /**

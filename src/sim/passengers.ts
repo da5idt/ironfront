@@ -52,8 +52,10 @@ import type { CellPos, EntityId, PlayerId, Vec } from "./types";
 //   together), and so does a stop on a Tick it lost health (what it took
 //   would be out again at the next hit). The distance is a straight line, so
 //   a Drive out and back to about where it began ends without it too.
-// - It keeps every place it put Passengers out (`putOutAt`) until a Drive of
-//   its own ends farther than that from the place. So it does not matter how
+// - It keeps every place it put Passengers out (`putOutAt`) until it is off
+//   its Drive farther than that from the place, whether the Drive ended by
+//   arriving or by a Command, and with or without a Passenger inside: having
+//   stood that far off, a Drive back to them is a new errand and takes them. So it does not matter how
 //   it left: a partial Unload and a later one that empties it, or a nudge and
 //   then a long Drive, bring nobody back in at a stop near where they got out.
 // - Nothing tells this file that a move began or ended. Each move and
@@ -253,7 +255,8 @@ function idleInfantryNear(m: MatchState, carrier: UnitState): UnitState[] {
 }
 
 /**
- * Per-Tick system, after the fight: Collecting. Each Troop Carrier that began
+ * Per-Tick system, after the fight: Collecting, and forgetting the places a
+ * Troop Carrier put Passengers out that it now stands far from. Each Troop Carrier that began
  * the Tick on a move and now stands idle has just finished its Drive, and takes
  * the idle Infantry near it if the Drive ended far enough from where it began
  * and from everywhere it put Passengers out, it has been empty since the Drive
@@ -264,15 +267,16 @@ function idleInfantryNear(m: MatchState, carrier: UnitState): UnitState[] {
 export function collectPassengers(m: MatchState): void {
   // A copy, as the Units it takes leave the Units being walked.
   for (const carrier of [...m.units.values()]) {
-    const start = carrier.moveAtTickStart?.drive;
-    if (!start || carrier.order.type !== "idle" || !isTroopCarrier(carrier.kind)) continue;
+    // On its way it is neither Collecting nor leaving anywhere behind.
+    if (!isTroopCarrier(carrier.kind) || isMoveOrAttackMove(carrier.order)) continue;
     // More than the least Drive, not as much: a Unit is taken at the Collecting radius exactly, so at exactly the
     // least Drive one put out the farthest way would be within it.
     const farFrom = (p: Vec): boolean => Math.hypot(carrier.x - p.x, carrier.y - p.y) > TROOP_CARRIER.collectAfterCells;
-    const stillNear = carrier.putOutAt.filter((p) => !farFrom(p));
-    const nearThoseItPutOut = stillNear.length > 0;
-    // Whatever else this stop is, it has left behind the places it is now far from.
-    carrier.putOutAt = stillNear;
+    const nearThoseItPutOut = carrier.putOutAt.some((p) => !farFrom(p));
+    // However its Drive ended, by arriving or by a Command, it has left behind the places it now stands far from.
+    if (carrier.putOutAt.some(farFrom)) carrier.putOutAt = carrier.putOutAt.filter((p) => !farFrom(p));
+    const start = carrier.moveAtTickStart?.drive;
+    if (!start || carrier.order.type !== "idle") continue;
     // One that Boarded on the Tick of the stop got in after the move was over, so the count is asked too.
     if (!start.empty || carrier.passengers.length > 0 || m.damaged.has(carrier.id)) continue;
     if (!farFrom(start.from) || nearThoseItPutOut) continue;

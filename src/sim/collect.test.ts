@@ -27,6 +27,8 @@ function stageWithWater(water: readonly CellPos[]): Match {
 }
 /** How many Cells before a stop the Troop Carriers staged here set off: a Drive well over long enough. */
 const FAR_OFF = 2 * LONG_DRIVE;
+/** How many rows off a Troop Carrier's row a Rifleman is put to hit it as it passes: within his range, out of its way. */
+const IN_RANGE = Math.floor(UNIT_STATS.rifleman.range);
 /** Long enough to show that a Troop Carrier which stands is not Collecting. */
 const A_WHILE = 3 * TICKS_PER_SECOND;
 
@@ -347,7 +349,7 @@ describe("an empty Troop Carrier that finishes a move", () => {
     // Hit too near the stop for the Drive from there to end in Collecting, and the attacker walks off: the stop itself is quiet.
     runUntil(match, () => COL + 0.5 - find(match, carrier)!.x < TROOP_CARRIER.collectAfterCells - 1);
     // Off its row, in the column it is in now: within a Rifleman's range of it, and not in its way.
-    const attacker = addTestUnit(match, 1, "rifleman", { x: Math.floor(find(match, carrier)!.x), y: ROW + Math.floor(UNIT_STATS.rifleman.range) });
+    const attacker = addTestUnit(match, 1, "rifleman", { x: Math.floor(find(match, carrier)!.x), y: ROW + IN_RANGE });
     run(match, 1);
     expect(find(match, carrier)!.hp).toBeLessThan(UNIT_STATS.troopCarrier.maxHp);
     expect(isAt(match, carrier, STOP)).toBe(false);
@@ -384,7 +386,7 @@ describe("an empty Troop Carrier that finishes a move", () => {
     expect(issueCommand(match, 0, { type: "move", unitIds: [carrier], target: STOP })).toEqual({ ok: true });
     // Hit more than a long enough Drive before the stop, and the attacker walks off: the stop itself is quiet.
     runUntil(match, () => find(match, carrier)!.x >= COL - LONG_DRIVE - 1);
-    const attacker = addTestUnit(match, 1, "rifleman", at(-LONG_DRIVE - 1, 3));
+    const attacker = addTestUnit(match, 1, "rifleman", at(-LONG_DRIVE - 1, IN_RANGE));
     run(match, 1);
     expect(find(match, carrier)!.hp).toBeLessThan(UNIT_STATS.troopCarrier.maxHp);
     expect(COL + 0.5 - find(match, carrier)!.x).toBeGreaterThan(TROOP_CARRIER.collectAfterCells);
@@ -633,6 +635,23 @@ describe("a Troop Carrier that has stopped and stands", () => {
     expect(passengerIds(match, carrier)).toEqual([passenger]);
   });
 
+  it("is Collecting again near where it put Passengers out once a stop Command has ended a Drive far from there", () => {
+    const match = stage();
+    const { carrier, passenger } = carrierWithPassenger(match);
+    const start = at(-FAR_OFF, 0);
+    expect(issueCommand(match, 0, { type: "unload", unitIds: [carrier] })).toEqual({ ok: true });
+    // Off empty and stopped by a Command a long Drive away, short of where it was sent.
+    expect(issueCommand(match, 0, { type: "move", unitIds: [carrier], target: at(FAR_OFF, 0) })).toEqual({ ok: true });
+    runUntil(match, () => find(match, carrier)!.x >= COL);
+    expect(issueCommand(match, 0, { type: "stop", unitIds: [carrier] })).toEqual({ ok: true });
+    // Until it stands: sent back before that, it would still be on the Drive it set off on.
+    run(match, A_WHILE);
+    moveTo(match, [carrier], start);
+    // Setting off from between two Cell centres, its last step can land on the centre a Tick before it stands.
+    run(match, 1);
+    expect(passengerIds(match, carrier)).toEqual([passenger]);
+  });
+
   it("takes nobody when it is sent somewhere it has no way to and cannot leave its Cell", () => {
     // Two Cells of ground with water all round: the stop, and the Cell on the side away from where it is sent.
     const ring: CellPos[] = [];
@@ -696,7 +715,7 @@ describe("a Troop Carrier that has stopped and stands", () => {
     expect(issueCommand(match, 0, { type: "move", unitIds: [carrier], target: reached })).toEqual({ ok: true });
     run(match, A_WHILE);
     expect(isAt(match, carrier, reached)).toBe(true);
-    // The drive began where it last stood, not where the second Command found it.
+    // The Drive began where it last stood, not where the second Command found it.
     expect(passengerIds(match, carrier)).toEqual([rifleman]);
   });
 
