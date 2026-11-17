@@ -7,87 +7,33 @@ import {
   getMatchStatus,
   getPlayerView,
   issueCommand,
+  type MapDef,
   type Match,
   OPPONENT,
-  TICKS_PER_SECOND,
   type UnitKind,
   type UnitView,
 } from "../sim";
 import { RIVERFORD } from "../game/maps/riverford";
-import { openMap } from "../sim/testing/maps";
+import { testMap } from "../sim/testing/maps";
 import { addTestBuilding, addTestUnit, setTestBuildingHp, setTestCredits, setTestUnitHp } from "../sim/testing/setup";
-import { createOpponent, type Opponent, THINK_EVERY_TICKS } from "./opponent";
+import { createOpponent, THINK_EVERY_TICKS } from "./opponent";
+import { BUILD_ORDER_DONE, type Given, opponentPastItsFirstWave, play, PLENTY, SECONDS, base as stagedBase } from "./testing/stage";
 
 // The Opponent's Troop Carrier, through its own seam: its Player view in,
 // Commands out. It plays Player 0 on openMap(40, 40): HQ on (0..2, 0..2),
 // Refinery on (4..6, 0..1), rally point at about (6, 6). Player 1's HQ covers
 // (37..39, 37..39).
 
-const SECONDS = TICKS_PER_SECOND;
-const PLENTY = 20_000;
-const BUILD_ORDER_DONE: readonly BuildingKind[] = ["barracks", "refinery", "vehicleFactory", "turret"];
+const SITES = [
+  { x: 10, y: 0 },
+  { x: 14, y: 0 },
+  { x: 18, y: 0 },
+  { x: 22, y: 0 },
+  { x: 26, y: 0 },
+];
 
 /** Player 0's base with these Buildings added to the starting HQ and Refinery. */
-function base(extra: readonly BuildingKind[]): Match {
-  const match = createMatch(openMap(40, 40), 1);
-  const sites = [
-    { x: 10, y: 0 },
-    { x: 14, y: 0 },
-    { x: 18, y: 0 },
-    { x: 22, y: 0 },
-    { x: 26, y: 0 },
-  ];
-  extra.forEach((kind, i) => addTestBuilding(match, 0, kind, sites[i]!));
-  advanceTick(match);
-  return match;
-}
-
-interface Given {
-  readonly tick: number;
-  readonly command: Command;
-}
-
-/**
- * Plays Player 0 as the Opponent for `ticks`, or until `done`, and returns every Command it gave.
- * `before` is called with each Command just before it is issued, so a test can stage what it meets.
- */
-function play(
-  match: Match,
-  opponent: Opponent,
-  ticks: number,
-  done?: (given: readonly Given[]) => boolean,
-  before?: (command: Command) => void,
-): Given[] {
-  const given: Given[] = [];
-  for (let t = 0; t < ticks && getMatchStatus(match).state === "running"; t++) {
-    if (t % THINK_EVERY_TICKS === 0) {
-      const view = getPlayerView(match, 0);
-      for (const command of opponent.think(view)) {
-        before?.(command);
-        expect(issueCommand(match, 0, command), JSON.stringify(command)).toEqual({ ok: true });
-        given.push({ tick: view.tick, command });
-      }
-      if (done?.(given)) break;
-    }
-    advanceTick(match);
-  }
-  return given;
-}
-
-/**
- * An Opponent for Player 0 whose first wave has set off, which is when it begins to spend on support.
- * It is shown one view in which the time for a first wave has come, six more Riflemen wait and the other
- * Player's HQ is known. The wave's Commands are not issued, so its Units stay where they are.
- */
-function opponentPastItsFirstWave(match: Match): Opponent {
-  for (let i = 0; i < 6; i++) addTestUnit(match, 0, "rifleman", { x: 30 + i, y: 4 });
-  const opponent = createOpponent(0, 1);
-  const view = getPlayerView(match, 0);
-  const othersHq = getPlayerView(match, 1).buildings.filter((b) => b.owner === 1 && b.kind === "hq");
-  const commands = opponent.think({ ...view, tick: OPPONENT.firstWaveTick, buildings: [...view.buildings, ...othersHq] });
-  expect(commands.some((c) => c.type === "attackMove")).toBe(true);
-  return opponent;
-}
+const base = (extra: readonly BuildingKind[], map?: MapDef): Match => stagedBase(extra, SITES, map);
 
 const ownUnits = (match: Match): UnitView[] => getPlayerView(match, 0).units.filter((u) => u.owner === 0);
 const unit = (match: Match, id: number): UnitView | undefined => ownUnits(match).find((u) => u.id === id);
@@ -120,7 +66,7 @@ describe("Computer Opponent counting its Passengers", () => {
   it("still counts a Mechanic inside its Troop Carrier as at work on the Building it was sent to", () => {
     const match = base([...BUILD_ORDER_DONE, "hospital"]);
     const first = addTestUnit(match, 0, "mechanic", RALLY);
-    const carrier = addTestUnit(match, 0, "troopCarrier", { x: 20, y: 20 });
+    const carrier = addTestUnit(match, 0, "troopCarrier", { x: RALLY.x + 1, y: RALLY.y + 1 });
     const damaged = (kind: BuildingKind, by: number): number => {
       const building = getPlayerView(match, 0).buildings.find((b) => b.owner === 0 && b.kind === kind)!;
       setTestBuildingHp(match, building.id, building.maxHp - by);
@@ -131,16 +77,14 @@ describe("Computer Opponent counting its Passengers", () => {
     const opponent = createOpponent(0, 1);
     expect(opponent.think(getPlayerView(match, 0))).toContainEqual({ type: "tend", unitIds: [first], targetId: factory });
 
-    const second = addTestUnit(match, 0, "mechanic", { x: RALLY.x + 1, y: RALLY.y });
-    const view = getPlayerView(match, 0);
-    const riding = {
-      ...view,
-      units: view.units
-        .filter((u) => u.id !== first)
-        .map((u) => (u.id === carrier ? { ...u, passengers: [{ id: first, kind: "mechanic" as const }] } : u)),
-    };
+    // It Boards the Troop Carrier beside it before it has taken a step.
+    expect(issueCommand(match, 0, { type: "board", unitIds: [first], targetId: carrier })).toEqual({ ok: true });
+    for (let t = 0; t < 5 * SECONDS && unit(match, carrier)!.passengers!.length === 0; t++) advanceTick(match);
+    expect(unit(match, carrier)!.passengers).toEqual([{ id: first, kind: "mechanic" }]);
+    const second = addTestUnit(match, 0, "mechanic", { x: RALLY.x - 1, y: RALLY.y });
     // The worse-off Vehicle Factory already has its Mechanic, so the new one goes to the Hospital.
-    expect(opponent.think(riding).filter((c) => c.type === "tend")).toEqual([{ type: "tend", unitIds: [second], targetId: hospital }]);
+    const commands = opponent.think(getPlayerView(match, 0));
+    expect(commands.filter((c) => c.type === "tend")).toEqual([{ type: "tend", unitIds: [second], targetId: hospital }]);
   });
 });
 
@@ -151,7 +95,7 @@ const holdsSomeone = (match: Match): boolean => ofKind(match, "troopCarrier").so
 describe("Computer Opponent keeping its Troop Carrier clear of its Medics and Mechanics", () => {
   const SUPPORTED: readonly BuildingKind[] = [...BUILD_ORDER_DONE, "hospital"];
 
-  it("parks a new Troop Carrier away from the rally point, so it never takes in the Medics and Mechanics waiting there", () => {
+  it("parks a new Troop Carrier away from the rally point, so it never Collects the Medics and Mechanics waiting there", () => {
     const match = base(SUPPORTED);
     const waiting = (["medic", "medic", "mechanic", "mechanic"] as const).map((kind, i) =>
       addTestUnit(match, 0, kind, { x: RALLY.x - 1 + i, y: RALLY.y }),
@@ -166,11 +110,11 @@ describe("Computer Opponent keeping its Troop Carrier clear of its Medics and Me
     const [carrier] = ofKind(match, "troopCarrier");
     expect(carrier).toBeDefined();
     expect(tookSomeone).toBe(false);
-    // Out of its reach for collecting, which is two Cells.
+    // Out of its reach for Collecting, which is two Cells.
     for (const id of waiting) expect(apart(unit(match, id)!, carrier!)).toBeGreaterThan(4);
   });
 
-  it("has a Troop Carrier that took in a Medic and a Mechanic Unload, and sends them back to the rally point", () => {
+  it("has a Troop Carrier that holds a Medic and a Mechanic Unload, and sends them back to the rally point", () => {
     const match = base(SUPPORTED);
     const { carrier, inside } = carrying(match, { x: 20, y: 20 }, ["medic", "mechanic"]);
     const opponent = createOpponent(0, 1);
@@ -182,13 +126,12 @@ describe("Computer Opponent keeping its Troop Carrier clear of its Medics and Me
 });
 
 describe("Computer Opponent training a Troop Carrier", () => {
-  it("trains one Troop Carrier once its build order stands and its first wave has set off, and then no more", () => {
+  it("trains its Troop Carrier once its build order stands and its first wave has set off, and then no more", () => {
     const match = base(BUILD_ORDER_DONE);
     setTestCredits(match, 0, PLENTY);
     const given = play(match, opponentPastItsFirstWave(match), 90 * SECONDS);
-    expect(trains(given, "troopCarrier")).toHaveLength(1);
-    expect(ofKind(match, "troopCarrier")).toHaveLength(1);
-    expect(OPPONENT.mostTroopCarriers).toBe(1);
+    expect(trains(given, "troopCarrier")).toHaveLength(OPPONENT.mostTroopCarriers);
+    expect(ofKind(match, "troopCarrier")).toHaveLength(OPPONENT.mostTroopCarriers);
   });
 
   it("trains none while its build order still lacks a Building", () => {
@@ -214,8 +157,8 @@ describe("Computer Opponent's wave with a Troop Carrier", () => {
    * starting Riflemen and four more make the wave, two Riflemen and two Raiders
    * (one of them the scout) stay.
    */
-  function staged(): Staged {
-    const match = base(BUILD_ORDER_DONE);
+  function staged(map?: MapDef): Staged {
+    const match = base(BUILD_ORDER_DONE, map);
     const starting = ofKind(match, "rifleman").map((u) => u.id);
     const added = Array.from({ length: 6 }, (_, i) => addTestUnit(match, 0, "rifleman", { x: RALLY.x - 2 + i, y: RALLY.y + 1 }));
     const carrier = addTestUnit(match, 0, "troopCarrier", { x: 12, y: 12 });
@@ -234,10 +177,12 @@ describe("Computer Opponent's wave with a Troop Carrier", () => {
   it("has five of the wave's Riflemen Board it at home, and sets off with them aboard", () => {
     const { match, carrier, wave } = staged();
     let aboardAtSetOff: number[] | null = null;
-    const given = play(match, createOpponent(0, 1), WAVE_SETS_OFF, (soFar) => {
-      if (waveMoves(soFar).length === 0) return false;
-      aboardAtSetOff = inside(match, carrier);
-      return true;
+    const given = play(match, createOpponent(0, 1), WAVE_SETS_OFF, {
+      done: (soFar) => {
+        if (waveMoves(soFar).length === 0) return false;
+        aboardAtSetOff = inside(match, carrier);
+        return true;
+      },
     });
     expect(boards(given).map((g) => g.command)).toEqual([{ type: "board", unitIds: wave.slice(0, 5), targetId: carrier }]);
     const setOff = waveMoves(given)[0]!;
@@ -256,23 +201,24 @@ describe("Computer Opponent's wave with a Troop Carrier", () => {
     const carrier = addTestUnit(match, 0, "troopCarrier", { x: 12, y: 12 });
     for (let i = 0; i < 2; i++) addTestUnit(match, 0, "raider", { x: RALLY.x + i, y: RALLY.y + 3 });
     let aboardAtSetOff: number[] | null = null;
-    const given = play(match, createOpponent(0, 1), WAVE_SETS_OFF, (soFar) => {
-      if (waveMoves(soFar).length === 0) return false;
-      aboardAtSetOff = inside(match, carrier);
-      return true;
+    const given = play(match, createOpponent(0, 1), WAVE_SETS_OFF, {
+      done: (soFar) => {
+        if (waveMoves(soFar).length === 0) return false;
+        aboardAtSetOff = inside(match, carrier);
+        return true;
+      },
     });
     expect(boards(given).map((g) => g.command)).toEqual([{ type: "board", unitIds: [...near, ...far.slice(0, 3)], targetId: carrier }]);
     const setOff = waveMoves(given)[0]!;
     expect(aboardAtSetOff).toEqual(near);
     expect(setOff.tick - boards(given)[0]!.tick).toBe(OPPONENT.boardTicks);
-    expect(OPPONENT.boardTicks).toBe(12 * SECONDS);
     expect(sorted(setOff.unitIds)).toEqual(sorted(far));
   });
 
   it("Unloads at the gathering point, where its Riflemen join the wave's attack, and drives home empty", () => {
     const { match, carrier, wave } = staged();
     const opponent = createOpponent(0, 1);
-    const given = play(match, opponent, WAVE_SETS_OFF, (soFar) => soFar.some((g) => g.command.type === "unload"));
+    const given = play(match, opponent, WAVE_SETS_OFF, { done: (soFar) => soFar.some((g) => g.command.type === "unload") });
     const gatherAt = waveMoves(given)[0]!.target;
     expect(given.at(-1)!.command).toEqual({ type: "unload", unitIds: [carrier] });
     expect(apart(unit(match, carrier)!, gatherAt)).toBeLessThanOrEqual(6);
@@ -292,10 +238,25 @@ describe("Computer Opponent's wave with a Troop Carrier", () => {
     expect(apart(parked, { x: 1, y: 1 })).toBeLessThan(12);
   });
 
+  it("has a wave Board a Troop Carrier that could not get to its parking Cell, where it stopped after a second try", () => {
+    // Rock for five Cells every way from the parking Cell at (1, 9), which itself is open ground.
+    const rows = Array.from({ length: 40 }, (_, y) =>
+      Array.from({ length: 40 }, (_, x) => (x <= 5 && y >= 5 && y <= 13 && !(x === 1 && y === 9) ? "#" : ".")).join(""),
+    );
+    const { match, carrier, wave } = staged(testMap(rows));
+    const given = play(match, createOpponent(0, 1), WAVE_SETS_OFF, { done: (soFar) => waveMoves(soFar).length > 0 });
+    const drives = given.filter((g) => g.command.type === "move" && g.command.unitIds.includes(carrier));
+    expect(drives.map((g) => g.command)).toEqual([
+      { type: "move", unitIds: [carrier], target: { x: 1, y: 9 } },
+      { type: "move", unitIds: [carrier], target: { x: 1, y: 9 } },
+    ]);
+    expect(boards(given).map((g) => g.command)).toEqual([{ type: "board", unitIds: wave.slice(0, 5), targetId: carrier }]);
+  });
+
   it("takes one Troop Carrier with a wave when two are parked", () => {
     const { match, carrier } = staged();
     const second = addTestUnit(match, 0, "troopCarrier", { x: 14, y: 12 });
-    const given = play(match, createOpponent(0, 1), WAVE_SETS_OFF, (soFar) => soFar.some((g) => g.command.type === "unload"));
+    const given = play(match, createOpponent(0, 1), WAVE_SETS_OFF, { done: (soFar) => soFar.some((g) => g.command.type === "unload") });
     expect(boards(given)).toHaveLength(1);
     const went = new Set(waveMoves(given).flatMap((c) => c.unitIds.filter((id) => id === carrier || id === second)));
     expect(went.size).toBe(1);
@@ -304,10 +265,12 @@ describe("Computer Opponent's wave with a Troop Carrier", () => {
   it("sets off at once when its Troop Carrier is gone before the Riflemen are aboard", () => {
     const { match, carrier, wave } = staged();
     const opponent = createOpponent(0, 1);
-    play(match, opponent, WAVE_SETS_OFF, (soFar) => boards(soFar).length > 0);
-    const view = getPlayerView(match, 0);
-    const without = { ...view, units: view.units.filter((u) => u.id !== carrier) };
-    const commands = opponent.think(without);
+    play(match, opponent, WAVE_SETS_OFF, { done: (soFar) => boards(soFar).length > 0 });
+    // Destroyed before anyone has reached it: the next Tick takes it off the Map.
+    setTestUnitHp(match, carrier, 0);
+    advanceTick(match);
+    expect(unit(match, carrier)).toBeUndefined();
+    const commands = play(match, opponent, 1).map((g) => g.command);
     expect(commands.filter((c) => c.type === "board")).toEqual([]);
     expect(commands).toContainEqual({ type: "attackMove", unitIds: wave, target: expect.anything() });
   });
@@ -318,7 +281,7 @@ describe("Computer Opponent's wave with a Troop Carrier", () => {
     // the Troop Carrier, faster than anyone on foot, meets them first. Raiders reach as far as its own gun.
     for (let i = 0; i < 2; i++) addTestUnit(match, 1, "raider", { x: 12 + i, y: 19 });
     const opponent = createOpponent(0, 1);
-    const before = play(match, opponent, WAVE_SETS_OFF, (soFar) => waveMoves(soFar).length > 0);
+    const before = play(match, opponent, WAVE_SETS_OFF, { done: (soFar) => waveMoves(soFar).length > 0 });
     const gatherAt = waveMoves(before)[0]!.target;
     const after = play(match, opponent, 60 * SECONDS);
     expect(boards(after)).toEqual([]);
@@ -334,7 +297,7 @@ describe("Computer Opponent's wave with a Troop Carrier", () => {
   it("keeps its Troop Carrier no farther on than the wave's foremost Unit, and Unloads at the gathering point", () => {
     const { match, carrier, wave } = staged();
     const opponent = createOpponent(0, 1);
-    const before = play(match, opponent, WAVE_SETS_OFF, (soFar) => waveMoves(soFar).length > 0);
+    const before = play(match, opponent, WAVE_SETS_OFF, { done: (soFar) => waveMoves(soFar).length > 0 });
     const gatherAt = waveMoves(before)[0]!.target;
     const onFoot = wave[5]!;
     let farthestAhead = -Infinity;
@@ -372,18 +335,23 @@ describe("Computer Opponent's wave with a Troop Carrier", () => {
         .filter((c) => !taken.has(`${c.x},${c.y}`));
       for (const cell of beside.slice(1)) addTestUnit(match, 0, "harvester", cell);
     };
-    const upTo = play(match, opponent, WAVE_SETS_OFF, (soFar) => soFar.some((g) => g.command.type === "unload"), ring);
+    const upTo = play(match, opponent, WAVE_SETS_OFF, {
+      done: (soFar) => soFar.some((g) => g.command.type === "unload"),
+      before: ring,
+    });
     const gatherAt = waveMoves(upTo)[0]!.target;
     expect(inside(match, carrier)).toHaveLength(4);
 
     let homeWithSomeoneInside = false;
-    const after = play(match, opponent, 60 * SECONDS, undefined, (command) => {
-      if (command.type === "move" && command.unitIds.includes(carrier)) homeWithSomeoneInside ||= inside(match, carrier).length > 0;
+    const after = play(match, opponent, 60 * SECONDS, {
+      before: (command) => {
+        if (command.type === "move" && command.unitIds.includes(carrier)) homeWithSomeoneInside ||= inside(match, carrier).length > 0;
+      },
     });
     expect(homeWithSomeoneInside).toBe(false);
     expect(inside(match, carrier)).toEqual([]);
     expect(after.filter((g) => g.command.type === "unload").length).toBeGreaterThan(0);
-    // Nobody rode off: none of the wave was sent anywhere by a plain move, and all of it was led on to the attack.
+    // Nobody was driven off: none of the wave was sent anywhere by a plain move, and all of it was led on to the attack.
     const moved = after.flatMap((g) => (g.command.type === "move" ? g.command.unitIds : []));
     expect(wave.filter((id) => moved.includes(id))).toEqual([]);
     const led = new Set(after.flatMap((g) => (g.command.type === "attackMove" || g.command.type === "attack" ? g.command.unitIds : [])));
@@ -394,10 +362,10 @@ describe("Computer Opponent's wave with a Troop Carrier", () => {
   it("sets off before the time allowed is up once nobody is still on the way to Board", () => {
     const { match, carrier, wave } = staged();
     const opponent = createOpponent(0, 1);
-    const before = play(match, opponent, WAVE_SETS_OFF, (soFar) => boards(soFar).length > 0);
+    const before = play(match, opponent, WAVE_SETS_OFF, { done: (soFar) => boards(soFar).length > 0 });
     // A Board that ended without the Unit getting in: from the view, a Unit that stands on the Map.
     expect(issueCommand(match, 0, { type: "stop", unitIds: [wave[4]!] })).toEqual({ ok: true });
-    const after = play(match, opponent, OPPONENT.boardTicks + SECONDS, (soFar) => waveMoves(soFar).length > 0);
+    const after = play(match, opponent, OPPONENT.boardTicks + SECONDS, { done: (soFar) => waveMoves(soFar).length > 0 });
     const setOff = waveMoves(after)[0]!;
     expect(setOff.tick - boards(before)[0]!.tick).toBeLessThan(OPPONENT.boardTicks);
     expect(inside(match, carrier)).toEqual(wave.slice(0, 4));
@@ -407,7 +375,7 @@ describe("Computer Opponent's wave with a Troop Carrier", () => {
   it("sets off at once when its Troop Carrier puts Units out while the wave is boarding", () => {
     const { match, carrier, wave } = staged();
     const opponent = createOpponent(0, 1);
-    play(match, opponent, WAVE_SETS_OFF, (soFar) => boards(soFar).length > 0);
+    play(match, opponent, WAVE_SETS_OFF, { done: (soFar) => boards(soFar).length > 0 });
     for (let t = 0; t < OPPONENT.boardTicks && inside(match, carrier).length < 2; t += THINK_EVERY_TICKS) {
       play(match, opponent, THINK_EVERY_TICKS);
     }
@@ -422,23 +390,39 @@ describe("Computer Opponent's wave with a Troop Carrier", () => {
     expect(waveMoves(given).map((c) => sorted(c.unitIds))).toEqual([wave]);
   });
 
+  it("sends a first wave again, without waiting, when every Unit of the first is lost while it Boards", () => {
+    const { match, carrier, wave } = staged();
+    const opponent = createOpponent(0, 1);
+    play(match, opponent, WAVE_SETS_OFF, { done: (soFar) => boards(soFar).length > 0 });
+    for (const id of wave) setTestUnitHp(match, id, 0);
+    // With those that stayed, more than enough at home for a second wave, which is larger than a first.
+    for (let i = 0; i < 6; i++) addTestUnit(match, 0, "rifleman", { x: RALLY.x - 2 + i, y: RALLY.y + 2 });
+    // Far sooner than the least time from one wave to the next.
+    const given = play(match, opponent, OPPONENT.boardTicks + 10 * SECONDS, { done: (soFar) => waveMoves(soFar).length > 0 });
+    expect(boards(given)).toHaveLength(1);
+    const boarding = boards(given)[0]!.command;
+    expect(boarding).toMatchObject({ type: "board", targetId: carrier });
+    const onFoot = waveMoves(given)[0]!.unitIds;
+    expect((boarding.type === "board" ? boarding.unitIds.length : 0) + onFoot.length).toBe(OPPONENT.firstWave);
+  });
+
   it("turns the Units waiting to Board on a Unit that comes at its base, and has the wave Board again afterwards", () => {
     const { match, wave } = staged();
     const opponent = createOpponent(0, 1);
-    play(match, opponent, WAVE_SETS_OFF, (soFar) => boards(soFar).length > 0);
+    play(match, opponent, WAVE_SETS_OFF, { done: (soFar) => boards(soFar).length > 0 });
     // In sight of the Riflemen at the rally point, and within the ten Cells of a Building that the Opponent defends.
     const raider = addTestUnit(match, 1, "raider", { x: 10, y: 9 });
     const given = play(match, opponent, THINK_EVERY_TICKS);
     const defending = given.flatMap((g) => (g.command.type === "attack" && g.command.targetId === raider ? g.command.unitIds : []));
     expect(wave.filter((id) => !defending.includes(id))).toEqual([]);
-    const later = play(match, opponent, 60 * SECONDS, (soFar) => boards(soFar).length > 0);
+    const later = play(match, opponent, 60 * SECONDS, { done: (soFar) => boards(soFar).length > 0 });
     expect(getPlayerView(match, 1).units.some((u) => u.id === raider)).toBe(false);
     expect(boards(later)).toHaveLength(1);
   });
 });
 
-describe("Computer Opponent's loaded waves on Riverford when nothing meets them on the way", () => {
-  interface Loaded {
+describe("Computer Opponent's waves with a Troop Carrier on Riverford when nothing meets them on the way", () => {
+  interface CarrierWave {
     readonly carrier: number;
     gatherAt: { x: number; y: number } | null;
     onFoot: number[];
@@ -454,7 +438,7 @@ describe("Computer Opponent's loaded waves on Riverford when nothing meets them 
     // and they reach no farther than the gathering points, fourteen Cells short.
     for (const at of [{ x: 9, y: 9 }, { x: 12, y: 6 }, { x: 6, y: 12 }, { x: 12, y: 11 }]) addTestBuilding(match, 0, "turret", at);
     const opponent = createOpponent(1, 7);
-    const waves: Loaded[] = [];
+    const waves: CarrierWave[] = [];
     for (let t = 0; t < 8 * 60 * SECONDS && getMatchStatus(match).state === "running"; t++) {
       if (t % THINK_EVERY_TICKS === 0) {
         const view = getPlayerView(match, 1);
@@ -485,7 +469,7 @@ describe("Computer Opponent's loaded waves on Riverford when nothing meets them 
       }
       advanceTick(match);
     }
-    // The first wave goes on foot: there is no Troop Carrier before it has set off. The next two are loaded.
+    // The first wave goes on foot: there is no Troop Carrier before it has set off. The next two each have five Riflemen Board the Troop Carrier.
     expect(waves.length).toBeGreaterThanOrEqual(2);
     for (const wave of waves) {
       expect(wave.unloaded?.inside).toBe(5);

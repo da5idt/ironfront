@@ -5,7 +5,7 @@ import { createPixelBuffer, type PixelBuffer } from "./pixelBuffer";
 import { type Brush, brushOn, type Legend } from "./spriteTemplate";
 import { ART_CELL_PX } from "./terrainArt";
 
-// The six Buildings, painted in code (ADR 0003). Every one is seen the same
+// The Buildings, painted in code (ADR 0003). Every one is seen the same
 // way: roof from above, front wall facing the viewer, light from the top
 // left. A Building fills its footprint at 12 art pixels per Cell. All frames
 // are painted once at startup by the sprite sheet; nothing here runs per frame.

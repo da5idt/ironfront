@@ -1,25 +1,30 @@
-import { type CellPos, type Command, type EntityId, isTroopCarrier, type PlayerView, type UnitView } from "../sim";
+import { type CellPos, type Command, type EntityId, isTroopCarrier, OPPONENT, type PlayerView, type UnitView } from "../sim";
 import { hqCentre, isOpenGround, type Standing } from "./base";
 import { rallyPoint } from "./economy";
-import { STUCK_THINKS } from "./tactics";
+import { distanceToCell, STUCK_THINKS } from "./tactics";
 
 // The Computer Opponent's Troop Carriers while they are at home. An empty one
-// takes in the idle Infantry within two Cells once, on the Tick it finishes a
-// move, and at the rally point those are the Medics and Mechanics, who must
-// stay. So a Troop Carrier at home never drives to the rally point: it waits
-// on a Cell of its own, and anyone it took in on arriving is put out again and
-// sent back. Once it stands it takes nobody, so it needs no more Commands.
+// that finishes a move Collects the idle Infantry within two Cells, and at the
+// rally point those are the Medics and Mechanics, who must stay. So a Troop
+// Carrier at home never drives to the rally point: it waits on a parking Cell
+// of its own, and anyone it Collected on arriving is put out again and sent
+// back. Once it stands it Collects nobody, so it needs no more Commands.
 
 /** The Opponent's notes on its Troop Carriers at home: a Player view does not say what a Unit is doing. */
 export interface CarrierMemory {
-  /** Whether each is still on its way to its parking Cell or has stopped there. */
-  readonly parking: Map<EntityId, "driving" | "parked">;
+  /**
+   * Whether each is on its way to its parking Cell, on its way there a second
+   * time after stopping short of it, parked, or stopped far from it.
+   */
+  readonly parking: Map<EntityId, "driving" | "drivingAgain" | "parked" | "farOff">;
+  /** For each stopped far from its parking Cell, the Tick from which it is sent there again. */
+  readonly sendAgainAt: Map<EntityId, number>;
   /** Units a Troop Carrier at home was told to put out, to send back once they are seen on the Map. */
   readonly putOut: Set<EntityId>;
 }
 
 export function createCarrierMemory(): CarrierMemory {
-  return { parking: new Map(), putOut: new Set() };
+  return { parking: new Map(), sendAgainAt: new Map(), putOut: new Set() };
 }
 
 /**
@@ -58,7 +63,7 @@ export function parkingCell(view: PlayerView): CellPos {
     };
     if (isOpenGround(view, cell)) return cell;
   }
-  // Nowhere to one side: the rally point, where whoever it takes in is put out again.
+  // Nowhere to one side: the rally point, where whoever it Collects is put out again.
   return rallyPoint(view);
 }
 
@@ -69,6 +74,16 @@ export function driveToParking(view: PlayerView, memory: CarrierMemory, standing
   return { type: "move", unitIds: [carrier.id], target: parkingCell(view) };
 }
 
+/**
+ * Brings home a Troop Carrier whose wave has ended while it was out with
+ * Passengers: it drives to its parking Cell, and everyone inside is noted to
+ * be sent back to the rally point once out, wherever that happens.
+ */
+export function recall(view: PlayerView, memory: CarrierMemory, standing: Standing, carrier: UnitView): Command {
+  for (const p of carrier.passengers ?? []) memory.putOut.add(p.id);
+  return driveToParking(view, memory, standing, carrier);
+}
+
 /** Whether the Troop Carrier waits at home, stopped and empty: ready for a wave's Riflemen to Board. */
 export function isParked(memory: CarrierMemory, carrier: UnitView): boolean {
   return memory.parking.get(carrier.id) === "parked" && carrier.passengers?.length === 0;
@@ -76,7 +91,12 @@ export function isParked(memory: CarrierMemory, carrier: UnitView): boolean {
 
 /**
  * Commands for the Troop Carriers at home, which is every own one not `away`
- * with a wave: drive to the parking Cell, and Unload anyone inside.
+ * with a wave: drive to the parking Cell, and Unload anyone inside. One that
+ * stops short of the parking Cell is sent once more. If it stops short again
+ * it counts as parked where it stands, but only near home: one far off, as a
+ * Troop Carrier recalled from the front can be, is never parked, or the next
+ * wave would be told to Board it out there. That one is sent again now and
+ * then, as its way home may open.
  */
 export function parkCommands(
   view: PlayerView,
@@ -85,7 +105,11 @@ export function parkCommands(
   away: EntityId | null,
 ): Command[] {
   const carriers = ownCarriers(view);
-  for (const id of memory.parking.keys()) if (!carriers.some((c) => c.id === id)) memory.parking.delete(id);
+  for (const id of memory.parking.keys()) {
+    if (carriers.some((c) => c.id === id)) continue;
+    memory.parking.delete(id);
+    memory.sendAgainAt.delete(id);
+  }
   const commands: Command[] = [];
 
   const outNow = view.units.filter((u) => memory.putOut.has(u.id)).map((u) => u.id);
@@ -102,12 +126,23 @@ export function parkCommands(
       for (const p of inside) memory.putOut.add(p.id);
     }
     const parking = memory.parking.get(carrier.id);
-    if (parking === "parked" || (parking === "driving" && standing.thinks(carrier.id) < STUCK_THINKS)) continue;
-    const at = parkingCell(view);
-    const arrived = Math.hypot(carrier.x - (at.x + 0.5), carrier.y - (at.y + 0.5)) <= PARKED_WITHIN;
-    // New, or stopped somewhere else on its way: it is sent (again).
-    if (parking === "driving" && arrived) memory.parking.set(carrier.id, "parked");
-    else commands.push(driveToParking(view, memory, standing, carrier));
+    if (parking === "parked" || (parking !== undefined && standing.thinks(carrier.id) < STUCK_THINKS)) continue;
+    if (parking === "farOff" && view.tick < memory.sendAgainAt.get(carrier.id)!) continue;
+    const short = distanceToCell(parkingCell(view), carrier);
+    // Stopped short twice, it has no way there. Sent a third time at once it would stop short again, think
+    // after think. Near home it waits where it is, where a wave can still Board it; far off it waits to be sent.
+    if ((parking === "driving" && short <= PARKED_WITHIN) || (parking === "drivingAgain" && short <= OPPONENT.parkedNearCells)) {
+      memory.parking.set(carrier.id, "parked");
+      continue;
+    }
+    if (parking === "drivingAgain") {
+      memory.parking.set(carrier.id, "farOff");
+      memory.sendAgainAt.set(carrier.id, view.tick + OPPONENT.parkAgainTicks);
+      continue;
+    }
+    // New, stopped somewhere else on its way, or far off and due again: it is sent, and once more if it stops short.
+    commands.push(driveToParking(view, memory, standing, carrier));
+    if (parking === "driving") memory.parking.set(carrier.id, "drivingAgain");
   }
   if (unloading.length > 0) commands.unshift({ type: "unload", unitIds: unloading });
   return commands;

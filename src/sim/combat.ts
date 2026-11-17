@@ -2,8 +2,7 @@ import type { CommandResult } from "./commands";
 import { OK, reject } from "./commands";
 import { type BuildingSighting, isFootprintVisible, isVisible } from "./fog";
 import type { CommandHandler } from "./handlers";
-import { moveBegins } from "./passengers";
-import { claimedCells, finishMove, freeCellNear, freeCellsNear, groupMoveGoals, orderMoveTo, planMove, stepAlong, unitCell, walkingTo } from "./movement";
+import { claimedCells, freeCellNear, freeCellsNear, groupMoveGoals, moveStart, orderMoveTo, planMove, stepAlong, unitCell, walkingTo } from "./movement";
 import type { BuildingState, MatchState, UnitState } from "./state";
 import { cellIndex, isUnit, ownUnits, removeBuilding } from "./state";
 import { BUILDING_STATS, isArmed, MOVEMENT, UNIT_STATS, type WeaponStats } from "./tuning";
@@ -123,7 +122,8 @@ function canFight(u: UnitState): boolean {
   return isArmed(UNIT_STATS[u.kind]);
 }
 
-function distanceTo(t: KnownTarget, from: Vec): number {
+/** How far the target is from `from`: to a Unit's position, or to the nearest point of a Building's footprint. Tending measures its seek radius the same way. */
+export function distanceTo(t: KnownTarget, from: Vec): number {
   const p = aimPoint(t, from);
   return Math.hypot(p.x - from.x, p.y - from.y);
 }
@@ -208,10 +208,8 @@ export const handleAttackMove: CommandHandler<"attackMove"> = (m, player, comman
   if (!(goals instanceof Map)) return goals;
   for (const [u, goal] of goals) {
     if (canFight(u)) {
-      u.order = { type: "attackMove", plan: planMove(m, u, goal), firing: false, spot: null, settled: false };
-      moveBegins(u);
-    }
-    else orderMoveTo(m, u, goal);
+      u.order = { type: "attackMove", plan: planMove(m, u, goal), start: moveStart(u), firing: false, spot: null, settled: false };
+    } else orderMoveTo(m, u, goal);
   }
   return OK;
 };
@@ -226,7 +224,7 @@ function advanceAttackMove(m: MatchState, u: UnitState, order: Extract<UnitState
     order.firing = false;
     order.spot = null;
     order.settled = false;
-    if (stepAlong(m, u, order.plan) === "arrived") finishMove(u);
+    if (stepAlong(m, u, order.plan) === "arrived") u.order = { type: "idle" };
     return;
   }
   fire(m, u, u, UNIT_STATS[u.kind], target);

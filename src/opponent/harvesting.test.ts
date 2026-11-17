@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { createMatch, getPlayerView, OPPONENT, type PlayerView } from "../sim";
 import { testMap } from "../sim/testing/maps";
 import { addTestBuilding, addTestUnit, setTestCredits } from "../sim/testing/setup";
-import { buildCommands, trainCommands } from "./economy";
+import { buildCommands, trainCommands, type WaveNeeds } from "./economy";
 import { chooseOre, type DangerMemory, rememberDanger } from "./harvesting";
 
 // 40x40: Player 0's Refinery covers (4..6, 0..1). A near Ore Field at (8..9, 8)
@@ -13,6 +13,8 @@ const rows = Array.from({ length: 40 }, (_, y) =>
   ).join(""),
 );
 const refinery = { x: 5.5, y: 1 };
+/** What the Opponent tells its economy until its first wave has set off. */
+const BEFORE_FIRST_WAVE: WaveNeeds = { firstWaveSent: false, nextWaveCovered: false };
 
 function scene(withEnemyAtNearField: boolean): PlayerView {
   const match = createMatch(testMap(rows), 1);
@@ -66,12 +68,12 @@ describe("the Opponent short of Harvesters", () => {
 
   it("keeps a Harvester's worth back from army and Turrets", () => {
     const view = shortOfHarvesters(1000);
-    expect(buildCommands(view, { count: 0 })).toEqual([]);
-    expect(trainCommands(view).map((c) => c.type === "train" && c.kind)).toEqual(["harvester"]);
+    expect(buildCommands(view, { count: 0 }, BEFORE_FIRST_WAVE)).toEqual([]);
+    expect(trainCommands(view, BEFORE_FIRST_WAVE).map((c) => c.type === "train" && c.kind)).toEqual(["harvester"]);
   });
 
   it("trains no army while it can't yet afford the Harvester", () => {
-    expect(trainCommands(shortOfHarvesters(600))).toEqual([]);
+    expect(trainCommands(shortOfHarvesters(600), BEFORE_FIRST_WAVE)).toEqual([]);
   });
 });
 
@@ -89,7 +91,7 @@ describe("the Opponent's HQ with nowhere to place a finished Building", () => {
   /** Thinks until the HQ cancels, returning how many it took. */
   const thinksUntilCancel = (view: PlayerView, failures: { count: number }): number => {
     for (let n = 1; n <= 100; n++) {
-      if (buildCommands(view, failures).some((c) => c.type === "cancelBuilding")) return n;
+      if (buildCommands(view, failures, BEFORE_FIRST_WAVE).some((c) => c.type === "cancelBuilding")) return n;
     }
     return Infinity;
   };

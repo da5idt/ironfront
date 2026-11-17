@@ -7,6 +7,7 @@ import {
   type PlayerView,
   type ShotView,
   TICKS_PER_SECOND,
+  isInfantry,
   UNIT_STATS,
   type UnitKind,
   type UnitView,
@@ -363,7 +364,7 @@ export function present(prev: Presentation | null, view: PlayerView): Presented 
     const unit = view.units.find((u) => u.id === t.targetId);
     const building = unit ? undefined : view.buildings.find((b) => b.id === t.targetId);
     if (!unit && !building) continue;
-    const work = unit && UNIT_STATS[unit.kind].class === "infantry" ? "heal" : "repair";
+    const work = unit && isInfantry(unit.kind) ? "heal" : "repair";
     const at = { x: t.x, y: t.y };
     // Sparks fly from a new spot each round: anywhere on a Building's footprint short of its edge, or about a Vehicle's hull.
     const reachX = building ? building.width / 2 - SPARK_EDGE_CELLS : SPARK_HULL_CELLS;

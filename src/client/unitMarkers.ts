@@ -37,16 +37,16 @@ const UNIT_HEALTH_BAR = { width: ART_CELL_PX, height: HEALTH_BAR_PX } as const;
 export const GROUP_DIGIT_DOTS = { width: 3, height: 5 } as const;
 /**
  * The least height of a Control Group number's digit on the screen. Under
- * this the five rows of dots run together: at the widest zoom an art pixel is
- * one screen pixel, and a digit five of them tall could not be told apart.
+ * this the rows of dots run together: at the widest zoom an art pixel is one
+ * screen pixel, and a digit with one to the dot could not be told apart.
  */
 export const MIN_GROUP_DIGIT_SCREEN_PX = 10;
 
 /**
  * The least size of a Passenger mark, and of the gap to the next, on the
  * screen. Under this the row cannot be counted at a glance: at the widest zoom
- * a mark two art pixels square with one between is a dotted line. They grow
- * taller before wider, as five must fit over one Unit.
+ * marks at their art size run into a dotted line. They grow taller before
+ * wider, as a mark for every place in a Troop Carrier must fit over one Unit.
  */
 export const MIN_PASSENGER_MARK_SCREEN_PX = { width: 2, height: 4, gap: 2 } as const;
 /** A Passenger mark and its gap in art pixels wherever the least screen size asks for no more. */

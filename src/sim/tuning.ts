@@ -111,8 +111,7 @@ export const UNIT_STATS: Readonly<Record<UnitKind, UnitStats>> = {
     trainTicks: 10 * TICKS_PER_SECOND,
     maxHp: 220,
     speed: 3.5,
-    // A light gun: the Raider's reach and reload at half its damage, enough to
-    // answer Infantry but no match for a Raider.
+    // A light gun: it is there to answer Infantry, and is no match for a Raider.
     damage: 5,
     range: 4,
     reloadTicks: 12,
@@ -214,21 +213,35 @@ export function tendRate(kind: UnitKind, target: TendTargetClass): number {
 }
 
 export const TEND = {
-  /** How far an idle support Unit looks for something of its own Player's to help. */
+  /** The seek radius: how far an idle support Unit looks for something of its own Player's to help. */
   seekRadius: 6,
-  /** How far a target may move from the line between where it and the Unit were when the Tend began before the Unit gives up on it. */
+  /** The leash: how far a target may move from the line between where it and the Unit were when the Tend began before the Unit gives up on it. */
   leash: 8,
   /** How often an idle support Unit looks: slow enough to be cheap, quick enough to feel willing. */
   seekTicks: Math.ceil(TICKS_PER_SECOND / 2),
-  /** How long an idle support Unit leaves alone a target it found no way to, before it looks at it again. */
-  retryTicks: 5 * TICKS_PER_SECOND,
+  /** The Tend back-off: how long an idle support Unit leaves alone a target it found no way to, before it looks at it again. */
+  backOffTicks: 5 * TICKS_PER_SECOND,
+  /**
+   * Most Cells beside a target a Unit plans a route to before it settles for
+   * getting as near as it can. Every Cell round a 3 by 3 Building, the largest
+   * there is, so a target with one Cell beside it that can be walked to is
+   * reached. Each try that fails costs a search of the ground the Unit can
+   * walk, which is why there is a limit at all.
+   */
+  standTries: 16,
 } as const;
 
 export const TROOP_CARRIER = {
   /** Most Passengers a Troop Carrier holds. */
   capacity: 5,
-  /** How far, in Cells, a Troop Carrier reaches for idle Infantry of its own Player when it collects. */
-  pickupRadius: 2,
+  /** How far, in Cells, a Troop Carrier reaches for idle Infantry of its own Player when it is Collecting. */
+  collectRadius: 2,
+  /**
+   * Most steps on foot, Cell to Cell, between a Unit it takes when Collecting and a Cell touching its own.
+   * On open ground a Unit within the radius is one step away at most. Three lets it round the corner of a wall or a
+   * Building that stands between them, and is too few to get round a river or a long wall.
+   */
+  collectWalk: 3,
 } as const;
 
 /**
@@ -242,6 +255,11 @@ export function passengerRoom(kind: UnitKind): number {
 /** True for a Unit kind that carries Passengers. */
 export function isTroopCarrier(kind: UnitKind): boolean {
   return passengerRoom(kind) > 0;
+}
+
+/** True for a Unit kind of the Infantry class. */
+export function isInfantry(kind: UnitKind): boolean {
+  return UNIT_STATS[kind].class === "infantry";
 }
 
 export const PLACEMENT = {
@@ -290,8 +308,9 @@ export const OPPONENT = {
   mostHarvesters: 5,
   /** Army size (Riflemen and Raiders) the Opponent stops training at. */
   mostArmy: 40,
-  /** Medics kept at the rally point and Mechanics kept for the base; a loss is trained again. */
+  /** Medics kept at the rally point; a loss is trained again. */
   mostMedics: 2,
+  /** Mechanics kept for the base; a loss is trained again. */
   mostMechanics: 2,
   /** Troop Carriers kept for the attack waves: one, as a wave takes one at most. */
   mostTroopCarriers: 1,
@@ -305,6 +324,15 @@ export const OPPONENT = {
   dangerTicks: 60 * TICKS_PER_SECOND,
   /** Once the enemy base is found, the scout explores everything this many Cells from the HQ, looking for Ore. */
   homeExploreRadius: 28,
+  /** The Opponent's own Tend back-off: how long it gives a Mechanic that found no way to a damaged Building no Tend Command onto it. */
+  tendBackOffTicks: 60 * TICKS_PER_SECOND,
+  /**
+   * How near its Parking Cell, in Cells, a Troop Carrier that found no way onto it still counts as parked where it
+   * stopped: about as far as the rally point is, so the Riflemen who Board it have a short walk and it is still at home.
+   */
+  parkedNearCells: 8,
+  /** How long a Troop Carrier that stopped farther from its Parking Cell than that waits before it is sent there again. */
+  parkAgainTicks: 30 * TICKS_PER_SECOND,
 } as const;
 
 export const TRAINING = {

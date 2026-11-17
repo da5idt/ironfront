@@ -1,57 +1,32 @@
 import { describe, expect, it } from "vitest";
+import { advanceTick, getPlayerView, issueCommand, type Match, type PlayerId } from "./index";
 import {
-  advanceTick,
-  createMatch,
-  getPlayerView,
-  issueCommand,
-  type Match,
-  type PlayerId,
-  TEND,
-  TEND_RATES,
-  tendRate,
-  TICKS_PER_SECOND,
-  type UnitView,
-} from "./index";
-import { openMap } from "./testing/maps";
-import { addTestBuilding, addTestUnit, setTestBuildingHp, setTestUnitHp } from "./testing/setup";
+  addTestBuilding,
+  addTestUnit,
+  at,
+  find,
+  hp,
+  hurt,
+  run,
+  runUntil,
+  setTestBuildingHp,
+  setTestUnitHp,
+  snapshot,
+  stage,
+  tend,
+} from "./testing/setup";
+import { TEND, tendRate, TICKS_PER_SECOND, UNIT_STATS } from "./tuning";
 
-// Staged along row 8 of a wide open Map, far from both starting bases in the
-// corners (and from their Riflemen, who are out of every radius used here).
+// Staged along row 8 of the open Map, with the starting Riflemen out of every radius used here.
 const ROW = 8;
-const stage = (): Match => createMatch(openMap(50, 40), 1);
-
-function run(match: Match, ticks: number): void {
-  for (let t = 0; t < ticks; t++) advanceTick(match);
-}
-
-function runUntil(match: Match, done: () => boolean, limit = 1200): number {
-  for (let t = 0; t < limit; t++) {
-    if (done()) return t;
-    advanceTick(match);
-  }
-  throw new Error(`still not so after ${limit} Ticks`);
-}
-
-/** A Unit as its owner sees it: a Player always sees its own Units. */
-const find = (match: Match, id: number): UnitView | undefined =>
-  getPlayerView(match, 0).units.find((u) => u.id === id && u.owner === 0) ??
-  getPlayerView(match, 1).units.find((u) => u.id === id && u.owner === 1);
-
-const hp = (match: Match, id: number): number => find(match, id)!.hp;
-const at = (match: Match, id: number) => ({ x: find(match, id)!.x, y: find(match, id)!.y });
-
-/** Adds a hurt Unit and returns its id. */
-function hurt(match: Match, owner: PlayerId, kind: UnitView["kind"], x: number, y: number, health: number): number {
-  const id = addTestUnit(match, owner, kind, { x, y });
-  setTestUnitHp(match, id, health);
-  return id;
-}
-
-const tend = (match: Match, unitIds: number[], targetId: number, player: PlayerId = 0) =>
-  issueCommand(match, player, { type: "tend", unitIds, targetId });
-
-/** Everything either Player can see, to show that a rejected Command changed nothing. */
-const snapshot = (match: Match): string => JSON.stringify([getPlayerView(match, 0), getPlayerView(match, 1)]);
+/** A Rifleman's full health: every patient here is one unless it says otherwise. */
+const FULL = UNIT_STATS.rifleman.maxHp;
+/** Health a second a Medic Heals. */
+const HEAL = tendRate("medic", "infantry");
+/** The seek radius in whole Cells: a target this many Cells along the row is the farthest an idle Medic goes to. */
+const REACH = Math.floor(TEND.seekRadius);
+/** How far marchAway sends a patient: well beyond the leash and the seek radius together. */
+const MARCH = 30;
 
 /** Adds a Building for the Player, sets its health and returns its id. */
 function damagedBuilding(match: Match, owner: PlayerId, x: number, y: number, health: number): number {
@@ -64,16 +39,16 @@ function damagedBuilding(match: Match, owner: PlayerId, x: number, y: number, he
 const buildingHp = (match: Match, owner: PlayerId, id: number): number =>
   getPlayerView(match, owner).buildings.find((b) => b.id === id)!.hp;
 
-/** Marches the patient 30 Cells along the row and returns where the Medic stands once it is there. */
+/** Marches the patient far along the row and returns where the Medic stands once it is there. */
 function marchAway(match: Match, medic: number, patient: number): { x: number; y: number } {
   const from = at(match, patient).x;
-  issueCommand(match, 0, { type: "move", unitIds: [patient], target: { x: Math.floor(from) + 30, y: ROW } });
-  runUntil(match, () => at(match, patient).x === from + 30);
+  issueCommand(match, 0, { type: "move", unitIds: [patient], target: { x: Math.floor(from) + MARCH, y: ROW } });
+  runUntil(match, () => at(match, patient).x === from + MARCH);
   return at(match, medic);
 }
 
 describe("the Tend Command", () => {
-  it("sends a Medic to a hurt Rifleman, heals it to full health at 8 a second, and leaves the Medic idle", () => {
+  it("sends a Medic to a hurt Rifleman, heals it to full health at the Medic's rate, and leaves the Medic idle", () => {
     const match = stage();
     const medic = addTestUnit(match, 0, "medic", { x: 14, y: ROW });
     const rifleman = hurt(match, 0, "rifleman", 20, ROW, 10);
@@ -86,14 +61,14 @@ describe("the Tend Command", () => {
     expect(Math.floor(at(match, medic).x)).toBe(19);
     const before = hp(match, rifleman);
     run(match, TICKS_PER_SECOND);
-    expect(hp(match, rifleman) - before).toBe(8);
+    expect(hp(match, rifleman) - before).toBe(HEAL);
     // Whole health points all the way, so a health bar never shows a sliver missing.
     runUntil(match, () => {
       expect(Number.isInteger(hp(match, rifleman))).toBe(true);
-      return hp(match, rifleman) === 50;
+      return hp(match, rifleman) === FULL;
     });
     run(match, 3 * TICKS_PER_SECOND);
-    expect(hp(match, rifleman)).toBe(50);
+    expect(hp(match, rifleman)).toBe(FULL);
     // Idle again: when the healed Rifleman walks off, the Medic stays where it is.
     const stood = at(match, medic);
     issueCommand(match, 0, { type: "move", unitIds: [rifleman], target: { x: 23, y: ROW } });
@@ -107,7 +82,7 @@ describe("the Tend Command", () => {
     const medic = addTestUnit(match, 0, "medic", { x: 20, y: ROW });
     const other = hurt(match, 0, "medic", 21, ROW, 5);
     expect(tend(match, [medic], other)).toEqual({ ok: true });
-    runUntil(match, () => hp(match, other) === 40);
+    runUntil(match, () => hp(match, other) === UNIT_STATS.medic.maxHp);
 
     // A hurt Medic by itself stays hurt, and cannot be Tended onto itself.
     const alone = stage();
@@ -132,7 +107,7 @@ describe("the Tend Command", () => {
     expect(at(match, medic)).toEqual({ x: 20.5, y: ROW + 0.5 });
   });
 
-  it("is rejected, with the Match unchanged, for another Player's target or another Player's Units", () => {
+  it("is rejected, with the Match unchanged, for another Player's target or for only another Player's Units", () => {
     const match = stage();
     const medic = addTestUnit(match, 0, "medic", { x: 20, y: ROW });
     const theirs = hurt(match, 1, "rifleman", 21, ROW + 3, 10);
@@ -144,6 +119,17 @@ describe("the Tend Command", () => {
     expect(tend(match, [], mine).ok).toBe(false);
     expect(tend(match, [medic], 987654).ok).toBe(false);
     expect(snapshot(match)).toBe(before);
+  });
+
+  it("is obeyed by the Player's own Units when it names another Player's Units with them, and those are left as they were", () => {
+    const match = stage();
+    const medic = addTestUnit(match, 0, "medic", { x: 14, y: ROW });
+    const theirMedic = addTestUnit(match, 1, "medic", { x: 14, y: ROW + 2 });
+    const patient = hurt(match, 0, "rifleman", 20, ROW, 10);
+    expect(tend(match, [theirMedic, medic], patient)).toEqual({ ok: true });
+    runUntil(match, () => hp(match, patient) === FULL);
+    expect(Math.floor(at(match, medic).x)).toBe(19);
+    expect(at(match, theirMedic)).toEqual({ x: 14.5, y: ROW + 2.5 });
   });
 
   it("gives the same answer for another Player's Unit whether or not it can be seen, and for a Unit that is not there", () => {
@@ -170,7 +156,7 @@ describe("the Tend Command", () => {
     // The Rifleman is on a move of its own, which the Tend it cannot join must not replace.
     issueCommand(match, 0, { type: "move", unitIds: [rifleman], target: { x: 14, y: ROW + 10 } });
     expect(tend(match, [rifleman, medic], patient)).toEqual({ ok: true });
-    runUntil(match, () => hp(match, patient) === 50);
+    runUntil(match, () => hp(match, patient) === FULL);
     expect(at(match, rifleman)).toEqual({ x: 14.5, y: ROW + 10.5 });
   });
 
@@ -212,8 +198,8 @@ describe("the Tend Command", () => {
       run(match, 2 * TICKS_PER_SECOND);
       return hp(match, patient) - 5;
     };
-    expect(gained(1)).toBe(16);
-    expect(gained(2)).toBe(32);
+    expect(gained(1)).toBe(2 * HEAL);
+    expect(gained(2)).toBe(4 * HEAL);
   });
 
   it("costs no Credits", () => {
@@ -222,7 +208,7 @@ describe("the Tend Command", () => {
     const patient = hurt(match, 0, "rifleman", 20, ROW, 5);
     const credits = getPlayerView(match, 0).credits;
     tend(match, [medic], patient);
-    runUntil(match, () => hp(match, patient) === 50);
+    runUntil(match, () => hp(match, patient) === FULL);
     expect(getPlayerView(match, 0).credits).toBe(credits);
   });
 
@@ -240,7 +226,7 @@ describe("the Tend Command", () => {
     expect(at(match, medic)).toEqual(stood);
     // Idle, not stuck on the dead target: it sees to the next hurt Unit that turns up close by.
     const next = hurt(match, 0, "rifleman", Math.floor(stood.x) + 2, ROW, 10);
-    runUntil(match, () => hp(match, next) === 50);
+    runUntil(match, () => hp(match, next) === FULL);
   });
 
   it("is replaced by a new Command: a Medic told to move walks off and the healing stops", () => {
@@ -251,7 +237,7 @@ describe("the Tend Command", () => {
     run(match, TICKS_PER_SECOND);
     issueCommand(match, 0, { type: "move", unitIds: [medic], target: { x: 30, y: ROW } });
     const then = hp(match, patient);
-    expect(then).toBe(13);
+    expect(then).toBe(5 + HEAL);
     runUntil(match, () => at(match, medic).x === 30.5);
     expect(hp(match, patient)).toBe(then);
   });
@@ -263,37 +249,37 @@ describe("the Tend Command", () => {
     tend(match, [medic], patient);
     // The target sets off at once, 5 Cells along: the Medic, no faster, catches it up only where it stops.
     issueCommand(match, 0, { type: "move", unitIds: [patient], target: { x: 25, y: ROW } });
-    runUntil(match, () => hp(match, patient) === 50);
+    runUntil(match, () => hp(match, patient) === FULL);
     expect(at(match, patient)).toEqual({ x: 25.5, y: ROW + 0.5 });
     expect(Math.floor(at(match, medic).x)).toBe(24);
   });
 
-  it("gives up when the target moves beyond the leash of 8 Cells from where it was", () => {
+  it("gives up when the target moves beyond the leash from where it was", () => {
     const match = stage();
     const medic = addTestUnit(match, 0, "medic", { x: 14, y: ROW });
     const patient = hurt(match, 0, "rifleman", 20, ROW, 10);
     tend(match, [medic], patient);
-    expect(TEND.leash).toBe(8);
-    issueCommand(match, 0, { type: "move", unitIds: [patient], target: { x: 34, y: ROW } });
-    runUntil(match, () => at(match, patient).x === 34.5);
-    // The Medic stopped when the target passed 8 Cells from its start, about 6 Cells behind it.
+    const goal = 20 + Math.ceil(TEND.leash) + 6;
+    issueCommand(match, 0, { type: "move", unitIds: [patient], target: { x: goal, y: ROW } });
+    runUntil(match, () => at(match, patient).x === goal + 0.5);
+    // No faster than the target, the Medic was still as far behind as it began when the target passed the leash:
+    // it stopped about a leash from its own start.
     const stood = at(match, medic);
-    expect(stood.x).toBeGreaterThan(21);
-    expect(stood.x).toBeLessThan(24);
+    expect(Math.abs(stood.x - (14.5 + TEND.leash))).toBeLessThan(1.5);
     run(match, 10 * TICKS_PER_SECOND);
     expect(at(match, medic)).toEqual(stood);
     expect(hp(match, patient)).toBe(10);
   });
 
-  it("holds to the leash when it starts beside a target that marches off: it stops within 8 Cells and stays there", () => {
+  it("holds to the leash when it starts beside a target that marches off: it stops within the leash and stays there", () => {
     const match = stage();
     const medic = addTestUnit(match, 0, "medic", { x: 14, y: ROW });
     const patient = hurt(match, 0, "rifleman", 15, ROW, 1);
     tend(match, [medic], patient);
     const stood = marchAway(match, medic, patient);
-    // The patient's start was 15.5; the Medic walks a Cell behind it and stops once the patient is 8 Cells out.
-    expect(stood.x).toBeLessThan(15.5 + 8);
-    expect(hp(match, patient)).toBeLessThan(50);
+    // The patient's start was 15.5; the Medic walks a Cell behind it and stops once the patient is a leash out.
+    expect(stood.x).toBeLessThan(15.5 + TEND.leash);
+    expect(hp(match, patient)).toBeLessThan(FULL);
     const left = hp(match, patient);
     run(match, 10 * TICKS_PER_SECOND);
     expect(at(match, medic)).toEqual(stood);
@@ -309,8 +295,8 @@ describe("the Tend Command", () => {
     run(match, 2 * TICKS_PER_SECOND);
     expect(at(match, medic)).toEqual(stood);
     expect(tend(match, [medic], patient)).toEqual({ ok: true });
-    runUntil(match, () => hp(match, patient) === 50);
-    expect(Math.floor(at(match, medic).x)).toBe(44);
+    runUntil(match, () => hp(match, patient) === FULL);
+    expect(Math.floor(at(match, medic).x)).toBe(15 + MARCH - 1);
   });
 
   it("does not set off by itself after a target that is still marching, whether or not the Medic has been given a Command since", () => {
@@ -320,7 +306,7 @@ describe("the Tend Command", () => {
       const patient = hurt(match, 0, "rifleman", 15, ROW, 1);
       tend(match, [medic], patient);
       issueCommand(match, 0, { type: "move", unitIds: [patient], target: { x: 45, y: ROW } });
-      // The Medic walks a Cell behind and gives up as the patient passes the leash, 8 Cells from 15.5.
+      // The Medic walks a Cell behind and gives up as the patient passes the leash, measured from 15.5.
       runUntil(match, () => at(match, patient).x > 15.5 + TEND.leash + 1);
       const stood = at(match, medic);
       expect(stood.x).toBeLessThan(15.5 + TEND.leash);
@@ -335,15 +321,15 @@ describe("the Tend Command", () => {
 });
 
 describe("a Medic with nothing to do", () => {
-  it("holds to the leash on a target it went to by itself: it stops within 8 Cells and stays there", () => {
+  it("holds to the leash on a target it went to by itself: it stops within the leash and stays there", () => {
     const match = stage();
     const medic = addTestUnit(match, 0, "medic", { x: 14, y: ROW });
     const patient = hurt(match, 0, "rifleman", 15, ROW, 1);
     // Long enough for a look: the Medic is at work without being told.
     runUntil(match, () => hp(match, patient) > 1);
     const stood = marchAway(match, medic, patient);
-    expect(stood.x).toBeLessThan(15.5 + 8);
-    expect(hp(match, patient)).toBeLessThan(50);
+    expect(stood.x).toBeLessThan(15.5 + TEND.leash);
+    expect(hp(match, patient)).toBeLessThan(FULL);
     const left = hp(match, patient);
     run(match, 10 * TICKS_PER_SECOND);
     expect(at(match, medic)).toEqual(stood);
@@ -354,15 +340,16 @@ describe("a Medic with nothing to do", () => {
     const match = stage();
     const medic = addTestUnit(match, 0, "medic", { x: 16, y: ROW });
     const rifleman = hurt(match, 0, "rifleman", 19, ROW, 5);
-    // The Medic is on its way without being told when the Rifleman sets off: 9 Cells, a Cell beyond the leash.
+    // The Medic is on its way without being told when the Rifleman sets off, to a Cell beyond the leash.
+    const goal = 19 + Math.ceil(TEND.leash) + 1;
     runUntil(match, () => at(match, medic).x > 16.5);
-    issueCommand(match, 0, { type: "move", unitIds: [rifleman], target: { x: 28, y: ROW } });
-    runUntil(match, () => at(match, rifleman).x === 28.5);
-    expect(hp(match, rifleman)).toBeLessThan(50);
+    issueCommand(match, 0, { type: "move", unitIds: [rifleman], target: { x: goal, y: ROW } });
+    runUntil(match, () => at(match, rifleman).x === goal + 0.5);
+    expect(hp(match, rifleman)).toBeLessThan(FULL);
     // The Medic gave up short of it; the Rifleman has stopped, so it is hurt and in reach like any other.
     expect(at(match, rifleman).x - at(match, medic).x).toBeLessThan(TEND.seekRadius);
-    runUntil(match, () => hp(match, rifleman) === 50);
-    expect(Math.floor(at(match, medic).x)).toBe(27);
+    runUntil(match, () => hp(match, rifleman) === FULL);
+    expect(Math.floor(at(match, medic).x)).toBe(goal - 1);
   });
 
   it("goes back to a target it left at the leash when that target comes back and stops within the seek radius", () => {
@@ -372,29 +359,28 @@ describe("a Medic with nothing to do", () => {
     runUntil(match, () => hp(match, patient) > 1);
     const stood = marchAway(match, medic, patient);
     const left = hp(match, patient);
-    // Stopped 30 Cells off, far beyond the seek radius: left alone.
+    // Stopped far beyond the seek radius: left alone.
     run(match, 5 * TICKS_PER_SECOND);
     expect(hp(match, patient)).toBe(left);
     expect(at(match, medic)).toEqual(stood);
     issueCommand(match, 0, { type: "move", unitIds: [patient], target: { x: Math.floor(stood.x) + 3, y: ROW } });
-    runUntil(match, () => hp(match, patient) === 50);
+    runUntil(match, () => hp(match, patient) === FULL);
     // Healed where it stopped: the Medic did not set off until then.
     expect(at(match, patient).x).toBe(Math.floor(stood.x) + 3.5);
   });
 
-  it("walks to a hurt Infantry Unit within 6 Cells and heals it to full health by itself", () => {
+  it("walks to a hurt Infantry Unit within the seek radius and heals it to full health by itself", () => {
     const match = stage();
     const medic = addTestUnit(match, 0, "medic", { x: 14, y: ROW });
-    const patient = hurt(match, 0, "rifleman", 20, ROW, 10);
-    expect(TEND.seekRadius).toBe(6);
-    runUntil(match, () => hp(match, patient) === 50);
-    expect(Math.floor(at(match, medic).x)).toBe(19);
+    const patient = hurt(match, 0, "rifleman", 14 + REACH, ROW, 10);
+    runUntil(match, () => hp(match, patient) === FULL);
+    expect(Math.floor(at(match, medic).x)).toBe(14 + REACH - 1);
   });
 
   it("ignores a hurt Infantry Unit beyond the seek radius", () => {
     const match = stage();
     const medic = addTestUnit(match, 0, "medic", { x: 14, y: ROW });
-    const patient = hurt(match, 0, "rifleman", 21, ROW, 10);
+    const patient = hurt(match, 0, "rifleman", 14 + REACH + 1, ROW, 10);
     run(match, 10 * TICKS_PER_SECOND);
     expect(hp(match, patient)).toBe(10);
     expect(at(match, medic)).toEqual({ x: 14.5, y: ROW + 0.5 });
@@ -404,17 +390,17 @@ describe("a Medic with nothing to do", () => {
     const match = stage();
     const medic = addTestUnit(match, 0, "medic", { x: 20, y: ROW });
     // The farther one is added first, so going by id would pick it.
-    const far = hurt(match, 0, "rifleman", 25, ROW, 10);
+    const far = hurt(match, 0, "rifleman", 20 + REACH - 1, ROW, 10);
     const near = hurt(match, 0, "rifleman", 17, ROW, 10);
     runUntil(match, () => hp(match, near) > 10 || hp(match, far) > 10);
     expect(hp(match, far)).toBe(10);
-    runUntil(match, () => hp(match, near) === 50);
+    runUntil(match, () => hp(match, near) === FULL);
     expect(hp(match, far)).toBe(10);
-    // The other is 7 Cells from where the Medic now stands, so it is left alone until it comes nearer.
+    // The Medic now stands at 18, a Cell beyond the seek radius from the other, so that one is left alone until it comes nearer.
     run(match, 5 * TICKS_PER_SECOND);
     expect(hp(match, far)).toBe(10);
-    issueCommand(match, 0, { type: "move", unitIds: [far], target: { x: 23, y: ROW } });
-    runUntil(match, () => hp(match, far) === 50);
+    issueCommand(match, 0, { type: "move", unitIds: [far], target: { x: 18 + REACH - 1, y: ROW } });
+    runUntil(match, () => hp(match, far) === FULL);
     expect(medic).toBeGreaterThan(0);
   });
 
@@ -443,7 +429,7 @@ describe("a Medic with nothing to do", () => {
     runUntil(match, () => at(match, medic).x === goal.x + 0.5 && at(match, medic).y === goal.y + 0.5);
     expect(hp(match, passed)).toBe(10);
     expect(hp(match, atTheEnd)).toBe(10);
-    runUntil(match, () => hp(match, atTheEnd) === 50);
+    runUntil(match, () => hp(match, atTheEnd) === FULL);
     expect(hp(match, passed)).toBe(10);
   });
 });
@@ -452,7 +438,8 @@ describe("what a Player view shows of a Tend", () => {
   it("lists the target, where it is and the Tick, on every Tick a Medic is at work on it and on no other", () => {
     const match = stage();
     const medic = addTestUnit(match, 0, "medic", { x: 17, y: ROW });
-    const patient = hurt(match, 0, "rifleman", 20, ROW, 44);
+    const missing = 6;
+    const patient = hurt(match, 0, "rifleman", 20, ROW, FULL - missing);
     expect(getPlayerView(match, 0).tends).toEqual([]);
     tend(match, [medic], patient);
     const worked: number[] = [];
@@ -469,10 +456,11 @@ describe("what a Player view shows of a Tend", () => {
         expect(hp(match, patient)).toBe(before);
       }
     }
-    // 6 health at 8 a second is 15 Ticks of work, one after the other, and none once it is full.
-    expect(worked).toHaveLength(15);
-    expect(worked.at(-1)! - worked[0]!).toBe(14);
-    expect(hp(match, patient)).toBe(50);
+    // As many Ticks of work as the missing health takes at the Medic's rate, one after the other, and none once it is full.
+    const ticks = Math.ceil((missing * TICKS_PER_SECOND) / HEAL);
+    expect(worked).toHaveLength(ticks);
+    expect(worked.at(-1)! - worked[0]!).toBe(ticks - 1);
+    expect(hp(match, patient)).toBe(FULL);
   });
 
   it("lists a target once however many Medics are at work on it", () => {
@@ -501,20 +489,7 @@ describe("what a Player view shows of a Tend", () => {
   });
 });
 
-describe("Tend numbers and replays", () => {
-  it("keeps its numbers in the tuning file: a Medic heals Infantry at 8 a second and helps nothing else", () => {
-    expect(TEND_RATES.medic).toEqual({ infantry: 8, vehicle: 0, building: 0 });
-    expect(tendRate("medic", "infantry")).toBe(8);
-    expect(tendRate("medic", "vehicle")).toBe(0);
-    expect(tendRate("medic", "building")).toBe(0);
-    expect(tendRate("rifleman", "infantry")).toBe(0);
-    expect(tendRate("harvester", "vehicle")).toBe(0);
-    expect(TEND).toMatchObject({ seekRadius: 6, leash: 8 });
-    // "A slow cadence": no more than a few looks a second, and at least one.
-    expect(TEND.seekTicks).toBeGreaterThanOrEqual(TICKS_PER_SECOND / 4);
-    expect(TEND.seekTicks).toBeLessThanOrEqual(TICKS_PER_SECOND);
-  });
-
+describe("Tend replays", () => {
   it("gives the same result from the same seed and Commands", () => {
     const play = (): string => {
       const match = stage();

@@ -16,6 +16,10 @@ _Avoid_: Team, faction, army, side
 The Player whose decisions are made by the game.
 _Avoid_: AI, bot, enemy, CPU
 
+**Parking Cell**:
+The Cell near its HQ, to one side of where its new Units gather, on which the Computer Opponent keeps a Troop Carrier that is not out with an attack. Standing there it is out of reach of the Medics and Mechanics it would otherwise Collect, and it is where Riflemen about to attack Board it. A Troop Carrier that finds no way onto it counts as parked where it stopped only within eight Cells of it. One that stopped farther off, as one recalled from an attack can, is not Boarded where it stands: it is sent to its Parking Cell again every half minute.
+_Avoid_: Garage, depot, bay, parking spot
+
 **Tick**:
 One fixed step of game time. The Match advances only in whole Ticks, at a fixed rate.
 _Avoid_: Frame, turn, update
@@ -32,16 +36,28 @@ _Avoid_: Aggressive move, a-move, assault
 A Command that sends support Units to one of the Player's own Units or Buildings to restore its health. Each Unit that can help the target walks until it is beside it and works until it is at full health, is gone, has moved too far off, or a new Command arrives. A Unit that cannot help that target ignores the Command, and a Tend on a target already at full health is rejected. An idle support Unit Tends the nearest target it can help by itself, but only one that is standing still, so it does not trail a marching group.
 _Avoid_: Assist, support (as a Command), treat, fix
 
+**Seek radius**:
+How far an idle support Unit looks, every so often, for a target to Tend by itself: an own Unit or Building below full health that it can help and that is standing still. To a Building it is measured from the nearest point of the footprint.
+_Avoid_: Aggro range, scan range, auto-heal range
+
+**Leash**:
+How far the target of a Tend may move before the support Unit gives up on it and stands idle. It is measured from the straight line between where the target and the support Unit were when the Tend began, not from where the support Unit is now. Buildings never move, so it only matters for Units.
+_Avoid_: Tether, chase range, follow distance
+
+**Tend back-off**:
+The wait after a support Unit found no way to a target: until it is over, the Unit does not go to that target by itself, though it still goes to others. Each target has its own, a Tend Command is always tried whatever the back-off, and getting into a Troop Carrier ends them all.
+_Avoid_: Cooldown, blacklist, retry timer
+
 **Board**:
 A Command that sends Infantry to one of the Player's own Troop Carriers to get in. Each walks until it is in a Cell touching the Troop Carrier's and becomes a Passenger if there is room; with no room it stops beside it. Vehicles ignore the Command.
 _Avoid_: Load, embark, enter, mount, garrison
 
 **Unload**:
-A Command that has every Passenger of a Troop Carrier get out onto a free Cell beside it, nearest first; a Passenger with no free Cell stays inside. A Troop Carrier that loses health Unloads by itself on that Tick. Units that get out are idle. (A Harvester emptying its Ore at a Refinery is not this.)
+A Command that has every Passenger of a Troop Carrier get out onto a free Cell beside it, nearest first; a Passenger with no free Cell stays inside. The Command is rejected when none of the Troop Carriers holds a Passenger. A Troop Carrier that loses health Unloads by itself on that Tick. Units that get out are idle. (A Harvester emptying its Ore at a Refinery is not this.)
 _Avoid_: Disembark, deploy, drop off, eject, evacuate
 
 **Collecting**:
-What a Troop Carrier does, once, on the Tick it finishes a move or an Attack-move that it began with no Passengers and had none on since: idle Infantry of its own Player within the pick-up radius (two Cells) become its Passengers from where they stand, nearest first and lowest id first among those as near as each other, until it is full. No Command asks for it. A Troop Carrier that stands takes nobody, so Units that got out, and Units sent beside a parked one, stay on the Map until it has been sent off empty and has stopped again. A move on which it held a Passenger or put one out ends without it, and so does a stop on a Tick it lost health.
+What a Troop Carrier does, once, on the Tick it finishes a move or an Attack-move that took it to another Cell, that it began with no Passengers and had none on since: idle Infantry of its own Player within the Collecting radius (two Cells) become its Passengers from where they stand, nearest first and lowest id first among those as near as each other, until it is full. It takes only Units that have a way on foot of at most three Cells to a Cell touching its own, so none across water or behind a wall. No Command asks for it, and a Unit it takes is shown and heard getting in exactly as one that Boards. A Troop Carrier that stands takes nobody, so Units that got out, and Units sent beside a parked one, stay on the Map until it has been sent off empty and has stopped again in another Cell; sent to the Cell it stands on, or somewhere it has no way to, it has not moved. A move on which it held a Passenger or put one out ends without it, and so does a stop on a Tick it lost health.
 _Avoid_: Auto-load, auto-board, pick-up mode
 
 **Victory**:
@@ -135,6 +151,10 @@ _Avoid_: Engineer, repairman, technician, fitter
 **Repair**:
 To restore health to a Vehicle or a Building, which is what a Mechanic does when it Tends one. It costs nothing and never goes above full health.
 _Avoid_: Fix, mend, patch up, rebuild, service
+
+**Support Unit**:
+A Unit that can Tend: the Medic and the Mechanic. What each kind can help, and how fast, is a number in the tuning file; a kind with no number there is not one.
+_Avoid_: Helper, healer, support (alone), utility Unit
 
 **Raider**:
 The light attack Vehicle.

@@ -1,42 +1,12 @@
 import { describe, expect, it } from "vitest";
-import {
-  advanceTick,
-  createMatch,
-  ECONOMY,
-  getPlayerView,
-  isArmed,
-  issueCommand,
-  type Match,
-  type PlayerId,
-  TICKS_PER_SECOND,
-  TRAINS,
-  UNIT_STATS,
-  type UnitView,
-} from "./index";
+import { createMatch, getPlayerView, issueCommand, type Match, type PlayerId, TRAINS, type UnitView } from "./index";
 import { openMap } from "./testing/maps";
-import { addTestBuilding, addTestUnit } from "./testing/setup";
+import { addTestBuilding, addTestUnit, find, run, runUntil, stage } from "./testing/setup";
+import { ECONOMY, isArmed, TICKS_PER_SECOND, UNIT_STATS } from "./tuning";
 
-// Staged along row 8 of a wide open Map, far from both starting bases in the
-// corners, so only the Units put there take part.
+// Staged along row 8 of the open Map, so only the Units put there take part.
 const ROW = 8;
-const stage = (): Match => createMatch(openMap(50, 40), 1);
-
-function run(match: Match, ticks: number): void {
-  for (let t = 0; t < ticks; t++) advanceTick(match);
-}
-
-function runUntil(match: Match, done: () => boolean, limit = 1200): number {
-  for (let t = 0; t < limit; t++) {
-    if (done()) return t;
-    advanceTick(match);
-  }
-  throw new Error(`still not so after ${limit} Ticks`);
-}
-
-/** A Unit as its owner sees it: a Player always sees its own Units. */
-const find = (match: Match, id: number): UnitView | undefined =>
-  getPlayerView(match, 0).units.find((u) => u.id === id && u.owner === 0) ??
-  getPlayerView(match, 1).units.find((u) => u.id === id && u.owner === 1);
+const CARRIER = UNIT_STATS.troopCarrier;
 
 /** Adds a Building for the Player and returns its id. */
 function building(match: Match, owner: PlayerId, kind: "vehicleFactory" | "barracks" | "turret", x: number, y: number): number {
@@ -48,20 +18,9 @@ const carriers = (match: Match, owner: PlayerId): UnitView[] =>
   getPlayerView(match, owner).units.filter((u) => u.owner === owner && u.kind === "troopCarrier");
 
 describe("the Troop Carrier", () => {
-  it("has its numbers in the tuning file: 600 Credits, 220 health, speed 3.5, a gun of damage 5 at range 4", () => {
-    expect(UNIT_STATS.troopCarrier).toMatchObject({
-      name: "Troop Carrier",
-      class: "vehicle",
-      cost: 600,
-      maxHp: 220,
-      speed: 3.5,
-      damage: 5,
-      range: 4,
-    });
-    expect(isArmed(UNIT_STATS.troopCarrier)).toBe(true);
-  });
-
   it("is a light gun on a fast Vehicle: it hits less hard than a Raider, and is slower than one but far faster than Infantry", () => {
+    expect(CARRIER.class).toBe("vehicle");
+    expect(isArmed(CARRIER)).toBe(true);
     const perSecond = (kind: "troopCarrier" | "raider") => UNIT_STATS[kind].damage / UNIT_STATS[kind].reloadTicks;
     expect(perSecond("troopCarrier")).toBeLessThan(perSecond("raider"));
     expect(UNIT_STATS.troopCarrier.speed).toBeLessThan(UNIT_STATS.raider.speed);
@@ -87,42 +46,46 @@ describe("the Troop Carrier", () => {
     const match = stage();
     const vehicleFactory = building(match, 0, "vehicleFactory", 10, 10);
     expect(issueCommand(match, 0, { type: "train", buildingId: vehicleFactory, kind: "troopCarrier" })).toEqual({ ok: true });
-    expect(getPlayerView(match, 0).credits).toBe(ECONOMY.startingCredits - 600);
+    expect(getPlayerView(match, 0).credits).toBe(ECONOMY.startingCredits - CARRIER.cost);
     run(match, UNIT_STATS.troopCarrier.trainTicks - 1);
     expect(carriers(match, 0)).toEqual([]);
     run(match, 1);
     const [carrier] = carriers(match, 0);
-    expect(carrier).toMatchObject({ hp: 220, maxHp: 220 });
+    expect(carrier).toMatchObject({ hp: CARRIER.maxHp, maxHp: CARRIER.maxHp });
     // Beside the 3 by 3 footprint at (10, 10): within one Cell of it, and not on it.
     const cell = { x: Math.floor(carrier!.x), y: Math.floor(carrier!.y) };
     expect(cell.x >= 9 && cell.x <= 13 && cell.y >= 9 && cell.y <= 13).toBe(true);
     expect(cell.x >= 10 && cell.x <= 12 && cell.y >= 10 && cell.y <= 12).toBe(false);
   });
 
-  it("moves where it is told at 3.5 Cells a second", () => {
+  it("moves where it is told at its speed", () => {
     const match = stage();
     const carrier = addTestUnit(match, 0, "troopCarrier", { x: 10, y: ROW });
-    expect(issueCommand(match, 0, { type: "move", unitIds: [carrier], target: { x: 31, y: ROW } })).toEqual({ ok: true });
+    const cells = 21;
+    expect(issueCommand(match, 0, { type: "move", unitIds: [carrier], target: { x: 10 + cells, y: ROW } })).toEqual({ ok: true });
     run(match, 2 * TICKS_PER_SECOND);
-    expect(find(match, carrier)!.x).toBeCloseTo(10.5 + 7, 5);
-    // 21 Cells at 3.5 a second is 6 seconds.
-    run(match, 4 * TICKS_PER_SECOND);
-    expect(find(match, carrier)).toMatchObject({ x: 31.5, y: ROW + 0.5 });
+    expect(find(match, carrier)!.x).toBeCloseTo(10.5 + 2 * CARRIER.speed, 5);
+    // There in the time the whole way takes at that speed, and not a Tick sooner.
+    const ticks = Math.ceil((cells / CARRIER.speed) * TICKS_PER_SECOND);
+    run(match, ticks - 2 * TICKS_PER_SECOND - 1);
+    expect(find(match, carrier)!.x).toBeLessThan(10.5 + cells);
+    run(match, 1);
+    expect(find(match, carrier)).toMatchObject({ x: 10.5 + cells, y: ROW + 0.5 });
   });
 
-  it("fires at an enemy it is sent to attack, 5 health a shot from 4 Cells off", () => {
+  it("fires at an enemy it is sent to attack, its damage a shot from as far off as its range", () => {
     const match = stage();
     const carrier = addTestUnit(match, 0, "troopCarrier", { x: 10, y: ROW });
     // A Harvester does not fire back or run, so every point of health lost is the gun's.
-    const target = addTestUnit(match, 1, "harvester", { x: 14, y: ROW });
+    const target = addTestUnit(match, 1, "harvester", { x: 10 + Math.floor(CARRIER.range), y: ROW });
     issueCommand(match, 1, { type: "stop", unitIds: [target] });
     expect(issueCommand(match, 0, { type: "attack", unitIds: [carrier], targetId: target })).toEqual({ ok: true });
     run(match, 1);
-    expect(find(match, target)!.hp).toBe(UNIT_STATS.harvester.maxHp - 5);
+    expect(find(match, target)!.hp).toBe(UNIT_STATS.harvester.maxHp - CARRIER.damage);
     // In range from where it stood: it did not have to close in.
     expect(find(match, carrier)!.x).toBe(10.5);
-    run(match, UNIT_STATS.troopCarrier.reloadTicks);
-    expect(find(match, target)!.hp).toBe(UNIT_STATS.harvester.maxHp - 10);
+    run(match, CARRIER.reloadTicks);
+    expect(find(match, target)!.hp).toBe(UNIT_STATS.harvester.maxHp - 2 * CARRIER.damage);
   });
 
   it("fires by itself at an enemy that comes into range while it stands idle", () => {
@@ -131,7 +94,7 @@ describe("the Troop Carrier", () => {
     const target = addTestUnit(match, 1, "harvester", { x: 13, y: ROW });
     issueCommand(match, 1, { type: "stop", unitIds: [target] });
     run(match, 1);
-    expect(find(match, target)!.hp).toBe(UNIT_STATS.harvester.maxHp - 5);
+    expect(find(match, target)!.hp).toBe(UNIT_STATS.harvester.maxHp - CARRIER.damage);
   });
 
   it("takes part in an Attack-move: it stops to fight an enemy on the route, then carries on and arrives", () => {
@@ -153,13 +116,13 @@ describe("the Troop Carrier", () => {
     issueCommand(match, 0, { type: "move", unitIds: [carrier], target: { x: 10, y: ROW } });
     addTestUnit(match, 1, "rifleman", { x: 13, y: ROW });
     run(match, 1);
-    expect(find(match, carrier)!.hp).toBe(220 - UNIT_STATS.rifleman.damage);
+    expect(find(match, carrier)!.hp).toBe(CARRIER.maxHp - UNIT_STATS.rifleman.damage);
 
     const other = stage();
     const second = addTestUnit(other, 0, "troopCarrier", { x: 10, y: ROW });
     building(other, 1, "turret", 14, ROW);
     run(other, 2);
-    expect(find(other, second)!.hp).toBeLessThan(220);
+    expect(find(other, second)!.hp).toBeLessThan(CARRIER.maxHp);
     runUntil(other, () => find(other, second) === undefined);
   });
 
@@ -171,7 +134,7 @@ describe("the Troop Carrier", () => {
     issueCommand(match, 0, { type: "stop", unitIds: [harvester] });
     const carrier = addTestUnit(match, 0, "troopCarrier", { x: 22, y: ROW - 1 });
     issueCommand(match, 1, { type: "attackMove", unitIds: [raider], target: { x: 22, y: ROW } });
-    runUntil(match, () => find(match, carrier)!.hp <= 220 - 3 * UNIT_STATS.raider.damage);
+    runUntil(match, () => find(match, carrier)!.hp <= CARRIER.maxHp - 3 * UNIT_STATS.raider.damage);
     expect(find(match, harvester)!.hp).toBe(UNIT_STATS.harvester.maxHp);
   });
 

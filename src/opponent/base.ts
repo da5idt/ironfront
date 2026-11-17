@@ -25,7 +25,7 @@ export function hqCentre(view: PlayerView): CellPos {
 /**
  * The Player's Units inside its own Troop Carriers. They are off the Map and
  * so not among the view's Units, but they are alive: whoever counts what the
- * Player has must add them, or a ride looks like a loss.
+ * Player has must add them, or Units that Boarded look lost.
  */
 export function ownPassengers(view: PlayerView): PassengerView[] {
   return view.units.filter((u) => u.owner === view.playerId).flatMap((u) => u.passengers ?? []);

@@ -1,58 +1,39 @@
 import { describe, expect, it } from "vitest";
 import {
   advanceTick,
-  BUILDING_STATS,
   type BuildingKind,
   type BuildingView,
   canPlaceBuilding,
-  createMatch,
   getPlayerView,
-  isArmed,
   issueCommand,
   type Match,
   type PlayerId,
-  TEND,
-  TEND_RATES,
-  tendRate,
-  TICKS_PER_SECOND,
   TRAINS,
-  UNIT_STATS,
-  type UnitView,
 } from "./index";
-import { openMap } from "./testing/maps";
-import { addTestBuilding, addTestUnit, setTestBuildingHp, setTestCredits, setTestUnitHp } from "./testing/setup";
+import {
+  addTestBuilding,
+  addTestUnit,
+  at,
+  hp,
+  hurt,
+  run,
+  runUntil,
+  setTestBuildingHp,
+  setTestCredits,
+  snapshot,
+  stage,
+  tend,
+} from "./testing/setup";
+import { BUILDING_STATS, isArmed, TEND, tendRate, TICKS_PER_SECOND, UNIT_STATS } from "./tuning";
 
-// Staged along row 8 of a wide open Map, far from both starting bases in the
-// corners (and from their Riflemen, who are out of every radius used here).
+// Staged along row 8 of the open Map, with the starting Riflemen out of every radius used here.
 const ROW = 8;
-const stage = (): Match => createMatch(openMap(50, 40), 1);
-
-function run(match: Match, ticks: number): void {
-  for (let t = 0; t < ticks; t++) advanceTick(match);
-}
-
-function runUntil(match: Match, done: () => boolean, limit = 1200): number {
-  for (let t = 0; t < limit; t++) {
-    if (done()) return t;
-    advanceTick(match);
-  }
-  throw new Error(`still not so after ${limit} Ticks`);
-}
-
-/** A Unit as its owner sees it: a Player always sees its own Units. */
-const find = (match: Match, id: number): UnitView | undefined =>
-  getPlayerView(match, 0).units.find((u) => u.id === id && u.owner === 0) ??
-  getPlayerView(match, 1).units.find((u) => u.id === id && u.owner === 1);
-
-const hp = (match: Match, id: number): number => find(match, id)!.hp;
-const at = (match: Match, id: number) => ({ x: find(match, id)!.x, y: find(match, id)!.y });
-
-/** Adds a hurt Unit and returns its id. */
-function hurt(match: Match, owner: PlayerId, kind: UnitView["kind"], x: number, y: number, health: number): number {
-  const id = addTestUnit(match, owner, kind, { x, y });
-  setTestUnitHp(match, id, health);
-  return id;
-}
+/** Health a second a Mechanic Repairs, in a Vehicle and in a Building. */
+const VEHICLE_RATE = tendRate("mechanic", "vehicle");
+const BUILDING_RATE = tendRate("mechanic", "building");
+/** The seek radius in whole Cells: a target this many Cells along the row is the farthest an idle Mechanic goes to. */
+const REACH = Math.floor(TEND.seekRadius);
+const RAIDER_HP = UNIT_STATS.raider.maxHp;
 
 /** Adds a Building for the Player, sets its health when given, and returns its id. */
 function building(match: Match, owner: PlayerId, kind: BuildingKind, x: number, y: number, health?: number): number {
@@ -66,26 +47,13 @@ const ownBuilding = (match: Match, owner: PlayerId, id: number): BuildingView =>
   getPlayerView(match, owner).buildings.find((b) => b.id === id)!;
 const buildingHp = (match: Match, owner: PlayerId, id: number): number => ownBuilding(match, owner, id).hp;
 
-const tend = (match: Match, unitIds: number[], targetId: number, player: PlayerId = 0) =>
-  issueCommand(match, player, { type: "tend", unitIds, targetId });
-
-/** Everything either Player can see, to show that a rejected Command changed nothing. */
-const snapshot = (match: Match): string => JSON.stringify([getPlayerView(match, 0), getPlayerView(match, 1)]);
-
 const BUILDING_KINDS = Object.keys(BUILDING_STATS) as BuildingKind[];
 
 describe("the Mechanic", () => {
-  it("has its numbers in the tuning file: 300 Credits, 50 health, the Rifleman's speed, Infantry, no weapon", () => {
-    expect(UNIT_STATS.mechanic).toMatchObject({ name: "Mechanic", class: "infantry", cost: 300, maxHp: 50, damage: 0, range: 0 });
+  it("is unarmed Infantry that walks at the Rifleman's speed", () => {
+    expect(UNIT_STATS.mechanic.class).toBe("infantry");
     expect(UNIT_STATS.mechanic.speed).toBe(UNIT_STATS.rifleman.speed);
     expect(isArmed(UNIT_STATS.mechanic)).toBe(false);
-  });
-
-  it("repairs Vehicles at 10 a second and Buildings at 15, and helps no Infantry", () => {
-    expect(TEND_RATES.mechanic).toEqual({ infantry: 0, vehicle: 10, building: 15 });
-    expect(tendRate("mechanic", "vehicle")).toBe(10);
-    expect(tendRate("mechanic", "building")).toBe(15);
-    expect(tendRate("mechanic", "infantry")).toBe(0);
   });
 
   it("is trained at the Vehicle Factory, after the Raider and the Harvester, and nowhere else", () => {
@@ -98,14 +66,16 @@ describe("the Mechanic", () => {
   it("is paid for when queued and steps out beside the Vehicle Factory at full health when trained", () => {
     const match = stage();
     const vehicleFactory = building(match, 0, "vehicleFactory", 20, ROW);
-    setTestCredits(match, 0, 500);
+    // One short of the cost of two.
+    const { cost, maxHp } = UNIT_STATS.mechanic;
+    setTestCredits(match, 0, 2 * cost - 1);
     expect(issueCommand(match, 0, { type: "train", buildingId: vehicleFactory, kind: "mechanic" })).toEqual({ ok: true });
-    expect(getPlayerView(match, 0).credits).toBe(200);
+    expect(getPlayerView(match, 0).credits).toBe(cost - 1);
     expect(issueCommand(match, 0, { type: "train", buildingId: vehicleFactory, kind: "mechanic" }).ok).toBe(false);
     const mechanics = () => getPlayerView(match, 0).units.filter((u) => u.kind === "mechanic");
     runUntil(match, () => mechanics().length === 1);
     const [mechanic] = mechanics();
-    expect(mechanic).toMatchObject({ owner: 0, hp: 50, maxHp: 50 });
+    expect(mechanic).toMatchObject({ owner: 0, hp: maxHp, maxHp });
     // Beside the footprint (Cells 20..22 by 8..10), not on it.
     expect(Math.max(Math.abs(mechanic!.x - 21.5), Math.abs(mechanic!.y - (ROW + 1.5)))).toBe(2);
   });
@@ -134,7 +104,7 @@ describe("the Mechanic", () => {
 });
 
 describe("a Mechanic told to Tend", () => {
-  it("walks to a damaged Raider and repairs it to full health at 10 a second, then stands idle", () => {
+  it("walks to a damaged Raider and repairs it to full health at the Mechanic's rate for Vehicles, then stands idle", () => {
     const match = stage();
     const mechanic = addTestUnit(match, 0, "mechanic", { x: 14, y: ROW });
     const raider = hurt(match, 0, "raider", 20, ROW, 15);
@@ -146,13 +116,13 @@ describe("a Mechanic told to Tend", () => {
     expect(Math.floor(at(match, mechanic).x)).toBe(19);
     const before = hp(match, raider);
     run(match, TICKS_PER_SECOND);
-    expect(hp(match, raider) - before).toBe(10);
+    expect(hp(match, raider) - before).toBe(VEHICLE_RATE);
     runUntil(match, () => {
       expect(Number.isInteger(hp(match, raider))).toBe(true);
-      return hp(match, raider) === UNIT_STATS.raider.maxHp;
+      return hp(match, raider) === RAIDER_HP;
     });
     run(match, 3 * TICKS_PER_SECOND);
-    expect(hp(match, raider)).toBe(120);
+    expect(hp(match, raider)).toBe(RAIDER_HP);
     // Idle again: when the repaired Raider drives off, the Mechanic stays where it is.
     const stood = at(match, mechanic);
     issueCommand(match, 0, { type: "move", unitIds: [raider], target: { x: 26, y: ROW } });
@@ -166,9 +136,9 @@ describe("a Mechanic told to Tend", () => {
     const harvester = hurt(match, 0, "harvester", 20, ROW, 100);
     issueCommand(match, 0, { type: "stop", unitIds: [harvester] });
     expect(tend(match, [mechanic], harvester)).toEqual({ ok: true });
-    runUntil(match, () => hp(match, harvester) === 300);
+    runUntil(match, () => hp(match, harvester) === UNIT_STATS.harvester.maxHp);
     run(match, 2 * TICKS_PER_SECOND);
-    expect(hp(match, harvester)).toBe(300);
+    expect(hp(match, harvester)).toBe(UNIT_STATS.harvester.maxHp);
   });
 
   it("repairs a Troop Carrier to full health, when told to and by itself", () => {
@@ -179,18 +149,18 @@ describe("a Mechanic told to Tend", () => {
     runUntil(match, () => hp(match, carrier) > 100);
     const before = hp(match, carrier);
     run(match, TICKS_PER_SECOND);
-    expect(hp(match, carrier) - before).toBe(10);
+    expect(hp(match, carrier) - before).toBe(VEHICLE_RATE);
     runUntil(match, () => hp(match, carrier) === UNIT_STATS.troopCarrier.maxHp);
     run(match, 2 * TICKS_PER_SECOND);
-    expect(hp(match, carrier)).toBe(220);
+    expect(hp(match, carrier)).toBe(UNIT_STATS.troopCarrier.maxHp);
 
     const alone = stage();
     addTestUnit(alone, 0, "mechanic", { x: 15, y: ROW });
     const damaged = hurt(alone, 0, "troopCarrier", 20, ROW, 150);
-    runUntil(alone, () => hp(alone, damaged) === 220);
+    runUntil(alone, () => hp(alone, damaged) === UNIT_STATS.troopCarrier.maxHp);
   });
 
-  it.each(BUILDING_KINDS)("repairs a %s from under half health to full at 15 a second, and no further", (kind) => {
+  it.each(BUILDING_KINDS)("repairs a %s from under half health to full at the Mechanic's rate for Buildings, and no further", (kind) => {
     const match = stage();
     const { maxHp, width, height } = BUILDING_STATS[kind];
     const start = Math.floor(maxHp * 0.4);
@@ -208,7 +178,7 @@ describe("a Mechanic told to Tend", () => {
     expect(cell.y).toBeLessThanOrEqual(ROW + height);
     const before = buildingHp(match, 0, id);
     run(match, TICKS_PER_SECOND);
-    expect(buildingHp(match, 0, id) - before).toBe(15);
+    expect(buildingHp(match, 0, id) - before).toBe(BUILDING_RATE);
     runUntil(
       match,
       () => {
@@ -233,7 +203,7 @@ describe("a Mechanic told to Tend", () => {
     issueCommand(match, 1, { type: "stop", unitIds: [target] });
     tend(match, [mechanic], turret);
     run(match, 2 * TICKS_PER_SECOND);
-    expect(buildingHp(match, 0, turret)).toBe(130);
+    expect(buildingHp(match, 0, turret)).toBe(100 + 2 * BUILDING_RATE);
     expect(hp(match, target)).toBeLessThan(UNIT_STATS.harvester.maxHp);
   });
 
@@ -250,7 +220,7 @@ describe("a Mechanic told to Tend", () => {
     const mechanic = addTestUnit(match, 0, "mechanic", { x: 6, y: 5 });
     expect(tend(match, [mechanic], placed.id)).toEqual({ ok: true });
     run(match, TICKS_PER_SECOND);
-    expect(buildingHp(match, 0, placed.id)).toBe(215);
+    expect(buildingHp(match, 0, placed.id)).toBe(200 + BUILDING_RATE);
   });
 
   it("does nothing for Infantry: the Command is rejected and the Match is unchanged", () => {
@@ -271,14 +241,14 @@ describe("a Mechanic told to Tend", () => {
     expect(at(match, mechanic)).toEqual({ x: 20.5, y: ROW + 0.5 });
   });
 
-  it("is healed by a Medic when hurt, to its full 50 health", () => {
+  it("is healed by a Medic when hurt, to full health", () => {
     const match = stage();
     const medic = addTestUnit(match, 0, "medic", { x: 20, y: ROW });
     const mechanic = hurt(match, 0, "mechanic", 21, ROW, 10);
     expect(tend(match, [medic], mechanic)).toEqual({ ok: true });
     run(match, TICKS_PER_SECOND);
-    expect(hp(match, mechanic)).toBe(18);
-    runUntil(match, () => hp(match, mechanic) === 50);
+    expect(hp(match, mechanic)).toBe(10 + tendRate("medic", "infantry"));
+    runUntil(match, () => hp(match, mechanic) === UNIT_STATS.mechanic.maxHp);
   });
 
   it("is rejected for the other Player's Vehicle or Building, with the Match unchanged", () => {
@@ -316,7 +286,8 @@ describe("a Mechanic told to Tend", () => {
     const mechanics = [addTestUnit(match, 0, "mechanic", { x: 19, y: ROW }), addTestUnit(match, 0, "mechanic", { x: 19, y: ROW + 1 })];
     tend(match, mechanics, hq);
     run(match, 2 * TICKS_PER_SECOND);
-    expect(buildingHp(match, 0, hq)).toBe(560);
+    // Two Mechanics for two seconds.
+    expect(buildingHp(match, 0, hq)).toBe(500 + 2 * 2 * BUILDING_RATE);
     expect(at(match, mechanics[0]!)).not.toEqual(at(match, mechanics[1]!));
   });
 
@@ -328,7 +299,7 @@ describe("a Mechanic told to Tend", () => {
     const credits = getPlayerView(match, 0).credits;
     tend(match, [mechanics[0]!], raider);
     tend(match, [mechanics[1]!], refinery);
-    runUntil(match, () => hp(match, raider) === 120 && buildingHp(match, 0, refinery) === 900);
+    runUntil(match, () => hp(match, raider) === RAIDER_HP && buildingHp(match, 0, refinery) === BUILDING_STATS.refinery.maxHp);
     // The starting Harvester is still on its way to Ore this early, so nothing has been earned either.
     expect(getPlayerView(match, 0).credits).toBe(credits);
   });
@@ -348,29 +319,29 @@ describe("a Mechanic told to Tend", () => {
 });
 
 describe("a Mechanic with nothing to do", () => {
-  it("walks to a damaged Vehicle within 6 Cells and repairs it to full health by itself", () => {
+  it("walks to a damaged Vehicle within the seek radius and repairs it to full health by itself", () => {
     const match = stage();
     const mechanic = addTestUnit(match, 0, "mechanic", { x: 14, y: ROW });
-    const raider = hurt(match, 0, "raider", 20, ROW, 30);
-    runUntil(match, () => hp(match, raider) === 120);
-    expect(Math.floor(at(match, mechanic).x)).toBe(19);
+    const raider = hurt(match, 0, "raider", 14 + REACH, ROW, 30);
+    runUntil(match, () => hp(match, raider) === RAIDER_HP);
+    expect(Math.floor(at(match, mechanic).x)).toBe(14 + REACH - 1);
   });
 
-  it("walks to a damaged Building within 6 Cells of its footprint and repairs it to full health by itself", () => {
+  it("walks to a damaged Building with its footprint within the seek radius and repairs it to full health by itself", () => {
     const match = stage();
     const mechanic = addTestUnit(match, 0, "mechanic", { x: 14, y: ROW });
-    // The near wall is 5.5 Cells off, though the middle of the HQ is 7.
-    const hq = building(match, 0, "hq", 20, ROW, 1400);
-    runUntil(match, () => buildingHp(match, 0, hq) === 1500);
-    expect(Math.floor(at(match, mechanic).x)).toBe(19);
+    // The near wall is within the seek radius, though the middle of the HQ is a Cell and a half beyond it.
+    const full = BUILDING_STATS.hq.maxHp;
+    const hq = building(match, 0, "hq", 14 + REACH, ROW, full - 100);
+    runUntil(match, () => buildingHp(match, 0, hq) === full);
+    expect(Math.floor(at(match, mechanic).x)).toBe(14 + REACH - 1);
   });
 
   it("ignores a damaged Vehicle and a damaged Building beyond the seek radius", () => {
-    expect(TEND.seekRadius).toBe(6);
     const match = stage();
     const mechanic = addTestUnit(match, 0, "mechanic", { x: 14, y: ROW });
-    const raider = hurt(match, 0, "raider", 21, ROW, 30);
-    const barracks = building(match, 0, "barracks", 14, ROW + 8, 100);
+    const raider = hurt(match, 0, "raider", 14 + REACH + 1, ROW, 30);
+    const barracks = building(match, 0, "barracks", 14, ROW + REACH + 2, 100);
     run(match, 10 * TICKS_PER_SECOND);
     expect(hp(match, raider)).toBe(30);
     expect(buildingHp(match, 0, barracks)).toBe(100);
@@ -382,9 +353,9 @@ describe("a Mechanic with nothing to do", () => {
     addTestUnit(match, 0, "mechanic", { x: 20, y: ROW });
     const turret = building(match, 0, "turret", 22, ROW, 300);
     const raider = hurt(match, 0, "raider", 16, ROW, 60);
-    runUntil(match, () => buildingHp(match, 0, turret) === 400);
+    runUntil(match, () => buildingHp(match, 0, turret) === BUILDING_STATS.turret.maxHp);
     expect(hp(match, raider)).toBe(60);
-    runUntil(match, () => hp(match, raider) === 120);
+    runUntil(match, () => hp(match, raider) === RAIDER_HP);
   });
 
   it("leaves hurt Infantry, whole Vehicles and Buildings, and the other Player's damaged ones alone", () => {
@@ -416,7 +387,7 @@ describe("a Mechanic with nothing to do", () => {
     runUntil(match, () => at(match, mechanic).x === goal.x + 0.5 && at(match, mechanic).y === goal.y + 0.5);
     expect(buildingHp(match, 0, passed)).toBe(100);
     expect(hp(match, atTheEnd)).toBe(30);
-    runUntil(match, () => hp(match, atTheEnd) === 120);
+    runUntil(match, () => hp(match, atTheEnd) === RAIDER_HP);
     expect(buildingHp(match, 0, passed)).toBe(100);
   });
 });
@@ -426,7 +397,8 @@ describe("what a Player view shows of a repair", () => {
     const match = stage();
     const mechanic = addTestUnit(match, 0, "mechanic", { x: 17, y: ROW });
     const max = BUILDING_STATS.refinery.maxHp;
-    const refinery = building(match, 0, "refinery", 20, ROW, max - 45);
+    const missing = 45;
+    const refinery = building(match, 0, "refinery", 20, ROW, max - missing);
     expect(getPlayerView(match, 0).tends).toEqual([]);
     tend(match, [mechanic], refinery);
     const worked: number[] = [];
@@ -445,9 +417,10 @@ describe("what a Player view shows of a repair", () => {
         expect(buildingHp(match, 0, refinery)).toBe(before);
       }
     }
-    // 45 health at 15 a second is 60 Ticks of work, one after the other, and none once it is full.
-    expect(worked).toHaveLength(60);
-    expect(worked.at(-1)! - worked[0]!).toBe(59);
+    // As many Ticks of work as the missing health takes at the Mechanic's rate, one after the other, and none once it is full.
+    const ticks = Math.ceil((missing * TICKS_PER_SECOND) / BUILDING_RATE);
+    expect(worked).toHaveLength(ticks);
+    expect(worked.at(-1)! - worked[0]!).toBe(ticks - 1);
     expect(buildingHp(match, 0, refinery)).toBe(max);
   });
 
@@ -516,20 +489,22 @@ describe("a Mechanic and a Harvester that drives off", () => {
     const harvester = hurt(match, 0, "harvester", 15, ROW, 100);
     issueCommand(match, 0, { type: "stop", unitIds: [harvester] });
     runUntil(match, () => hp(match, harvester) > 100);
-    // Faster than the Mechanic, and 14 Cells is well beyond the leash: the Mechanic is left behind.
-    issueCommand(match, 0, { type: "move", unitIds: [harvester], target: { x: 29, y: ROW } });
-    runUntil(match, () => at(match, harvester).x === 29.5);
+    // Faster than the Mechanic, and it goes the leash and the seek radius together: the Mechanic is left behind.
+    const park = 15 + Math.ceil(TEND.leash + TEND.seekRadius);
+    issueCommand(match, 0, { type: "move", unitIds: [harvester], target: { x: park, y: ROW } });
+    runUntil(match, () => at(match, harvester).x === park + 0.5);
     run(match, 5 * TICKS_PER_SECOND);
     const stood = at(match, mechanic);
     const left = hp(match, harvester);
     expect(left).toBeLessThan(UNIT_STATS.harvester.maxHp);
-    expect(29.5 - stood.x).toBeGreaterThan(TEND.seekRadius);
+    expect(park + 0.5 - stood.x).toBeGreaterThan(TEND.seekRadius);
     run(match, 5 * TICKS_PER_SECOND);
     expect(at(match, mechanic)).toEqual(stood);
     expect(hp(match, harvester)).toBe(left);
-    // It drives back and parks 4 Cells from the Mechanic.
-    issueCommand(match, 0, { type: "move", unitIds: [harvester], target: { x: Math.floor(stood.x) + 4, y: ROW } });
+    // It drives back and parks within the Mechanic's seek radius.
+    const back = Math.floor(stood.x) + REACH - 2;
+    issueCommand(match, 0, { type: "move", unitIds: [harvester], target: { x: back, y: ROW } });
     runUntil(match, () => hp(match, harvester) === UNIT_STATS.harvester.maxHp);
-    expect(at(match, harvester).x).toBe(Math.floor(stood.x) + 4.5);
+    expect(at(match, harvester).x).toBe(back + 0.5);
   });
 });

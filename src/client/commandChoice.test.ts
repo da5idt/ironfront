@@ -256,7 +256,8 @@ describe("the U key", () => {
     const raider = addTestUnit(match, 0, "raider", { x: 18, y: 12 });
     const command = unloadCommand(view(match), new Set([rifleman, first, raider, second]));
     expect(command).toEqual({ type: "unload", unitIds: [first, second] });
-    expect(issueCommand(match, 0, command!)).toEqual({ ok: true });
+    // Neither holds a Passenger, so the Match rejects it and no acknowledgement plays (main.ts plays one only for an accepted Command).
+    expect(issueCommand(match, 0, command!).ok).toBe(false);
   });
 
   it("does nothing with no Troop Carrier selected", () => {

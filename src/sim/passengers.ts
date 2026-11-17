@@ -1,14 +1,15 @@
 import type { CommandResult } from "./commands";
 import { OK, reject } from "./commands";
 import type { CommandHandler } from "./handlers";
-import { type MovePlan, planMove, stepAlong, unitCell } from "./movement";
+import { matchGrid, type MovePlan, planMove, stepAlong, unitCell } from "./movement";
+import { cellsWithinSteps } from "./pathfinding";
 import type { MatchState, PassengerEvent, UnitState } from "./state";
 import { cellIndex, isWalkable, ownUnits } from "./state";
 import { isBeside, standGoal } from "./tend";
-import { isTroopCarrier, passengerRoom, TROOP_CARRIER, UNIT_STATS } from "./tuning";
+import { isInfantry, isTroopCarrier, passengerRoom, TROOP_CARRIER } from "./tuning";
 import type { CellPos, EntityId, PlayerId } from "./types";
 
-// Infantry riding in Troop Carriers. Rules:
+// Passengers: Infantry inside Troop Carriers. Rules:
 // - A Passenger is off the Map. It is kept in its Troop Carrier's list and
 //   taken out of the Match's Units, so it holds no Cell, cannot be seen, hit,
 //   Tended or given a Command, does not fire and gives no sight. It keeps its
@@ -24,18 +25,27 @@ import type { CellPos, EntityId, PlayerId } from "./types";
 // - A Troop Carrier that loses health Unloads on that Tick, before the dead are
 //   removed: if it was destroyed, its Passengers get out first and only those
 //   with no free Cell are lost with it.
-// - A Troop Carrier collects once, on the Tick it finishes a move or an
-//   Attack-move that it began with no Passengers and had none on since: idle
-//   Infantry of its own Player within the pick-up radius get in from where
-//   they stand, nearest first and lowest id first among those as near as each
-//   other, while there is room. Idle is the test used everywhere: no Command
-//   in progress, and a Tend a support Unit began by itself counts as one.
+// - Collecting happens once, on the Tick a Troop Carrier finishes a move or an
+//   Attack-move that took it to another Cell, that it began with no Passengers
+//   and had none on since: idle Infantry of its own Player within the
+//   Collecting radius get in from where they stand, nearest first and lowest
+//   id first among those as near as each other, while there is room. Idle is
+//   the test used everywhere: no Command in progress, and a Tend a support
+//   Unit began by itself counts as one.
+// - It takes only those with a short way on foot to a Cell touching its own
+//   (or already in one): a Board Command would have had them walk, so a Unit
+//   across water or behind a wall is no more taken than it could have Boarded.
 // - That is all of it. One that stands takes nobody, so a Unit sent beside a
-//   parked Troop Carrier stays on the Map, and so do those that got out. A
-//   move on which it held a Passenger, or put one out, ends without a pick-up
-//   (Units Unloaded a step from the stop are not gathered up again), and so
-//   does a stop on a Tick it lost health (what it took would be out again at
-//   the next hit). It collects again once it is sent off empty and stops.
+//   parked Troop Carrier stays on the Map, and so do those that got out; a
+//   move that ends in the Cell it began in (sent to where it stands, or with
+//   no way to go) is standing. A move on which it held a Passenger, or put one
+//   out, ends without Collecting (Units Unloaded a step from the stop are not
+//   gathered up again), and so does a stop on a Tick it lost health (what it
+//   took would be out again at the next hit). It is Collecting again once it
+//   is sent off empty and stops somewhere else.
+// - Nothing tells this file that a move began or ended. Each move and
+//   Attack-move order carries how it began (`MoveStart`, which the order types
+//   require), and movement.ts notes the one a Unit begins each Tick on.
 // - Every Unit that gets in or out is noted for the Player views (drawing and
 //   sound), by the two functions every way in and out goes through.
 // - Only own Units and an own target: a Player always sees those, so whether a
@@ -53,21 +63,6 @@ function hasRoom(carrier: UnitState): boolean {
   return carrier.passengers.length < passengerRoom(carrier.kind);
 }
 
-/** The Unit was set on a move or an Attack-move: a Troop Carrier that sets off empty may collect where it stops. */
-export function moveBegins(u: UnitState): void {
-  u.pickUp = isTroopCarrier(u.kind) && u.passengers.length === 0 ? "atStop" : "no";
-}
-
-/** The Unit finished that move: the pick-up, if it still may, is for this Tick's `collectPassengers`. */
-export function moveEnds(u: UnitState): void {
-  if (u.pickUp === "atStop") u.pickUp = "now";
-}
-
-/** A Passenger got in or out: whatever move the Troop Carrier is on no longer ends in a pick-up. */
-function noPickUp(carrier: UnitState): void {
-  carrier.pickUp = "no";
-}
-
 /** The Player's own live Unit with that id that can carry Passengers. */
 function ownCarrier(m: MatchState, player: PlayerId, id: EntityId): UnitState | undefined {
   const u = m.units.get(id);
@@ -79,16 +74,17 @@ function ownCarrier(m: MatchState, player: PlayerId, id: EntityId): UnitState | 
  * decide who may and from how far. False, with nothing changed, when there is
  * no room or the Unit is not on the Map.
  */
-export function enterCarrier(m: MatchState, u: UnitState, carrier: UnitState): boolean {
+function getIn(m: MatchState, u: UnitState, carrier: UnitState): boolean {
   if (u === carrier || !hasRoom(carrier) || m.units.get(u.id) !== u) return false;
   m.units.delete(u.id);
   u.order = { type: "idle" };
-  // A ride is a new start for the Tend targets it found no way to: no look
-  // reaches a Passenger to end those waits, and it will get out somewhere else.
+  // Becoming a Passenger ends its Tend back-offs: no look reaches a Passenger
+  // to end them one by one, and it will get out somewhere else.
   // Its reload is left as it was, or getting in and out would be a way to fire faster.
-  u.unreachable.clear();
+  u.tendBackOff.clear();
   carrier.passengers.push(u);
-  noPickUp(carrier);
+  // Whatever move the Troop Carrier is on no longer ends in Collecting, even if this one is out again before the stop.
+  if ("start" in carrier.order) carrier.order.start.empty = false;
   note(m, "board", u);
   return true;
 }
@@ -99,7 +95,6 @@ export function enterCarrier(m: MatchState, u: UnitState, carrier: UnitState): b
  */
 export function unloadPassengers(m: MatchState, carrier: UnitState): number {
   if (carrier.passengers.length === 0) return 0;
-  noPickUp(carrier);
   const cells = freeCellsBeside(m, carrier);
   const out = carrier.passengers.splice(0, cells.length);
   out.forEach((p, i) => {
@@ -148,7 +143,7 @@ export const handleBoard: CommandHandler<"board"> = (m, player, command): Comman
   if (units.length === 0) return reject("no own Units selected");
   const carrier = ownCarrier(m, player, command.targetId);
   if (!carrier) return reject("target is not an own Troop Carrier");
-  const infantry = units.filter((u) => UNIT_STATS[u.kind].class === "infantry");
+  const infantry = units.filter((u) => isInfantry(u.kind));
   if (infantry.length === 0) return reject("only Infantry can Board");
   for (const u of infantry) u.order = { type: "board", carrierId: carrier.id, walk: null };
   return OK;
@@ -157,6 +152,8 @@ export const handleBoard: CommandHandler<"board"> = (m, player, command): Comman
 export const handleUnload: CommandHandler<"unload"> = (m, player, command): CommandResult => {
   const carriers = ownUnits(m, player, command.unitIds).filter((u) => isTroopCarrier(u.kind));
   if (carriers.length === 0) return reject("no own Troop Carriers selected");
+  // Nothing would happen, and an accepted Command is acknowledged to the person who gave it.
+  if (carriers.every((c) => c.passengers.length === 0)) return reject("no Passengers to Unload");
   for (const carrier of carriers) unloadPassengers(m, carrier);
   return OK;
 };
@@ -169,7 +166,7 @@ function advanceBoard(m: MatchState, u: UnitState, boarding: Boarding): void {
     return;
   }
   const beside = isBeside(unitCell(u), carrier);
-  if (beside && enterCarrier(m, u, carrier)) return;
+  if (beside && getIn(m, u, carrier)) return;
   // Beside a full one while still walking: stop in the Cell being stepped into, not on the far side of it.
   const next = beside ? boarding.walk?.path[0] : undefined;
   if (next && isBeside(next, carrier)) boarding.walk = { goal: next, path: [next] };
@@ -190,7 +187,7 @@ function advanceBoard(m: MatchState, u: UnitState, boarding: Boarding): void {
   }
 }
 
-/** Per-Tick system: walks every Unit on a Board, and takes in those beside their Troop Carrier. */
+/** Per-Tick system: walks every Unit on a Board, and makes Passengers of those beside their Troop Carrier. */
 export function boardTroopCarriers(m: MatchState): void {
   for (const u of m.units.values()) {
     if (u.order.type === "board") advanceBoard(m, u, u.order);
@@ -205,34 +202,56 @@ export function getOutUnderFire(m: MatchState): void {
   }
 }
 
-/** The idle Infantry of the Troop Carrier's Player within the pick-up radius, in the order they are taken in. */
+/**
+ * The Cells a Unit can be taken from when the Troop Carrier is Collecting, as
+ * cellIndex values: its own, those touching it, and those a short way on foot
+ * from one of them.
+ */
+function cellsInWalkingReach(m: MatchState, carrier: UnitState): Set<number> {
+  const at = unitCell(carrier);
+  const beside: CellPos[] = [];
+  for (let y = at.y - 1; y <= at.y + 1; y++) {
+    for (let x = at.x - 1; x <= at.x + 1; x++) if (isWalkable(m, x, y)) beside.push({ x, y });
+  }
+  return cellsWithinSteps(matchGrid(m), beside, TROOP_CARRIER.collectWalk);
+}
+
+/** The idle Infantry of the Troop Carrier's Player it takes when Collecting, in the order it takes them. */
 function idleInfantryNear(m: MatchState, carrier: UnitState): UnitState[] {
   const near: { unit: UnitState; d: number }[] = [];
+  let reach: Set<number> | undefined;
   for (const u of m.units.values()) {
-    if (u.owner !== carrier.owner || u.hp <= 0 || u.order.type !== "idle") continue;
-    if (UNIT_STATS[u.kind].class !== "infantry") continue;
+    if (u.owner !== carrier.owner || u.hp <= 0 || u.order.type !== "idle" || !isInfantry(u.kind)) continue;
     const d = Math.hypot(u.x - carrier.x, u.y - carrier.y);
-    if (d <= TROOP_CARRIER.pickupRadius) near.push({ unit: u, d });
+    if (d > TROOP_CARRIER.collectRadius) continue;
+    // Worked out only once somebody is near enough: most stops are among nobody.
+    reach ??= cellsInWalkingReach(m, carrier);
+    const cell = unitCell(u);
+    if (reach.has(cellIndex(m, cell.x, cell.y))) near.push({ unit: u, d });
   }
-  // The id settles ties: the Match's Units are not in id order once some have ridden and got out.
+  // The id settles ties: the Match's Units are not in id order once some have been Passengers and got out.
   return near.sort((a, b) => a.d - b.d || a.unit.id - b.unit.id).map((n) => n.unit);
 }
 
 /**
- * Per-Tick system, after the fight: each Troop Carrier whose pick-up is for
- * this Tick takes in the idle Infantry near it, unless it lost health on it.
- * It runs before idle support Units look for work, so one that is only about
- * to is taken.
+ * Per-Tick system, after the fight: Collecting. Each Troop Carrier that began
+ * the Tick on a move and now stands idle has just finished it, and takes
+ * the idle Infantry near it if the move brought it to another Cell, it has
+ * been empty since it set off, and it lost no health on this Tick. It runs
+ * before idle support Units look for work, so one that is only about to is
+ * taken.
  */
 export function collectPassengers(m: MatchState): void {
-  // A copy, as the Units taken in leave the Units being walked.
+  // A copy, as the Units it takes leave the Units being walked.
   for (const carrier of [...m.units.values()]) {
-    if (carrier.pickUp !== "now") continue;
-    // Once, taken or not: nothing is left over for a later Tick.
-    noPickUp(carrier);
-    if (m.damaged.has(carrier.id)) continue;
+    const start = carrier.moveAtTickStart;
+    if (!start || carrier.order.type !== "idle" || !isTroopCarrier(carrier.kind)) continue;
+    // One that Boarded on the Tick of the stop got in after the move was over, so the count is asked too.
+    if (!start.empty || carrier.passengers.length > 0 || m.damaged.has(carrier.id)) continue;
+    const at = unitCell(carrier);
+    if (at.x === start.from.x && at.y === start.from.y) continue;
     for (const u of idleInfantryNear(m, carrier)) {
-      if (!enterCarrier(m, u, carrier)) break;
+      if (!getIn(m, u, carrier)) break;
     }
   }
 }
