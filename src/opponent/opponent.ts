@@ -402,9 +402,10 @@ export function createOpponent(playerId: PlayerId, seed: number): Opponent {
    * at each think while a Passenger has no free Cell to get out onto. Once it
    * is empty, there or because it was hit on the way, it leaves the wave and
    * drives home: at the front it would stand alone in the other Player's
-   * way, and the next wave looks for it parked at home. (Nothing else calls
-   * for the drive: a move on which it held or put out a Passenger ends
-   * without Collecting, so it would not take the wave's Riflemen back in.)
+   * way, and the next wave looks for it parked at home. (An Unload
+   * on the way that leaves it empty begins a new drive, so it is Collecting
+   * again where it next stops far enough from there: sent home, that is at
+   * home and not among the wave's Riflemen.)
    */
   function leadCarrier(
     view: PlayerView,

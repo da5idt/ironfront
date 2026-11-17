@@ -52,7 +52,7 @@ import type { CellPos, EntityId, PlayerId } from "./types";
 //   would be out again at the next hit). The distance is a straight line, so
 //   a drive out and back to about where it began ends without it too.
 // - Nothing tells this file that a move began or ended. Each move and
-//   Attack-move order carries how its drive began (`MoveStart`, which the order
+//   Attack-move order carries how its drive began (`DriveStart`, which the order
 //   types require), and movement.ts notes the one a Unit begins each Tick on.
 // - Every Unit that gets in or out is noted for the Player views (drawing and
 //   sound), by the two functions every way in and out goes through.
@@ -92,7 +92,7 @@ function getIn(m: MatchState, u: UnitState, carrier: UnitState): boolean {
   u.tendBackOff.clear();
   carrier.passengers.push(u);
   // The drive the Troop Carrier is on no longer ends in Collecting, unless an Unload on the way begins another.
-  if (isMoveOrAttackMove(carrier.order)) carrier.order.start.empty = false;
+  if (isMoveOrAttackMove(carrier.order)) carrier.order.drive.empty = false;
   note(m, "board", u);
   return true;
 }
@@ -254,7 +254,7 @@ function idleInfantryNear(m: MatchState, carrier: UnitState): UnitState[] {
 export function collectPassengers(m: MatchState): void {
   // A copy, as the Units it takes leave the Units being walked.
   for (const carrier of [...m.units.values()]) {
-    const start = carrier.moveAtTickStart;
+    const start = carrier.driveAtTickStart?.drive;
     if (!start || carrier.order.type !== "idle" || !isTroopCarrier(carrier.kind)) continue;
     // One that Boarded on the Tick of the stop got in after the move was over, so the count is asked too.
     if (!start.empty || carrier.passengers.length > 0 || m.damaged.has(carrier.id)) continue;

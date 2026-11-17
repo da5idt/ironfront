@@ -17,6 +17,7 @@ import {
   addTestBuilding,
   addTestUnit,
   find,
+  LONG_ENOUGH,
   removeTestBuilding,
   run,
   runUntil,
@@ -25,15 +26,13 @@ import {
   snapshot,
   stage,
 } from "./testing/setup";
-import { TEND, TROOP_CARRIER } from "./tuning";
+import { TEND } from "./tuning";
 
 // Staged round Cell (20, 8) of a wide open Map, far from both starting bases in
 // the corners, so only the Units put there take part.
 const ROW = 8;
 const COL = 20;
 const cellOf = (u: UnitView) => ({ x: Math.floor(u.x), y: Math.floor(u.y) });
-/** The fewest whole Cells along a row or a column that make a drive long enough to end in Collecting. */
-const LONG_ENOUGH = Math.ceil(TROOP_CARRIER.collectAfterCells);
 
 /** True when the Unit stands in a Cell touching the other's Cell, corners included, and not in it. */
 function isBeside(match: Match, id: number, otherId: number): boolean {

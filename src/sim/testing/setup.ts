@@ -4,7 +4,11 @@ import { advanceTick, createMatch, getPlayerView, issueCommand, type Match } fro
 import { addBuilding, cellIndex, type MatchState, removeBuilding, spawnUnit } from "../state";
 import type { BuildingKind, CellPos, EntityId, PlayerId, UnitKind, Vec } from "../types";
 import type { UnitView } from "../view";
+import { TROOP_CARRIER } from "../tuning";
 import { openMap } from "./maps";
+
+/** The fewest whole Cells along a row or a column that make a drive long enough to end in Collecting. */
+export const LONG_ENOUGH = Math.ceil(TROOP_CARRIER.collectAfterCells);
 
 /**
  * A Match on a wide open Map. Its starting bases are in the corners, so a test

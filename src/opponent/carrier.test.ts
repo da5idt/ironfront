@@ -175,7 +175,7 @@ describe("Computer Opponent's wave with a Troop Carrier", () => {
   const inside = (match: Match, carrier: number) => sorted(unit(match, carrier)!.passengers!.map((p) => p.id));
   const WAVE_SETS_OFF = OPPONENT.firstWaveTick + 60 * SECONDS;
 
-  it("has five of the wave's Riflemen Board it at home, and sets off with them aboard", () => {
+  it("has as many of the wave's Riflemen as it holds Board it at home, and sets off with them aboard", () => {
     const { match, carrier, wave } = staged();
     let aboardAtSetOff: number[] | null = null;
     const given = play(match, createOpponent(0, 1), WAVE_SETS_OFF, {
@@ -433,7 +433,7 @@ describe("Computer Opponent's waves with a Troop Carrier on Riverford when nothi
     unloaded: { apart: number; inside: number } | null;
   }
 
-  it("brings every Troop Carrier to the gathering point with the wave, and Unloads all five there", () => {
+  it("brings every Troop Carrier to the gathering point with the wave, and Unloads every Passenger there", () => {
     const match = createMatch(RIVERFORD, 7);
     // Player 0 gives no Commands. Its Turrets stop each wave at its base (its HQ is at (4, 4)), so several are sent,
     // and they reach no farther than the gathering points, which are well short of it.
@@ -481,7 +481,7 @@ describe("Computer Opponent's waves with a Troop Carrier on Riverford when nothi
 });
 
 describe("Computer Opponent against itself on Riverford", () => {
-  it("sets a wave off with five Riflemen inside a Troop Carrier it trained, and Unloads them at the gathering point", () => {
+  it("sets a wave off with a Troop Carrier it trained full of Riflemen, and Unloads them at the gathering point", () => {
     const match = createMatch(RIVERFORD, 3);
     const seats = [
       { player: 0 as const, opponent: createOpponent(0, 11) },

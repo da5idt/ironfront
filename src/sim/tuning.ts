@@ -238,6 +238,9 @@ const COLLECT_RADIUS = 2;
  * The farthest from a Troop Carrier, in Cells, that a Unit getting out of it can stand: on the centre of the Cell
  * touching the corner of its own, seen from the far corner of its own Cell, where a Troop Carrier that Unloads on
  * its way may be. One standing on its Cell's centre puts nobody out as far as that.
+ * This is geometry, not a balance number to tune: it follows from Units getting out onto the Cells touching the
+ * Troop Carrier's own, and changes only if that rule does. It is here because `collectAfterCells` is worked out
+ * from it.
  */
 const GET_OUT_REACH = Math.hypot(1.5, 1.5);
 
@@ -252,8 +255,6 @@ export const TROOP_CARRIER = {
    * Building that stands between them, and is too few to get round a river or a long wall.
    */
   collectWalk: 3,
-  /** How far from it, in Cells, a Unit that gets out can stand at the farthest. */
-  getOutReachCells: GET_OUT_REACH,
   /**
    * The least a Troop Carrier must have driven, in Cells in a straight line from where its drive began to where it
    * stopped, to be Collecting there. Its Collecting radius and the farthest a Unit that got out stands from it,

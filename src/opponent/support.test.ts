@@ -233,11 +233,13 @@ describe("Computer Opponent's Medics and the rally point", () => {
   const unit = (match: Match, id: number) => getPlayerView(match, 0).units.find((u) => u.id === id)!;
   /** The staged Map is this many Cells each way. */
   const MAP_CELLS = 40;
+  /** Long enough for a Medic to walk back to the rally point from anywhere on the staged Map. */
+  const WALK_HOME = Math.ceil(MAP_CELLS / UNIT_STATS.medic.speed) * SECONDS;
   /**
    * Longer than the Opponent waits before it takes a Medic to have no way to a hurt Unit, with time over for the
-   * walk back to the rally point from anywhere on the staged Map.
+   * walk back to the rally point.
    */
-  const GIVEN_UP_AND_HOME = OPPONENT.medicGiveUpTicks + Math.ceil(MAP_CELLS / UNIT_STATS.medic.speed) * SECONDS;
+  const GIVEN_UP_AND_HOME = OPPONENT.medicGiveUpTicks + WALK_HOME;
   /** Longer than one Medic takes to Heal a Rifleman from any health. */
   const ONE_HEAL = Math.ceil(UNIT_STATS.rifleman.maxHp / tendRate("medic", "infantry") + 1) * SECONDS;
   /** A Cell near the top of the Map, far from the rally point, that `mapWithIsland` rings with water. */
@@ -265,7 +267,7 @@ describe("Computer Opponent's Medics and the rally point", () => {
     // Given no move while it works: one would end its Tend.
     expect(medicMoves(whileHealing, medic)).toEqual([]);
 
-    const after = play(match, opponent, 30 * SECONDS);
+    const after = play(match, opponent, WALK_HOME);
     expect(medicMoves(after, medic)).toEqual([{ type: "move", unitIds: [medic], target: RALLY }]);
     expect(distanceToCell(RALLY, unit(match, medic))).toBeLessThan(1.5);
   });

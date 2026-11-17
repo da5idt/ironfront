@@ -11,7 +11,7 @@ import {
   type UnitView,
 } from "./index";
 import { openMap, testMap } from "./testing/maps";
-import { addTestBuilding, addTestUnit, find, run, runUntil, setTestCredits, setTestUnitHp, stage } from "./testing/setup";
+import { addTestBuilding, addTestUnit, find, LONG_ENOUGH, run, runUntil, setTestCredits, setTestUnitHp, stage } from "./testing/setup";
 import { BUILDING_STATS, TEND, TROOP_CARRIER } from "./tuning";
 
 // Staged round Cell (20, 8) of a wide open Map, far from both starting bases in
@@ -25,8 +25,6 @@ function stageWithWater(water: readonly CellPos[]): Match {
   for (const cell of water) rows[cell.y]![cell.x] = "~";
   return createMatch(testMap(rows.map((r) => r.join(""))), 1);
 }
-/** The fewest whole Cells along a row that make a drive long enough to end in Collecting. */
-const LONG_ENOUGH = Math.ceil(TROOP_CARRIER.collectAfterCells);
 /** How many Cells before a stop the Troop Carriers staged here set off: a drive well over long enough. */
 const FAR_OFF = 2 * LONG_ENOUGH;
 /** Long enough to show that a Troop Carrier which stands is not Collecting. */
@@ -489,7 +487,7 @@ describe("a Troop Carrier that has stopped and stands", () => {
 
   describe("never takes back a Unit that has just got out, whichever way and however far one move takes it", () => {
     const WAYS = [[1, 0], [1, 1], [0, 1], [-1, 1], [-1, 0], [-1, -1], [0, -1], [1, -1]] as const;
-    /** A Troop Carrier with a full load, so that some get out onto the Cells touching its corners, the farthest there are. */
+    /** A Troop Carrier with every place taken, so that some get out onto the Cells touching its corners, the farthest there are. */
     function full(match: Match, cell: CellPos): number {
       const carrier = addTestUnit(match, 0, "troopCarrier", cell);
       const riflemen = Array.from({ length: TROOP_CARRIER.capacity }, (_, i) =>
@@ -705,7 +703,7 @@ describe("a newly trained Troop Carrier", () => {
     const site = { x: 10, y: 10 };
     addTestBuilding(match, 0, "vehicleFactory", site);
     const factory = getPlayerView(match, 0).buildings.find((b) => b.kind === "vehicleFactory")!.id;
-    // Farther from the Factory's far edge than a drive that ends in Collecting is long, wherever beside it the new Unit appears.
+    // Farther from the Vehicle Factory's far edge than a drive that ends in Collecting is long, wherever beside it the new Unit appears.
     const rally = { x: site.x + BUILDING_STATS.vehicleFactory.width + LONG_ENOUGH + 1, y: site.y + LONG_ENOUGH };
     const beside = addTestUnit(match, 0, "rifleman", { x: rally.x + 1, y: rally.y });
     const below = addTestUnit(match, 0, "rifleman", { x: rally.x, y: rally.y + TROOP_CARRIER.collectRadius });
