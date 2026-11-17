@@ -444,7 +444,7 @@ describe("a Passenger", () => {
     expect(find(match, carrier)).toMatchObject({ x: COL + 0.5, y: ROW + 0.5 });
   });
 
-  it("gets no fresh reload from a ride: a Rifleman that fired, got in and got out does not fire again at once", () => {
+  it("gets no fresh reload from being a Passenger: a Rifleman that fired, got in and got out does not fire again at once", () => {
     const match = stage();
     const carrier = addTestUnit(match, 0, "troopCarrier", { x: COL, y: ROW });
     const rifleman = addTestUnit(match, 0, "rifleman", BESIDE[0]);
@@ -527,7 +527,7 @@ describe("a Passenger", () => {
     expect(isBeside(match, mechanic, raider)).toBe(true);
     ticks += TEND.seekTicks + 2;
     run(match, TEND.seekTicks + 2);
-    // Well inside the back-off it had before the ride.
+    // Well inside the back-off it had before it Boarded.
     expect(ticks).toBeLessThan(TEND.backOffTicks);
     expect(find(match, raider)!.hp).toBeGreaterThan(30);
   });

@@ -41,7 +41,7 @@ function base(extra: readonly BuildingKind[], map?: MapDef): Match {
 
 /** Plays `player` as the Opponent for `ticks` and returns every Command it gave. */
 function play(match: Match, opponent: Opponent, ticks: number, player: PlayerId = 0): Command[] {
-  return stagedPlay(match, opponent, ticks, undefined, undefined, player).map((g) => g.command);
+  return stagedPlay(match, opponent, ticks, { player }).map((g) => g.command);
 }
 
 /** Thinks once and issues what comes back, as the client does. */
@@ -109,13 +109,16 @@ describe("Computer Opponent's Medics and Mechanics", () => {
     const opponent = opponentPastItsFirstWave(match);
     play(match, opponent, 90 * SECONDS);
     setTestCredits(match, 0, PLENTY);
-    const view = getPlayerView(match, 0);
-    const lost = (kind: UnitKind) => {
-      const gone = view.units.find((u) => u.owner === 0 && u.kind === kind)!;
-      return { ...view, units: view.units.filter((u) => u !== gone) };
+    // Destroyed: the next Tick takes it off the Map, and the Opponent's next view is without it.
+    const lose = (kind: UnitKind): void => {
+      setTestUnitHp(match, getPlayerView(match, 0).units.find((u) => u.owner === 0 && u.kind === kind)!.id, 0);
+      advanceTick(match);
+      expect(count(match, kind)).toBe(OPPONENT[kind === "medic" ? "mostMedics" : "mostMechanics"] - 1);
     };
-    expect(opponent.think(lost("medic"))).toContainEqual({ type: "train", buildingId: own(match, "hospital").id, kind: "medic" });
-    expect(opponent.think(lost("mechanic"))).toContainEqual({
+    lose("medic");
+    expect(thinkOnce(match, opponent)).toContainEqual({ type: "train", buildingId: own(match, "hospital").id, kind: "medic" });
+    lose("mechanic");
+    expect(thinkOnce(match, opponent)).toContainEqual({
       type: "train",
       buildingId: own(match, "vehicleFactory").id,
       kind: "mechanic",
@@ -183,11 +186,11 @@ describe("Computer Opponent's Mechanics and its damaged Buildings", () => {
     const opponent = createOpponent(0, 1);
     const tend = { type: "tend", unitIds: [mechanic], targetId: hospital.id };
     // Half the time it leaves the Building alone for: the one Command, and none after the Mechanic has stopped.
-    expect(tends(play(match, opponent, OPPONENT.tendRetryTicks / 2))).toEqual([tend]);
+    expect(tends(play(match, opponent, OPPONENT.tendBackOffTicks / 2))).toEqual([tend]);
     const waiting = getPlayerView(match, 0).units.find((u) => u.id === mechanic)!;
     expect(Math.hypot(waiting.x - RALLY.x, waiting.y - RALLY.y)).toBeLessThan(3);
     // Then it is tried once more, as the way may have opened.
-    expect(tends(play(match, opponent, OPPONENT.tendRetryTicks))).toEqual([tend]);
+    expect(tends(play(match, opponent, OPPONENT.tendBackOffTicks))).toEqual([tend]);
   });
 
   it("spreads two Mechanics over two damaged Buildings, the worse off first", () => {
@@ -219,6 +222,8 @@ describe("Computer Opponent's Mechanics and its damaged Buildings", () => {
 
 describe("Computer Opponent's Medics and the rally point", () => {
   const RALLY = { x: 6, y: 6 };
+  /** Half the seek radius: how far from the rally point the Opponent lets a Medic stand. */
+  const STRAYED_AT_MOST = TEND.seekRadius / 2;
   const medicMoves = (commands: readonly Command[], medic: number) =>
     commands.filter((c) => c.type === "move" && c.unitIds.includes(medic));
 
@@ -243,6 +248,38 @@ describe("Computer Opponent's Medics and the rally point", () => {
     const after = play(match, opponent, 30 * SECONDS);
     expect(medicMoves(after, medic)).toEqual([{ type: "move", unitIds: [medic], target: RALLY }]);
     expect(Math.hypot(unit(medic).x - (RALLY.x + 0.5), unit(medic).y - (RALLY.y + 0.5))).toBeLessThan(1.5);
+  });
+
+  it("sends a strayed Medic back although a hurt Rifleman is near, when that one is on the move and so never Healed by it", () => {
+    const match = base([...BUILD_ORDER_DONE, "hospital"]);
+    const medic = addTestUnit(match, 0, "medic", { x: 16, y: 8 });
+    // Up and down a line three Cells from the Medic, so never farther from it than the seek radius, and never standing.
+    const ends = [
+      { x: 19, y: 5 },
+      { x: 19, y: 11 },
+    ];
+    const hurt = addTestUnit(match, 0, "rifleman", ends[0]!);
+    setTestUnitHp(match, hurt, 10);
+    const opponent = createOpponent(0, 1);
+    const unit = (id: number) => getPlayerView(match, 0).units.find((u) => u.id === id)!;
+
+    const given: Command[] = [];
+    let goal = 1;
+    let farthest = 0;
+    expect(issueCommand(match, 0, { type: "move", unitIds: [hurt], target: ends[goal]! })).toEqual({ ok: true });
+    for (let t = 0; t < 20 * SECONDS; t += THINK_EVERY_TICKS) {
+      given.push(...play(match, opponent, THINK_EVERY_TICKS));
+      const at = unit(hurt);
+      if (!medicMoves(given, medic).length) farthest = Math.max(farthest, Math.hypot(at.x - unit(medic).x, at.y - unit(medic).y));
+      // Turned round well before it would stop.
+      if (Math.hypot(at.x - (ends[goal]!.x + 0.5), at.y - (ends[goal]!.y + 0.5)) > 1.5) continue;
+      goal = 1 - goal;
+      expect(issueCommand(match, 0, { type: "move", unitIds: [hurt], target: ends[goal]! })).toEqual({ ok: true });
+    }
+    expect(farthest).toBeLessThanOrEqual(TEND.seekRadius);
+    expect(unit(hurt).hp).toBe(10);
+    expect(medicMoves(given, medic)).toEqual([{ type: "move", unitIds: [medic], target: RALLY }]);
+    expect(Math.hypot(unit(medic).x - (RALLY.x + 0.5), unit(medic).y - (RALLY.y + 0.5))).toBeLessThan(STRAYED_AT_MOST);
   });
 });
 

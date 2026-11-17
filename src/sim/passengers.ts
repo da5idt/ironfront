@@ -9,7 +9,7 @@ import { isBeside, standGoal } from "./tend";
 import { isInfantry, isTroopCarrier, passengerRoom, TROOP_CARRIER } from "./tuning";
 import type { CellPos, EntityId, PlayerId } from "./types";
 
-// Infantry riding in Troop Carriers. Rules:
+// Passengers: Infantry inside Troop Carriers. Rules:
 // - A Passenger is off the Map. It is kept in its Troop Carrier's list and
 //   taken out of the Match's Units, so it holds no Cell, cannot be seen, hit,
 //   Tended or given a Command, does not fire and gives no sight. It keeps its
@@ -78,8 +78,8 @@ function getIn(m: MatchState, u: UnitState, carrier: UnitState): boolean {
   if (u === carrier || !hasRoom(carrier) || m.units.get(u.id) !== u) return false;
   m.units.delete(u.id);
   u.order = { type: "idle" };
-  // A ride is a new start for the Tend targets it found no way to: no look
-  // reaches a Passenger to end those waits, and it will get out somewhere else.
+  // Becoming a Passenger ends its Tend back-offs: no look reaches a Passenger
+  // to end them one by one, and it will get out somewhere else.
   // Its reload is left as it was, or getting in and out would be a way to fire faster.
   u.tendBackOff.clear();
   carrier.passengers.push(u);
@@ -187,7 +187,7 @@ function advanceBoard(m: MatchState, u: UnitState, boarding: Boarding): void {
   }
 }
 
-/** Per-Tick system: walks every Unit on a Board, and takes in those beside their Troop Carrier. */
+/** Per-Tick system: walks every Unit on a Board, and makes Passengers of those beside their Troop Carrier. */
 export function boardTroopCarriers(m: MatchState): void {
   for (const u of m.units.values()) {
     if (u.order.type === "board") advanceBoard(m, u, u.order);
@@ -216,7 +216,7 @@ function cellsInWalkingReach(m: MatchState, carrier: UnitState): Set<number> {
   return cellsWithinSteps(matchGrid(m), beside, TROOP_CARRIER.collectWalk);
 }
 
-/** The idle Infantry of the Troop Carrier's Player it takes when Collecting, in the order they are taken in. */
+/** The idle Infantry of the Troop Carrier's Player it takes when Collecting, in the order it takes them. */
 function idleInfantryNear(m: MatchState, carrier: UnitState): UnitState[] {
   const near: { unit: UnitState; d: number }[] = [];
   let reach: Set<number> | undefined;
@@ -229,20 +229,20 @@ function idleInfantryNear(m: MatchState, carrier: UnitState): UnitState[] {
     const cell = unitCell(u);
     if (reach.has(cellIndex(m, cell.x, cell.y))) near.push({ unit: u, d });
   }
-  // The id settles ties: the Match's Units are not in id order once some have ridden and got out.
+  // The id settles ties: the Match's Units are not in id order once some have been Passengers and got out.
   return near.sort((a, b) => a.d - b.d || a.unit.id - b.unit.id).map((n) => n.unit);
 }
 
 /**
  * Per-Tick system, after the fight: Collecting. Each Troop Carrier that began
- * the Tick on a move and now stands idle has just finished it, and takes in
+ * the Tick on a move and now stands idle has just finished it, and takes
  * the idle Infantry near it if the move brought it to another Cell, it has
  * been empty since it set off, and it lost no health on this Tick. It runs
  * before idle support Units look for work, so one that is only about to is
  * taken.
  */
 export function collectPassengers(m: MatchState): void {
-  // A copy, as the Units taken in leave the Units being walked.
+  // A copy, as the Units it takes leave the Units being walked.
   for (const carrier of [...m.units.values()]) {
     const start = carrier.moveAtTickStart;
     if (!start || carrier.order.type !== "idle" || !isTroopCarrier(carrier.kind)) continue;

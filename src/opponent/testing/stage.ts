@@ -42,18 +42,18 @@ export interface Given {
   readonly command: Command;
 }
 
-/**
- * Plays `player` as the Opponent for `ticks`, or until `done`, and returns every Command it gave.
- * `before` is called with each Command just before it is issued, so a test can stage what it meets.
- */
-export function play(
-  match: Match,
-  opponent: Opponent,
-  ticks: number,
-  done?: (given: readonly Given[]) => boolean,
-  before?: (command: Command) => void,
-  player: PlayerId = 0,
-): Given[] {
+export interface PlayOptions {
+  /** Asked after each think with every Command given so far; play ends when it says so. */
+  readonly done?: (given: readonly Given[]) => boolean;
+  /** Called with each Command just before it is issued, so a test can stage what it meets. */
+  readonly before?: (command: Command) => void;
+  /** The Player the Opponent plays; Player 0 unless given. */
+  readonly player?: PlayerId;
+}
+
+/** Plays the Opponent for `ticks`, or until `done`, and returns every Command it gave. */
+export function play(match: Match, opponent: Opponent, ticks: number, options: PlayOptions = {}): Given[] {
+  const { done, before, player = 0 } = options;
   const given: Given[] = [];
   for (let t = 0; t < ticks && getMatchStatus(match).state === "running"; t++) {
     if (t % THINK_EVERY_TICKS === 0) {

@@ -1,4 +1,4 @@
-import { type CellPos, type Command, type EntityId, isTroopCarrier, type PlayerView, type UnitView } from "../sim";
+import { type CellPos, type Command, type EntityId, isTroopCarrier, OPPONENT, type PlayerView, type UnitView } from "../sim";
 import { hqCentre, isOpenGround, type Standing } from "./base";
 import { rallyPoint } from "./economy";
 import { distanceToCell, STUCK_THINKS } from "./tactics";
@@ -14,15 +14,17 @@ import { distanceToCell, STUCK_THINKS } from "./tactics";
 export interface CarrierMemory {
   /**
    * Whether each is on its way to its parking Cell, on its way there a second
-   * time after stopping short of it, or parked.
+   * time after stopping short of it, parked, or stopped far from it.
    */
-  readonly parking: Map<EntityId, "driving" | "drivingAgain" | "parked">;
+  readonly parking: Map<EntityId, "driving" | "drivingAgain" | "parked" | "farOff">;
+  /** For each stopped far from its parking Cell, the Tick from which it is sent there again. */
+  readonly sendAgainAt: Map<EntityId, number>;
   /** Units a Troop Carrier at home was told to put out, to send back once they are seen on the Map. */
   readonly putOut: Set<EntityId>;
 }
 
 export function createCarrierMemory(): CarrierMemory {
-  return { parking: new Map(), putOut: new Set() };
+  return { parking: new Map(), sendAgainAt: new Map(), putOut: new Set() };
 }
 
 /**
@@ -90,7 +92,11 @@ export function isParked(memory: CarrierMemory, carrier: UnitView): boolean {
 /**
  * Commands for the Troop Carriers at home, which is every own one not `away`
  * with a wave: drive to the parking Cell, and Unload anyone inside. One that
- * stops short of the parking Cell is sent once more, then counts as parked.
+ * stops short of the parking Cell is sent once more. If it stops short again
+ * it counts as parked where it stands, but only near home: one far off, as a
+ * Troop Carrier recalled from the front can be, is never parked, or the next
+ * wave would be told to Board it out there. That one is sent again now and
+ * then, as its way home may open.
  */
 export function parkCommands(
   view: PlayerView,
@@ -99,7 +105,11 @@ export function parkCommands(
   away: EntityId | null,
 ): Command[] {
   const carriers = ownCarriers(view);
-  for (const id of memory.parking.keys()) if (!carriers.some((c) => c.id === id)) memory.parking.delete(id);
+  for (const id of memory.parking.keys()) {
+    if (carriers.some((c) => c.id === id)) continue;
+    memory.parking.delete(id);
+    memory.sendAgainAt.delete(id);
+  }
   const commands: Command[] = [];
 
   const outNow = view.units.filter((u) => memory.putOut.has(u.id)).map((u) => u.id);
@@ -117,14 +127,20 @@ export function parkCommands(
     }
     const parking = memory.parking.get(carrier.id);
     if (parking === "parked" || (parking !== undefined && standing.thinks(carrier.id) < STUCK_THINKS)) continue;
-    const arrived = distanceToCell(parkingCell(view), carrier) <= PARKED_WITHIN;
-    // Stopped short twice, it has no way there: it waits where it is, where a wave can still Board it.
-    // Sent a third time it would stop short again, think after think, and never count as parked.
-    if (parking === "drivingAgain" || (parking === "driving" && arrived)) {
+    if (parking === "farOff" && view.tick < memory.sendAgainAt.get(carrier.id)!) continue;
+    const short = distanceToCell(parkingCell(view), carrier);
+    // Stopped short twice, it has no way there. Sent a third time at once it would stop short again, think
+    // after think. Near home it waits where it is, where a wave can still Board it; far off it waits to be sent.
+    if ((parking === "driving" && short <= PARKED_WITHIN) || (parking === "drivingAgain" && short <= OPPONENT.parkedNearCells)) {
       memory.parking.set(carrier.id, "parked");
       continue;
     }
-    // New, or stopped somewhere else on its way: it is sent, the second time for the last.
+    if (parking === "drivingAgain") {
+      memory.parking.set(carrier.id, "farOff");
+      memory.sendAgainAt.set(carrier.id, view.tick + OPPONENT.parkAgainTicks);
+      continue;
+    }
+    // New, stopped somewhere else on its way, or far off and due again: it is sent, and once more if it stops short.
     commands.push(driveToParking(view, memory, standing, carrier));
     if (parking === "driving") memory.parking.set(carrier.id, "drivingAgain");
   }

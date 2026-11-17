@@ -80,7 +80,7 @@ function driveUp(match: Match, stop: CellPos = STOP): number {
 }
 
 describe("an empty Troop Carrier that finishes a move", () => {
-  it("tells its Player of each Unit it takes in, where that Unit stood, as a Board by Command does", () => {
+  it("tells its Player of each Unit it takes when Collecting, where that Unit stood, as a Board by Command does", () => {
     const match = stage();
     const rifleman = addTestUnit(match, 0, "rifleman", at(2, 0));
     const carrier = addTestUnit(match, 0, "troopCarrier", { x: STOP.x - 8, y: STOP.y });
@@ -91,7 +91,7 @@ describe("an empty Troop Carrier that finishes a move", () => {
     ]);
   });
 
-  it("takes in the nearest five of seven idle Riflemen, nearest first, and leaves two where they stand", () => {
+  it("takes the nearest five of seven idle Riflemen, nearest first, and leaves two where they stand", () => {
     const match = stage();
     // Made in an order that is neither nearest first nor farthest first.
     const far0 = addTestUnit(match, 0, "rifleman", at(0, 2));
@@ -116,7 +116,7 @@ describe("an empty Troop Carrier that finishes a move", () => {
     const carrier = addTestUnit(match, 0, "troopCarrier", STOP);
     const low = addTestUnit(match, 0, "rifleman", at(0, -1));
     const high = addTestUnit(match, 0, "rifleman", at(2, -1));
-    // A ride and back out puts the lower id after the higher one among the Match's Units.
+    // Boarding and getting out again puts the lower id after the higher one among the Match's Units.
     expect(issueCommand(match, 0, { type: "board", unitIds: [low], targetId: carrier })).toEqual({ ok: true });
     run(match, 1);
     expect(passengerIds(match, carrier)).toEqual([low]);

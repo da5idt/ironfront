@@ -238,7 +238,8 @@ export const TROOP_CARRIER = {
   collectRadius: 2,
   /**
    * Most steps on foot, Cell to Cell, between a Unit it takes when Collecting and a Cell touching its own.
-   * One more than open ground ever asks within the radius, so a corner in the way is walked round and a river is not.
+   * On open ground a Unit within the radius is one step away at most. Three lets it round the corner of a wall or a
+   * Building that stands between them, and is too few to get round a river or a long wall.
    */
   collectWalk: 3,
 } as const;
@@ -323,8 +324,15 @@ export const OPPONENT = {
   dangerTicks: 60 * TICKS_PER_SECOND,
   /** Once the enemy base is found, the scout explores everything this many Cells from the HQ, looking for Ore. */
   homeExploreRadius: 28,
-  /** How long a Mechanic that found no way to a damaged Building is kept off it before it is sent there again. */
-  tendRetryTicks: 60 * TICKS_PER_SECOND,
+  /** The Opponent's own Tend back-off: how long it gives a Mechanic that found no way to a damaged Building no Tend Command onto it. */
+  tendBackOffTicks: 60 * TICKS_PER_SECOND,
+  /**
+   * How near its Parking Cell, in Cells, a Troop Carrier that found no way onto it still counts as parked where it
+   * stopped: about as far as the rally point is, so the Riflemen who Board it have a short walk and it is still at home.
+   */
+  parkedNearCells: 8,
+  /** How long a Troop Carrier that stopped farther from its Parking Cell than that waits before it is sent there again. */
+  parkAgainTicks: 30 * TICKS_PER_SECOND,
 } as const;
 
 export const TRAINING = {
