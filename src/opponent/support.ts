@@ -12,7 +12,7 @@ import {
 } from "../sim";
 import { ownBuildings, ownPassengers, type Standing } from "./base";
 import { rallyPoint } from "./economy";
-import { DEFEND_RADIUS, distanceTo, distanceToCell, nearest, STUCK_THINKS } from "./tactics";
+import { DEFEND_RADIUS, distanceTo, distanceToCell, STUCK_THINKS } from "./tactics";
 
 // The Computer Opponent's support Units once they are trained. Medics need no
 // Command to work: they wait at the rally point and Heal by themselves whoever
@@ -168,7 +168,7 @@ export function createMedicMemory(): MedicMemory {
  * A move back to the rally point for Medics that Healing has led away from
  * it: each walk to someone hurt can end a few Cells farther off, and over a
  * long Match that adds up to a Medic out of reach of the Units that come home.
- * A Medic gets no move while one would end a Tend: while it is taken to be Healing, and
+ * A Medic gets no move while one would end a Tend: while it is Healing, and
  * while a hurt Infantry Unit stands still within its seek radius, which it
  * goes to by itself. One that is hurt but on the move it never goes to, so
  * that one does not keep it out. Nor does one it has no way to, across water
@@ -196,18 +196,8 @@ export function medicCommands(view: PlayerView, memory: MedicMemory, standing: S
   const canHeal = own.filter((u) => tendRate("medic", UNIT_STATS[u.kind].class) > 0);
   // Standing where it stood at the last think: the Opponent's own count, as a view does not say who is moving.
   const hurtAndStill = canHeal.filter((u) => u.hp < u.maxHp && standing.thinks(u.id) > 0);
-  const beingHealed = view.tends.filter((t) => canHeal.some((u) => u.id === t.targetId));
-  /**
-   * Whether the Medic is taken to be Healing: the view names the target of a Tend, not who works on it. The Medic
-   * nearest a Unit being Healed is the one at it, the lowest id of those as near as each other. Any other Medic as
-   * near as that is at it too when the Unit stands still, as an idle Medic Heals such a one by itself; when the
-   * Unit is on the move it goes to nobody by itself, so it is only standing by and that Heal is not its work.
-   */
-  const isHealing = (u: UnitView): boolean =>
-    beingHealed.some((t) => {
-      if (t.targetId === u.id || distanceTo(u, t) > OPPONENT.medicHealingCells) return false;
-      return standing.thinks(t.targetId) > 0 || nearest(medics.filter((m) => m.id !== t.targetId), t) === u;
-    });
+  /** Whether the Medic is Healing: the view names who is at work on each Tend, so one only standing by is not. */
+  const isHealing = (u: UnitView): boolean => view.tends.some((t) => t.unitIds.includes(u.id));
   const { hurtAndStillSince } = memory;
   forgetGone(hurtAndStillSince, (id) => hurtAndStill.some((h) => h.id === id));
   for (const h of hurtAndStill) if (!hurtAndStillSince.has(h.id)) hurtAndStillSince.set(h.id, view.tick);

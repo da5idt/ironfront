@@ -7,7 +7,7 @@ import {
   type Visibility,
   visibilityAt,
 } from "./fog";
-import { cellIndex, type MatchState, type PassengerEvent } from "./state";
+import { cellIndex, type MatchState, type PassengerEvent, type UnitState } from "./state";
 import { type TrainingView, trainingView } from "./training";
 import { BUILDING_STATS, UNIT_STATS } from "./tuning";
 import type { BuildingKind, EntityId, PlayerId, Terrain, UnitKind } from "./types";
@@ -110,7 +110,10 @@ export interface PlayerView {
    * Units and Buildings worked on by a Tend during the last Tick, for drawing
    * and sound, under Fog of War. A target is listed on every Tick it is worked
    * on, also the Ticks that add no whole point of health: the Player's own
-   * always, the other Player's only where the target can be seen now.
+   * always, the other Player's only where the target can be seen now. Each
+   * names the support Units at work on it under the same rule: the Player's
+   * own always, the other Player's only those standing where they can be seen
+   * now.
    */
   readonly tends: readonly TendView[];
   /**
@@ -138,6 +141,8 @@ export interface ShotView {
 /** One target being worked on by a Tend. The target is in this view's `units` or `buildings` under the same id. */
 export interface TendView {
   readonly targetId: EntityId;
+  /** The support Units at work on it that this view shows, lowest id first. Each is in this view's `units`. */
+  readonly unitIds: readonly EntityId[];
   /** The target's position in Cell units: a Unit's own, or the centre of a Building's footprint. */
   readonly x: number;
   readonly y: number;
@@ -177,16 +182,19 @@ function visibleShots(m: MatchState, fog: PlayerFog): ShotView[] {
 
 /** The Tends a Player may see; the rule is on PlayerView.tends. */
 function visibleTends(m: MatchState, playerId: PlayerId, fog: PlayerFog): TendView[] {
+  const seen = (u: UnitState | undefined): u is UnitState =>
+    u !== undefined && (u.owner === playerId || isVisible(fog, cellIndex(m, Math.floor(u.x), Math.floor(u.y))));
   const tends: TendView[] = [];
   for (const t of m.tends) {
+    const unitIds = t.unitIds.filter((id) => seen(m.units.get(id))).sort((a, b) => a - b);
     const u = m.units.get(t.targetId);
     if (u) {
-      if (u.owner === playerId || isVisible(fog, cellIndex(m, Math.floor(u.x), Math.floor(u.y)))) tends.push({ ...t, x: u.x, y: u.y });
+      if (seen(u)) tends.push({ ...t, unitIds, x: u.x, y: u.y });
       continue;
     }
     const b = m.buildings.get(t.targetId);
     if (b && (b.owner === playerId || isFootprintVisible(m, fog, b))) {
-      tends.push({ ...t, x: b.x + b.width / 2, y: b.y + b.height / 2 });
+      tends.push({ ...t, unitIds, x: b.x + b.width / 2, y: b.y + b.height / 2 });
     }
   }
   return tends;

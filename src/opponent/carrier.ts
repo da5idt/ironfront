@@ -68,7 +68,7 @@ export function parkingCell(view: PlayerView): CellPos {
   return rallyPoint(view);
 }
 
-/** Sends a Troop Carrier to its Parking Cell and notes that it is on its way, for the first time unless said. */
+/** Sends a Troop Carrier to its Parking Cell and notes that it is on its way there: `state` says whether for the first time or again. */
 export function driveToParking(
   view: PlayerView,
   memory: CarrierMemory,

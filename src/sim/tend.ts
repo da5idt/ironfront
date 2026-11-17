@@ -210,7 +210,9 @@ function advanceTend(m: MatchState, u: UnitState, tending: Tending): void {
   target.hp = Math.min(full, target.hp + due(tending.workedTicks + 1) - due(tending.workedTicks));
   tending.workedTicks++;
   // Once for a target, however many Units are at work on it: it is one effect to draw and hear.
-  if (!m.tends.some((t) => t.targetId === target.id)) m.tends.push({ targetId: target.id, tick: m.tick });
+  const tended = m.tends.find((t) => t.targetId === target.id);
+  if (tended) tended.unitIds.push(u.id);
+  else m.tends.push({ targetId: target.id, unitIds: [u.id], tick: m.tick });
 }
 
 /** Ends a Tend the Unit found no way to the target of, and starts the Tend back-off so it does not come straight back by itself. */

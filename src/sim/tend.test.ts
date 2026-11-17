@@ -449,7 +449,7 @@ describe("what a Player view shows of a Tend", () => {
       advanceTick(match);
       const tends = getPlayerView(match, 0).tends;
       if (tends.length > 0) {
-        expect(tends).toEqual([{ targetId: patient, x: 20.5, y: ROW + 0.5, tick }]);
+        expect(tends).toEqual([{ targetId: patient, unitIds: [medic], x: 20.5, y: ROW + 0.5, tick }]);
         worked.push(tick);
       } else {
         // Health only ever goes up on a Tick that is listed.
@@ -463,13 +463,19 @@ describe("what a Player view shows of a Tend", () => {
     expect(hp(match, patient)).toBe(FULL);
   });
 
-  it("lists a target once however many Medics are at work on it", () => {
+  it("lists a target once however many Medics are at work on it, with each of them and not one that only stands by", () => {
     const match = stage();
     const patient = hurt(match, 0, "rifleman", 20, ROW, 5);
     const medics = [addTestUnit(match, 0, "medic", { x: 19, y: ROW }), addTestUnit(match, 0, "medic", { x: 21, y: ROW })];
+    // As near as the two at work, and held by a stop Command given every Tick so it never sets to work by itself.
+    const standingBy = addTestUnit(match, 0, "medic", { x: 20, y: ROW + 1 });
     tend(match, medics, patient);
-    run(match, 3);
+    for (let t = 0; t < 3; t++) {
+      issueCommand(match, 0, { type: "stop", unitIds: [standingBy] });
+      advanceTick(match);
+    }
     expect(getPlayerView(match, 0).tends).toHaveLength(1);
+    expect(getPlayerView(match, 0).tends[0]!.unitIds).toEqual(medics);
   });
 
   it("shows the other Player a Tend only where that Player can see the target", () => {
@@ -486,6 +492,22 @@ describe("what a Player view shows of a Tend", () => {
     run(match, 3);
     expect(getPlayerView(match, 1).tends).toEqual(getPlayerView(match, 0).tends);
     expect(getPlayerView(match, 1).tends).toHaveLength(1);
+  });
+
+  it("names to the other Player only the Medics at work that stand where that Player can see them", () => {
+    const match = stage();
+    const patient = hurt(match, 0, "rifleman", 20, ROW, 5);
+    const sight = UNIT_STATS.harvester.sight;
+    // The other Player's Harvester sees the patient at the edge of its sight, and the Medic on the near side only.
+    const near = addTestUnit(match, 0, "medic", { x: 21, y: ROW });
+    const far = addTestUnit(match, 0, "medic", { x: 19, y: ROW });
+    const watcher = addTestUnit(match, 1, "harvester", { x: 20 + Math.floor(sight), y: ROW });
+    issueCommand(match, 1, { type: "stop", unitIds: [watcher] });
+    tend(match, [near, far], patient);
+    run(match, 3);
+    expect(getPlayerView(match, 0).tends[0]!.unitIds).toEqual([near, far]);
+    expect(getPlayerView(match, 1).units.map((u) => u.id)).not.toContain(far);
+    expect(getPlayerView(match, 1).tends.map((t) => [t.targetId, t.unitIds])).toEqual([[patient, [near]]]);
   });
 });
 

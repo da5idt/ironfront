@@ -256,10 +256,11 @@ export const TROOP_CARRIER = {
    */
   collectWalk: 3,
   /**
-   * The least a Troop Carrier must have driven, in Cells in a straight line from where its drive began to where it
-   * stopped, to be Collecting there. Its Collecting radius and the farthest a Unit that got out stands from it,
-   * together: whichever way it drives that far from where it put its Passengers out, even straight over one of
-   * them, every one is left beyond its reach, so no nudge among them gathers any up again.
+   * What a Troop Carrier must have driven more than, in Cells in a straight line from where its Drive began to
+   * where it stopped, to be Collecting there; a stop must be more than this from anywhere it put Passengers out,
+   * too. Its Collecting radius and the farthest a Unit that got out stands from it, together: whichever way it
+   * drives more than that from where it put its Passengers out, even straight over one of them, every one is left
+   * beyond its reach, so no nudge among them gathers any up again. More than, as a Unit at the radius exactly is taken.
    */
   collectAfterCells: COLLECT_RADIUS + GET_OUT_REACH,
 } as const;
@@ -312,7 +313,7 @@ export const ECONOMY = {
 
 /**
  * The most, in Cells, between two Units standing on the centres of Cells that touch, rounded up: a little over the
- * distance cornerwise. The Opponent measures with it because its view gives positions, not who is working on what.
+ * distance cornerwise. The Opponent tells with it whether a Mechanic stopped where it can be at work on its Building.
  */
 const IN_TOUCHING_CELL = 1.5;
 
@@ -362,11 +363,6 @@ export const OPPONENT = {
    */
   mechanicAtWorkCells: IN_TOUCHING_CELL,
   /**
-   * How near a Unit being Healed, in Cells, a Medic counts as near enough to be the one Healing it: in a Cell
-   * touching that Unit's.
-   */
-  medicHealingCells: IN_TOUCHING_CELL,
-  /**
    * How far from the rally point, in Cells, a Medic may stand before it is sent back: half the seek radius, so
    * the Units that come home and stop round the rally point are still within its seek radius.
    */
@@ -381,7 +377,7 @@ export const OPPONENT = {
    */
   medicGiveUpTicks: 8 * TEND.seekTicks,
   /**
-   * How near its Parking Cell, in Cells, a Troop Carrier that stopped on its first drive there counts as parked:
+   * How near its Parking Cell, in Cells, a Troop Carrier that stopped on its first Drive there counts as parked:
    * other Units may stand on the Cell itself, and this near is as good.
    */
   parkedWithinCells: 3,

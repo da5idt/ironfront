@@ -17,7 +17,7 @@ import {
   addTestBuilding,
   addTestUnit,
   find,
-  LONG_ENOUGH,
+  LONG_DRIVE,
   removeTestBuilding,
   run,
   runUntil,
@@ -468,7 +468,7 @@ describe("a Passenger", () => {
     run(match, 1);
     expect(find(match, medic)).toMatchObject({ x: stood.x, y: stood.y });
     // An empty Troop Carrier stops beside the Medic and Collects it while the patient still marches: no Command names the Medic.
-    const carrier = addTestUnit(match, 0, "troopCarrier", { x: Math.floor(stood.x), y: ROW + 1 + LONG_ENOUGH });
+    const carrier = addTestUnit(match, 0, "troopCarrier", { x: Math.floor(stood.x), y: ROW + 1 + LONG_DRIVE });
     issueCommand(match, 0, { type: "move", unitIds: [carrier], target: { x: Math.floor(stood.x), y: ROW + 1 } });
     runUntil(match, () => passengerIds(match, carrier).length === 1);
     expect(passengerIds(match, carrier)).toEqual([medic]);
@@ -505,7 +505,7 @@ describe("a Passenger", () => {
     // Two looks, the first to see that the Raider stands still: it stands as near as it can get already, so it gives up on the spot and backs off.
     let ticks = 2 * TEND.seekTicks;
     run(match, ticks);
-    const carrier = addTestUnit(match, 0, "troopCarrier", { x: 17, y: 15 - LONG_ENOUGH });
+    const carrier = addTestUnit(match, 0, "troopCarrier", { x: 17, y: 15 - LONG_DRIVE });
     issueCommand(match, 0, { type: "move", unitIds: [carrier], target: { x: 17, y: 15 } });
     ticks += runUntil(match, () => passengerIds(match, carrier).length === 1);
     expect(passengerIds(match, carrier)).toEqual([mechanic]);

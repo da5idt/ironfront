@@ -2,7 +2,7 @@ import { buildProgress, deliverFreeHarvesters, dropOrphanedProduction } from "./
 import { fight, removeDead } from "./combat";
 import { updateFog } from "./fog";
 import { harvestOre } from "./harvest";
-import { moveUnits, noteMoves } from "./movement";
+import { moveUnits, noteMovesAtTickStart } from "./movement";
 import { boardTroopCarriers, collectPassengers, forgetShownPassengerEvents, getOutUnderFire } from "./passengers";
 import { tendTargets } from "./tend";
 import { trainUnits } from "./training";
@@ -23,7 +23,7 @@ export type System = (m: MatchState) => void;
 
 export const SYSTEMS: readonly System[] = [
   forgetShownPassengerEvents,
-  noteMoves,
+  noteMovesAtTickStart,
   buildProgress,
   trainUnits,
   deliverFreeHarvesters,

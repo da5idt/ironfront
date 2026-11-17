@@ -45,23 +45,23 @@ export function planMove(m: MatchState, u: UnitState, goal: CellPos): MovePlan {
   return { goal, path: findPath(matchGrid(m), at, goal) ?? [] };
 }
 
-/** How a drive that begins now, where the Unit is, begins: the one place that says so. */
+/** How a Drive that begins now, where the Unit is, begins: the one place that says so. */
 function driveFromHere(u: UnitState): DriveStart {
   return { from: { x: u.x, y: u.y }, empty: u.passengers.length === 0 };
 }
 
 /**
- * The start of the drive a move or an Attack-move the Unit is being set on now belongs to. One already on either
- * keeps the start it has: a second Command on the way, to the same Cell or another, is the same drive, and a
- * Troop Carrier is Collecting by how far it stops from where it last stood. Any other order between them,
- * a stop included, ends the drive.
+ * The start of the Drive a move or an Attack-move the Unit is being set on now belongs to. One already on either
+ * keeps the start it has: a second Command on the way, to the same Cell or another, is the same Drive, and a
+ * Troop Carrier is Collecting by how far it stops from where its Drive began. Any other order between them,
+ * a stop included, ends the Drive, and an Unload on the way that leaves it empty begins a new one (`beginDriveHere`).
  */
 export function driveStart(u: UnitState): DriveStart {
   return isMoveOrAttackMove(u.order) ? u.order.drive : driveFromHere(u);
 }
 
 /**
- * Begins a new drive where the Unit is, without it standing: for a Troop Carrier whose last Passenger has just got
+ * Begins a new Drive where the Unit is, without it standing: for a Troop Carrier whose last Passenger has just got
  * out on its way. From here it is as one sent off empty from this spot, so it is Collecting again where it stops,
  * but only far enough off to leave those it put out behind. The order stays the one it is on and is given the new
  * start, which is where the note of the order it began the Tick on reads it too.
@@ -81,8 +81,8 @@ export function orderMoveTo(m: MatchState, u: UnitState, goal: CellPos): void {
  * later in the Tick got there by arriving and in no other way, and no arrival
  * has to say so itself.
  */
-export function noteMoves(m: MatchState): void {
-  for (const u of m.units.values()) u.driveAtTickStart = isMoveOrAttackMove(u.order) ? u.order : null;
+export function noteMovesAtTickStart(m: MatchState): void {
+  for (const u of m.units.values()) u.moveAtTickStart = isMoveOrAttackMove(u.order) ? u.order : null;
 }
 
 /**

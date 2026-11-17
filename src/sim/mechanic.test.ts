@@ -409,7 +409,7 @@ describe("what a Player view shows of a repair", () => {
       const view = getPlayerView(match, 0);
       if (view.tends.length > 0) {
         // The Refinery covers Cells 20..22 by 8..9.
-        expect(view.tends).toEqual([{ targetId: refinery, x: 21.5, y: ROW + 1, tick }]);
+        expect(view.tends).toEqual([{ targetId: refinery, unitIds: [mechanic], x: 21.5, y: ROW + 1, tick }]);
         // The entry names a Building that is in the same view.
         expect(view.buildings.some((b) => b.id === refinery)).toBe(true);
         worked.push(tick);
@@ -445,7 +445,9 @@ describe("what a Player view shows of a repair", () => {
     const watcher = addTestUnit(match, 1, "harvester", { x: 21, y: ROW + 3 });
     issueCommand(match, 1, { type: "stop", unitIds: [watcher] });
     run(match, 3);
-    expect(getPlayerView(match, 1).tends).toEqual(getPlayerView(match, 0).tends);
+    // The Mechanic on the far side is out of its sight, so the repair is shown with nobody named at work on it.
+    expect(getPlayerView(match, 0).tends).toMatchObject([{ targetId: barracks, unitIds: [mechanic] }]);
+    expect(getPlayerView(match, 1).tends).toEqual(getPlayerView(match, 0).tends.map((t) => ({ ...t, unitIds: [] })));
     expect(getPlayerView(match, 1).tends).toHaveLength(1);
     // It drives off: the Barracks is remembered, at the health last seen, and the repair is no longer shown.
     issueCommand(match, 1, { type: "move", unitIds: [watcher], target: { x: 21, y: ROW + 20 } });
