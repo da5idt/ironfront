@@ -4,9 +4,15 @@ A personal real-time strategy game inspired by the classic base-building RTS gam
 
 This is a hobby project for personal use. It is an original game and is not affiliated with or endorsed by any existing game or publisher.
 
+## Play it
+
+Play the latest build in the browser: https://da5idt.github.io/ironfront/
+
+Every merge to `main` is published there by the `pages` workflow. Nothing leaves your machine while you play.
+
 ## Status
 
-Early prototype: the Map and starting bases draw in the browser, and the camera scrolls. Spec #2 tracks the rest of the first playable Match.
+Playable: gather ore, build a base, train Infantry and vehicles (with Medics, Mechanics and Troop Carriers in support) and fight the Computer Opponent on one Map. `docs/retros/` and the issues track what comes next.
 
 ## Play it locally
 

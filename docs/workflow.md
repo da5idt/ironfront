@@ -64,6 +64,7 @@ A two-way PR merges only when all of these hold: the `two-way-door` label, `**Do
 
 ## Scheduled jobs
 - **auto-merge** (GitHub Actions): every 30 minutes, and on each new PR comment.
+- **pages** (GitHub Actions): on each push to `main`, builds the game and publishes it to GitHub Pages at https://da5idt.github.io/ironfront/. It is not a gate: a failed deploy leaves the last published build in place.
 - **Daily pickup** (Claude scheduled task): once a day at midnight Central (hourly at :20 until 2026-11-16), starts the next approved spec (one at a time) from the build step, in a new thread.
 - **PR watch** (Claude scheduled task): every 2 hours at :50 Central, fixes failing CI and review comments on agent PRs.
 - **Retro check** (Claude scheduled task): every 4 hours at :50 Central (1:50, 5:50, 9:50 and so on, the hours the PR watch skips), runs the retro for the oldest closed spec without the `retro` label. A run with nothing to do resolves its thread.
