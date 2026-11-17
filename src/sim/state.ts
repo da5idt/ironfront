@@ -13,21 +13,23 @@ import { isPassableTerrain } from "./types";
 // outside reads a PlayerView (view.ts). Tests use the public seam in index.ts.
 
 /**
- * How a move or an Attack-move began, which is what decides whether a Troop
- * Carrier is Collecting where it ends (passengers.ts). Both orders must carry
- * one, so no new way of setting a Unit off can leave it out; `moveStart` in
- * movement.ts makes it. A Unit sent on again while it is on either order
- * keeps the one it has, so it tells of the whole drive since the Unit last
- * stood or did anything else.
+ * How the drive a move or an Attack-move belongs to began, which is what
+ * decides whether a Troop Carrier is Collecting where it ends (passengers.ts).
+ * Both orders must carry one, so no new way of setting a Unit off can leave
+ * it out; `driveStart` in movement.ts makes it. A Unit sent on again while it
+ * is on either order keeps the one it has, so it tells of the whole drive
+ * since the Unit last stood or did anything else. `beginDriveHere` in
+ * movement.ts is the one place that begins a drive without the Unit standing,
+ * and gives the order a new one.
  */
-export interface MoveStart {
-  /** Where the Unit stood when it set off, which need not be a Cell's centre. */
-  readonly from: Vec;
-  /** True while the Unit has had no Passenger inside since it set off. */
+export interface DriveStart {
+  /** Where the Unit was when the drive began, which need not be a Cell's centre. */
+  from: Vec;
+  /** True while the Unit has had no Passenger inside since the drive began. */
   empty: boolean;
 }
 
-/** The orders that carry a `MoveStart`: a move and an Attack-move. */
+/** The orders that carry a `DriveStart`: a move and an Attack-move. */
 export type MoveOrAttackMoveOrder = Extract<UnitOrder, { readonly type: "move" | "attackMove" }>;
 
 /**
@@ -41,14 +43,14 @@ export function isMoveOrAttackMove(order: UnitOrder): order is MoveOrAttackMoveO
 /** What a Unit is currently doing. Later features add their own variants. */
 export type UnitOrder =
   | { readonly type: "idle" }
-  | { readonly type: "move"; readonly plan: MovePlan; readonly start: MoveStart }
+  | { readonly type: "move"; readonly plan: MovePlan; drive: DriveStart }
   | { readonly type: "attack"; readonly targetId: EntityId; chase: MovePlan | null }
   /**
    * On an Attack-move: walking the plan, and standing (`firing`) whenever an enemy is in range.
    * `spot` is the short walk to a Cell of its own when it stopped on top of another own Unit;
    * `settled` says it has taken its place for this stand and will not shuffle again.
    */
-  | { readonly type: "attackMove"; readonly plan: MovePlan; readonly start: MoveStart; firing: boolean; spot: MovePlan | null; settled: boolean }
+  | { readonly type: "attackMove"; readonly plan: MovePlan; drive: DriveStart; firing: boolean; spot: MovePlan | null; settled: boolean }
   | HarvestOrder
   | Tending
   | Boarding;
@@ -115,14 +117,15 @@ export interface UnitState {
    */
   readonly passengers: UnitState[];
   /**
-   * How the move or Attack-move the Unit was on when the current Tick began had begun, or
+   * The move or Attack-move order the Unit was on when the current Tick began, or
    * null when it was on neither. Standing idle later in the same Tick, it has
-   * just finished that move, which is when a Troop Carrier is Collecting.
-   * While the Unit is still on that order this is the order's own `start`,
-   * the same object and not a copy: `getIn` in passengers.ts marks the order's
-   * `start` as no longer empty and relies on this field showing it.
+   * just finished that drive, which is when a Troop Carrier is Collecting.
+   * It is the order itself and how its drive began is read through it, so
+   * whatever the Tick did to the order's `drive` (a Passenger got in, an
+   * Unload began a new one) is what is read here: there is no second note of
+   * the drive to keep in step.
    */
-  moveAtTickStart: MoveStart | null;
+  driveAtTickStart: MoveOrAttackMoveOrder | null;
   /**
    * The Unit's Tend back-offs: the Tend targets it found no way to, each with
    * the Tick until which it will not go to that one by itself again.
@@ -250,7 +253,7 @@ export function spawnUnit(m: MatchState, owner: PlayerId, kind: UnitKind, cell: 
     order: kind === "harvester" ? startHarvesting() : { type: "idle" },
     cargo: 0,
     passengers: [],
-    moveAtTickStart: null,
+    driveAtTickStart: null,
     tendBackOff: new Map(),
     stoodAt: new Map(),
   };

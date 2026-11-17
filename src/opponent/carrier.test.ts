@@ -10,6 +10,7 @@ import {
   type MapDef,
   type Match,
   OPPONENT,
+  TROOP_CARRIER,
   type UnitKind,
   type UnitView,
 } from "../sim";
@@ -110,8 +111,8 @@ describe("Computer Opponent keeping its Troop Carrier clear of its Medics and Me
     const [carrier] = ofKind(match, "troopCarrier");
     expect(carrier).toBeDefined();
     expect(tookSomeone).toBe(false);
-    // Out of its reach for Collecting, which is two Cells.
-    for (const id of waiting) expect(apart(unit(match, id)!, carrier!)).toBeGreaterThan(4);
+    // Twice as far off as it reaches when Collecting.
+    for (const id of waiting) expect(apart(unit(match, id)!, carrier!)).toBeGreaterThan(2 * TROOP_CARRIER.collectRadius);
   });
 
   it("has a Troop Carrier that holds a Medic and a Mechanic Unload, and sends them back to the rally point", () => {
@@ -174,7 +175,7 @@ describe("Computer Opponent's wave with a Troop Carrier", () => {
   const inside = (match: Match, carrier: number) => sorted(unit(match, carrier)!.passengers!.map((p) => p.id));
   const WAVE_SETS_OFF = OPPONENT.firstWaveTick + 60 * SECONDS;
 
-  it("has five of the wave's Riflemen Board it at home, and sets off with them aboard", () => {
+  it("has as many of the wave's Riflemen as it holds Board it at home, and sets off with them aboard", () => {
     const { match, carrier, wave } = staged();
     let aboardAtSetOff: number[] | null = null;
     const given = play(match, createOpponent(0, 1), WAVE_SETS_OFF, {
@@ -432,10 +433,10 @@ describe("Computer Opponent's waves with a Troop Carrier on Riverford when nothi
     unloaded: { apart: number; inside: number } | null;
   }
 
-  it("brings every Troop Carrier to the gathering point with the wave, and Unloads all five there", () => {
+  it("brings every Troop Carrier to the gathering point with the wave, and Unloads every Passenger there", () => {
     const match = createMatch(RIVERFORD, 7);
     // Player 0 gives no Commands. Its Turrets stop each wave at its base (its HQ is at (4, 4)), so several are sent,
-    // and they reach no farther than the gathering points, fourteen Cells short.
+    // and they reach no farther than the gathering points, which are well short of it.
     for (const at of [{ x: 9, y: 9 }, { x: 12, y: 6 }, { x: 6, y: 12 }, { x: 12, y: 11 }]) addTestBuilding(match, 0, "turret", at);
     const opponent = createOpponent(1, 7);
     const waves: CarrierWave[] = [];
@@ -469,10 +470,10 @@ describe("Computer Opponent's waves with a Troop Carrier on Riverford when nothi
       }
       advanceTick(match);
     }
-    // The first wave goes on foot: there is no Troop Carrier before it has set off. The next two each have five Riflemen Board the Troop Carrier.
+    // The first wave goes on foot: there is no Troop Carrier before it has set off. Each one after has as many Riflemen as there is room for Board the Troop Carrier.
     expect(waves.length).toBeGreaterThanOrEqual(2);
     for (const wave of waves) {
-      expect(wave.unloaded?.inside).toBe(5);
+      expect(wave.unloaded?.inside).toBe(TROOP_CARRIER.capacity);
       expect(wave.unloaded!.apart).toBeLessThanOrEqual(6);
       expect(wave.farthestAhead).toBeLessThanOrEqual(3);
     }
@@ -480,7 +481,7 @@ describe("Computer Opponent's waves with a Troop Carrier on Riverford when nothi
 });
 
 describe("Computer Opponent against itself on Riverford", () => {
-  it("sets a wave off with five Riflemen inside a Troop Carrier it trained, and Unloads them at the gathering point", () => {
+  it("sets a wave off with a Troop Carrier it trained full of Riflemen, and Unloads them at the gathering point", () => {
     const match = createMatch(RIVERFORD, 3);
     const seats = [
       { player: 0 as const, opponent: createOpponent(0, 11) },
@@ -516,8 +517,8 @@ describe("Computer Opponent against itself on Riverford", () => {
       advanceTick(match);
     }
     expect(trained).toBe(true);
-    expect(boarded).toHaveLength(5);
-    expect(setOffWith).toEqual(["rifleman", "rifleman", "rifleman", "rifleman", "rifleman"]);
+    expect(boarded).toHaveLength(TROOP_CARRIER.capacity);
+    expect(setOffWith).toEqual(Array.from({ length: TROOP_CARRIER.capacity }, () => "rifleman"));
     expect(unloadedNearGathering).toBe(true);
   }, 60_000);
 });

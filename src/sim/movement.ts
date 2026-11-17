@@ -2,7 +2,7 @@ import type { CommandResult } from "./commands";
 import { OK, reject } from "./commands";
 import type { CommandHandler } from "./handlers";
 import { findPath, type Grid, nearbyCells } from "./pathfinding";
-import type { MatchState, MoveStart, UnitState } from "./state";
+import type { DriveStart, MatchState, UnitState } from "./state";
 import { cellIndex, inBounds, isMoveOrAttackMove, isWalkable, ownUnits, terrainAt } from "./state";
 import { MOVEMENT, TICKS_PER_SECOND, UNIT_STATS } from "./tuning";
 import type { CellPos, EntityId, PlayerId } from "./types";
@@ -45,30 +45,44 @@ export function planMove(m: MatchState, u: UnitState, goal: CellPos): MovePlan {
   return { goal, path: findPath(matchGrid(m), at, goal) ?? [] };
 }
 
+/** How a drive that begins now, where the Unit is, begins: the one place that says so. */
+function driveFromHere(u: UnitState): DriveStart {
+  return { from: { x: u.x, y: u.y }, empty: u.passengers.length === 0 };
+}
+
 /**
- * The start of a move or an Attack-move the Unit is being set on now. One already on either keeps the start it
- * has, the same object: a second Command on the way, to the same Cell or another, is the same drive, and a
+ * The start of the drive a move or an Attack-move the Unit is being set on now belongs to. One already on either
+ * keeps the start it has: a second Command on the way, to the same Cell or another, is the same drive, and a
  * Troop Carrier is Collecting by how far it stops from where it last stood. Any other order between them,
  * a stop included, ends the drive.
  */
-export function moveStart(u: UnitState): MoveStart {
-  if (isMoveOrAttackMove(u.order)) return u.order.start;
-  return { from: { x: u.x, y: u.y }, empty: u.passengers.length === 0 };
+export function driveStart(u: UnitState): DriveStart {
+  return isMoveOrAttackMove(u.order) ? u.order.drive : driveFromHere(u);
+}
+
+/**
+ * Begins a new drive where the Unit is, without it standing: for a Troop Carrier whose last Passenger has just got
+ * out on its way. From here it is as one sent off empty from this spot, so it is Collecting again where it stops,
+ * but only far enough off to leave those it put out behind. The order stays the one it is on and is given the new
+ * start, which is where the note of the order it began the Tick on reads it too.
+ */
+export function beginDriveHere(u: UnitState): void {
+  if (isMoveOrAttackMove(u.order)) u.order.drive = driveFromHere(u);
 }
 
 /** Sends one Unit walking to a Cell, replacing whatever it was doing. */
 export function orderMoveTo(m: MatchState, u: UnitState, goal: CellPos): void {
-  u.order = { type: "move", plan: planMove(m, u, goal), start: moveStart(u) };
+  u.order = { type: "move", plan: planMove(m, u, goal), drive: driveStart(u) };
 }
 
 /**
- * Per-Tick system, before anything walks: notes the move each Unit begins the
- * Tick on. Commands come between Ticks, so a Unit noted here that stands idle
+ * Per-Tick system, before anything walks: notes the move or Attack-move order
+ * each Unit begins the Tick on. Commands come between Ticks, so a Unit noted here that stands idle
  * later in the Tick got there by arriving and in no other way, and no arrival
  * has to say so itself.
  */
 export function noteMoves(m: MatchState): void {
-  for (const u of m.units.values()) u.moveAtTickStart = isMoveOrAttackMove(u.order) ? u.order.start : null;
+  for (const u of m.units.values()) u.driveAtTickStart = isMoveOrAttackMove(u.order) ? u.order : null;
 }
 
 /**

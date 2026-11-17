@@ -68,9 +68,15 @@ export function parkingCell(view: PlayerView): CellPos {
   return rallyPoint(view);
 }
 
-/** Sends a Troop Carrier to its Parking Cell and notes that it is on its way. */
-export function driveToParking(view: PlayerView, memory: CarrierMemory, standing: Standing, carrier: UnitView): Command {
-  memory.parking.set(carrier.id, { state: "driving" });
+/** Sends a Troop Carrier to its Parking Cell and notes that it is on its way, for the first time unless said. */
+export function driveToParking(
+  view: PlayerView,
+  memory: CarrierMemory,
+  standing: Standing,
+  carrier: UnitView,
+  state: "driving" | "drivingAgain" = "driving",
+): Command {
+  memory.parking.set(carrier.id, { state });
   standing.restart(carrier.id);
   return { type: "move", unitIds: [carrier.id], target: parkingCell(view) };
 }
@@ -141,15 +147,14 @@ export function parkCommands(
           break;
         }
         // Stopped somewhere else on its way: it is sent once more.
-        commands.push(driveToParking(view, memory, standing, carrier));
-        memory.parking.set(carrier.id, { state: "drivingAgain" });
+        commands.push(driveToParking(view, memory, standing, carrier, "drivingAgain"));
         break;
       case "drivingAgain":
         // Stopped short twice, it has no way there. Sent a third time at once it would stop short again, think
         // after think. Near home it waits where it is, where a wave can still Board it; far off it waits to be sent.
         memory.parking.set(
           carrier.id,
-          fromParkingCell <= OPPONENT.parkedNearCells
+          fromParkingCell <= OPPONENT.parkedNoWayCells
             ? { state: "parked" }
             : { state: "farOff", sendAgainAt: view.tick + OPPONENT.parkAgainTicks },
         );
