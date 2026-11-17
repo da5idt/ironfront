@@ -17,7 +17,7 @@ The Player whose decisions are made by the game.
 _Avoid_: AI, bot, enemy, CPU
 
 **Parking Cell**:
-The Cell near its HQ, to one side of where its new Units gather, on which the Computer Opponent keeps a Troop Carrier that is not out with an attack. Standing there it is out of reach of the Medics and Mechanics it would otherwise Collect, and it is where Riflemen about to attack Board it. A Troop Carrier that finds no way onto it counts as parked where it stopped only within eight Cells of it. One that stopped farther off, as one recalled from an attack can, is not Boarded where it stands: it is sent to its Parking Cell again every half minute.
+The Cell near its HQ, to one side of where its new Units gather, on which the Computer Opponent keeps a Troop Carrier that is not out with an attack. Standing there it is out of reach of the Medics and Mechanics it would otherwise Collect, and it is where Riflemen about to attack Board it. A Troop Carrier that finds no way onto it counts as parked where it stopped only near it (tuning: `OPPONENT.parkedNearCells`). One that stopped farther off, as one recalled from an attack can, is not Boarded where it stands: it is sent to its Parking Cell again every so often (tuning: `OPPONENT.parkAgainTicks`).
 _Avoid_: Garage, depot, bay, parking spot
 
 **Tick**:
@@ -48,6 +48,10 @@ _Avoid_: Tether, chase range, follow distance
 The wait after a support Unit found no way to a target: until it is over, the Unit does not go to that target by itself, though it still goes to others. Each target has its own, a Tend Command is always tried whatever the back-off, and getting into a Troop Carrier ends them all.
 _Avoid_: Cooldown, blacklist, retry timer
 
+**Leave-alone time**:
+The Computer Opponent's own wait after it took one of its support Units to have no way to a target (tuning: `OPPONENT.leaveAloneTicks`). Until it is over, a Mechanic gets no Tend Command onto that Building, and a hurt Unit does not keep that Medic away from the rally point. The Opponent keeps it in its own notes, one for each support Unit and target, from what its view shows: a Unit that has stopped where it cannot be at work. It is not the Tend back-off, which is the support Unit's own wait and never holds up a Tend Command.
+_Avoid_: Tend back-off (for this wait), cooldown, blacklist, retry timer
+
 **Board**:
 A Command that sends Infantry to one of the Player's own Troop Carriers to get in. Each walks until it is in a Cell touching the Troop Carrier's and becomes a Passenger if there is room; with no room it stops beside it. Vehicles ignore the Command.
 _Avoid_: Load, embark, enter, mount, garrison
@@ -57,7 +61,7 @@ A Command that has every Passenger of a Troop Carrier get out onto a free Cell b
 _Avoid_: Disembark, deploy, drop off, eject, evacuate
 
 **Collecting**:
-What a Troop Carrier does, once, on the Tick it finishes a move or an Attack-move that took it to another Cell, that it began with no Passengers and had none on since: idle Infantry of its own Player within the Collecting radius (two Cells) become its Passengers from where they stand, nearest first and lowest id first among those as near as each other, until it is full. It takes only Units that have a way on foot of at most three Cells to a Cell touching its own, so none across water or behind a wall. No Command asks for it, and a Unit it takes is shown and heard getting in exactly as one that Boards. A Troop Carrier that stands takes nobody, so Units that got out, and Units sent beside a parked one, stay on the Map until it has been sent off empty and has stopped again in another Cell; sent to the Cell it stands on, or somewhere it has no way to, it has not moved. A move on which it held a Passenger or put one out ends without it, and so does a stop on a Tick it lost health.
+What a Troop Carrier does, once, on the Tick it stops at the end of a move or an Attack-move, far enough in a straight line from where it last stood (tuning: `TROOP_CARRIER.collectAfterCells`), having set off from there with no Passengers and had none on since: idle Infantry of its own Player within the Collecting radius (tuning: `TROOP_CARRIER.collectRadius`) become its Passengers from where they stand, nearest first and lowest id first among those as near as each other, until it is full. It takes only Units that have a short way on foot to a Cell touching its own (tuning: `TROOP_CARRIER.collectWalk`), so none across water or behind a wall. No Command asks for it, and a Unit it takes is shown and heard getting in exactly as one that Boards. A Troop Carrier that stands takes nobody, so Units that got out, and Units sent beside a parked one, stay on the Map until it has been sent off empty and has stopped again that far from where it set off; sent to the Cell it stands on, nudged a Cell along, or sent somewhere it has no way to, it has not gone far enough. The distance is that of the whole drive: a move or Attack-move Command given while it is already on one, to the same Cell or another, does not start the count again, and a stop Command or any other Command does. A drive on which it held a Passenger or put one out ends without it, and so does a stop on a Tick it lost health.
 _Avoid_: Auto-load, auto-board, pick-up mode
 
 **Victory**:

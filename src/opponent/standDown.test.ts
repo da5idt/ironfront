@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { getPlayerView, type MapDef, type Match, OPPONENT, type UnitView } from "../sim";
+import { getPlayerView, type MapDef, type Match, OPPONENT, TROOP_CARRIER, type UnitView } from "../sim";
 import { testMap } from "../sim/testing/maps";
 import { addTestBuilding, addTestUnit, removeTestBuilding, setTestCredits, setTestUnitHp } from "../sim/testing/setup";
 import { createOpponent, type Opponent } from "./opponent";
@@ -7,16 +7,16 @@ import { base, BUILD_ORDER_DONE, play, SECONDS } from "./testing/stage";
 
 // A wave that ends with Units left while its Troop Carrier is still out with
 // Passengers inside. The Opponent plays Player 0: HQ on (0..2, 0..2), rally
-// point at about (6, 6), parking Cell at about (1, 9).
+// point at about (6, 6), Parking Cell at about (1, 9).
 
 const RALLY = { x: 6, y: 6 };
 const HQ = { x: 1, y: 1 };
-/** The other Player's Barracks. A wave on it gathers at about (17, 5), fourteen Cells short on the way from the HQ. */
+/** The other Player's Barracks. A wave on it gathers at about (17, 5), on the way there from the HQ. */
 const OUTPOST = { x: 30, y: 8 };
 /**
  * Two Cells shut in by rock on every side: a Unit on one sees out but goes nowhere.
  * The first is far from the base, from the Barracks and from the way between them;
- * the second is in sight of the Barracks (five Cells) and out of a Rifleman's range of it.
+ * the second is in sight of the Barracks and out of a Rifleman's range of it.
  */
 const SHUT_IN = { x: 5, y: 30 };
 const LOOKOUT = { x: 30, y: 14 };
@@ -49,31 +49,34 @@ interface AtTheFront {
   readonly match: Match;
   readonly opponent: Opponent;
   readonly carrier: number;
-  /** The five Riflemen inside the Troop Carrier. */
+  /** The Riflemen inside the Troop Carrier, as many as it holds. */
   readonly boarding: number[];
   /** The other Player's Barracks, as the Opponent sees it. */
   readonly outpost: number;
 }
 
 /**
- * A first wave that has set off and cannot gather: five of its Riflemen are
- * inside the Troop Carrier, which waits beside the sixth, who is shut in.
+ * A first wave that has set off and cannot gather: as many of its Riflemen as
+ * the Troop Carrier holds are inside it, and it waits beside one more, who is shut in.
  */
 function waveStuckGathering(map: MapDef): AtTheFront {
   const match = base(BUILD_ORDER_DONE, SITES, map);
   // The only Building of the other Player the Opponent ever knows: its scout stays near home once one is known.
   addTestBuilding(match, 1, "barracks", OUTPOST);
-  // The first wave is the six oldest army Units at home: the two starting Riflemen and three more Board,
-  // and the sixth, who can never leave its Cell, is the wave's only Unit on foot. The Troop Carrier is led
-  // to where the wave's foremost Unit on foot is, so it waits beside that Cell, full, and never gathers.
+  // The first wave is the oldest army Units at home: the starting Riflemen and enough more to fill the Troop
+  // Carrier Board, and the next, who can never leave its Cell, is the wave's only Unit on foot. The Troop Carrier
+  // is led to where the wave's foremost Unit on foot is, so it waits beside that Cell, full, and never gathers.
+  const starting = getPlayerView(match, 0)
+    .units.filter((u) => u.owner === 0 && u.kind === "rifleman")
+    .map((u) => u.id);
   const boarding = [
-    ...getPlayerView(match, 0)
-      .units.filter((u) => u.owner === 0 && u.kind === "rifleman")
-      .map((u) => u.id),
-    ...[0, 1, 2].map((i) => addTestUnit(match, 0, "rifleman", { x: RALLY.x - 1 + i, y: RALLY.y + 1 })),
+    ...starting,
+    ...Array.from({ length: TROOP_CARRIER.capacity - starting.length }, (_, i) =>
+      addTestUnit(match, 0, "rifleman", { x: RALLY.x - 1 + i, y: RALLY.y + 1 }),
+    ),
   ];
   const shutIn = addTestUnit(match, 0, "rifleman", SHUT_IN);
-  // The seventh stays behind and sees the Barracks. It is all that is left at home to scout, and it cannot move.
+  // One more than the wave takes stays behind and sees the Barracks. It is all that is left at home to scout, and it cannot move.
   addTestUnit(match, 0, "rifleman", LOOKOUT);
   const carrier = addTestUnit(match, 0, "troopCarrier", { x: 12, y: 12 });
   // Nothing to spend and nothing coming in, so the Opponent trains nobody who could go and find another Building.
@@ -93,14 +96,14 @@ function waveStuckGathering(map: MapDef): AtTheFront {
 }
 
 describe("Computer Opponent's wave that stands down with its Troop Carrier still full", () => {
-  it("brings the Troop Carrier back to its parking Cell and its Riflemen back to the rally point", () => {
+  it("brings the Troop Carrier back to its Parking Cell and its Riflemen back to the rally point", () => {
     const { match, opponent, carrier, boarding, outpost } = waveStuckGathering(mapWithShutInCells());
     // The Barracks falls while the wave is still gathering, in sight of the Rifleman shut in beside it
     // (removeTestBuilding takes it off the Map as destruction does), so the Opponent knows nothing to attack.
     removeTestBuilding(match, outpost);
     // A wave waits a minute for its stragglers. Until then the Troop Carrier stands by the shut-in Cell, still full.
     play(match, opponent, 30 * SECONDS);
-    expect(unit(match, carrier)!.passengers).toHaveLength(5);
+    expect(unit(match, carrier)!.passengers).toHaveLength(TROOP_CARRIER.capacity);
     expect(apart(unit(match, carrier)!, SHUT_IN)).toBeLessThan(4);
     play(match, opponent, 120 * SECONDS);
     expect(getPlayerView(match, 0).buildings.filter((b) => b.owner === 1)).toEqual([]);

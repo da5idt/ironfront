@@ -18,6 +18,7 @@ import { RIVERFORD } from "../game/maps/riverford";
 import { testMap } from "../sim/testing/maps";
 import { addTestUnit, setTestBuildingHp, setTestCredits, setTestUnitHp } from "../sim/testing/setup";
 import { createOpponent, type Opponent, THINK_EVERY_TICKS } from "./opponent";
+import { distanceToCell } from "./tactics";
 import { BUILD_ORDER_DONE, opponentPastItsFirstWave, PLENTY, SECONDS, base as stagedBase, play as stagedPlay } from "./testing/stage";
 
 // The Opponent's Hospital, Medics and Mechanics, through its own seam: its
@@ -186,11 +187,11 @@ describe("Computer Opponent's Mechanics and its damaged Buildings", () => {
     const opponent = createOpponent(0, 1);
     const tend = { type: "tend", unitIds: [mechanic], targetId: hospital.id };
     // Half the time it leaves the Building alone for: the one Command, and none after the Mechanic has stopped.
-    expect(tends(play(match, opponent, OPPONENT.tendBackOffTicks / 2))).toEqual([tend]);
+    expect(tends(play(match, opponent, OPPONENT.leaveAloneTicks / 2))).toEqual([tend]);
     const waiting = getPlayerView(match, 0).units.find((u) => u.id === mechanic)!;
     expect(Math.hypot(waiting.x - RALLY.x, waiting.y - RALLY.y)).toBeLessThan(3);
     // Then it is tried once more, as the way may have opened.
-    expect(tends(play(match, opponent, OPPONENT.tendBackOffTicks))).toEqual([tend]);
+    expect(tends(play(match, opponent, OPPONENT.leaveAloneTicks))).toEqual([tend]);
   });
 
   it("spreads two Mechanics over two damaged Buildings, the worse off first", () => {
@@ -222,8 +223,8 @@ describe("Computer Opponent's Mechanics and its damaged Buildings", () => {
 
 describe("Computer Opponent's Medics and the rally point", () => {
   const RALLY = { x: 6, y: 6 };
-  /** Half the seek radius: how far from the rally point the Opponent lets a Medic stand. */
-  const STRAYED_AT_MOST = TEND.seekRadius / 2;
+  /** How far from the rally point the Opponent lets a Medic stand. */
+  const STRAYED_AT_MOST = OPPONENT.medicStrayCells;
   const medicMoves = (commands: readonly Command[], medic: number) =>
     commands.filter((c) => c.type === "move" && c.unitIds.includes(medic));
 
@@ -242,7 +243,7 @@ describe("Computer Opponent's Medics and the rally point", () => {
     }
     expect(unit(hurt).hp).toBe(unit(hurt).maxHp);
     expect(Math.hypot(unit(medic).x - (RALLY.x + 0.5), unit(medic).y - (RALLY.y + 0.5))).toBeGreaterThan(3);
-    // Left alone while it works: a move would end its Tend.
+    // Given no move while it works: one would end its Tend.
     expect(medicMoves(whileHealing, medic)).toEqual([]);
 
     const after = play(match, opponent, 30 * SECONDS);
@@ -280,6 +281,47 @@ describe("Computer Opponent's Medics and the rally point", () => {
     expect(unit(hurt).hp).toBe(10);
     expect(medicMoves(given, medic)).toEqual([{ type: "move", unitIds: [medic], target: RALLY }]);
     expect(Math.hypot(unit(medic).x - (RALLY.x + 0.5), unit(medic).y - (RALLY.y + 0.5))).toBeLessThan(STRAYED_AT_MOST);
+  });
+  it("leaves a strayed Medic out until it has Healed both of two hurt Riflemen standing still near it", () => {
+    const match = base([...BUILD_ORDER_DONE, "hospital"]);
+    const medic = addTestUnit(match, 0, "medic", { x: 20, y: 20 });
+    // One beside it and one near the edge of the reach it looks for someone to Heal in: both stand
+    // still all through the first one's Heal, as the Medic does.
+    const beside = addTestUnit(match, 0, "rifleman", { x: 21, y: 20 });
+    const farther = addTestUnit(match, 0, "rifleman", { x: 20, y: 20 + TEND.seekRadius - 2 });
+    setTestUnitHp(match, beside, 10);
+    setTestUnitHp(match, farther, 10);
+    const unit = (id: number) => getPlayerView(match, 0).units.find((u) => u.id === id)!;
+    expect(distanceToCell(RALLY, unit(medic))).toBeGreaterThan(STRAYED_AT_MOST);
+
+    const given = play(match, createOpponent(0, 1), 90 * SECONDS);
+    expect(unit(beside).hp).toBe(unit(beside).maxHp);
+    expect(unit(farther).hp).toBe(unit(farther).maxHp);
+    // Home once both are whole.
+    expect(medicMoves(given, medic)).toEqual([{ type: "move", unitIds: [medic], target: RALLY }]);
+  });
+
+  it("sends a strayed Medic back from a hurt Rifleman that stands still near it but that it has no way to", () => {
+    // The Rifleman's Cell with water in every Cell touching it: nobody walks there.
+    const island = { x: 19, y: 8 };
+    const rows = Array.from({ length: 40 }, (_, y) =>
+      Array.from({ length: 40 }, (_, x) => {
+        const d = Math.max(Math.abs(x - island.x), Math.abs(y - island.y));
+        return d === 1 ? "~" : ".";
+      }).join(""),
+    );
+    const match = base([...BUILD_ORDER_DONE, "hospital"], testMap(rows));
+    const hurt = addTestUnit(match, 0, "rifleman", island);
+    setTestUnitHp(match, hurt, 10);
+    // Well within the reach it looks for someone to Heal in, and far from the rally point.
+    const medic = addTestUnit(match, 0, "medic", { x: island.x - TEND.seekRadius / 2, y: island.y });
+    const unit = (id: number) => getPlayerView(match, 0).units.find((u) => u.id === id)!;
+    expect(distanceToCell(RALLY, unit(medic))).toBeGreaterThan(STRAYED_AT_MOST);
+
+    const given = play(match, createOpponent(0, 1), 30 * SECONDS);
+    expect(unit(hurt)).toMatchObject({ hp: 10, x: island.x + 0.5, y: island.y + 0.5 });
+    expect(medicMoves(given, medic)).toEqual([{ type: "move", unitIds: [medic], target: RALLY }]);
+    expect(distanceToCell(RALLY, unit(medic))).toBeLessThan(STRAYED_AT_MOST);
   });
 });
 

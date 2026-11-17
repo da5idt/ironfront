@@ -3,7 +3,7 @@ import { OK, reject } from "./commands";
 import type { CommandHandler } from "./handlers";
 import { findPath, type Grid, nearbyCells } from "./pathfinding";
 import type { MatchState, MoveStart, UnitState } from "./state";
-import { cellIndex, inBounds, isWalkable, ownUnits, terrainAt } from "./state";
+import { cellIndex, inBounds, isMoveOrAttackMove, isWalkable, ownUnits, terrainAt } from "./state";
 import { MOVEMENT, TICKS_PER_SECOND, UNIT_STATS } from "./tuning";
 import type { CellPos, EntityId, PlayerId } from "./types";
 
@@ -37,12 +37,23 @@ export function matchGrid(m: MatchState): Grid {
 
 /** Plans a route for the Unit to `goal`, or as close to it as it can get. */
 export function planMove(m: MatchState, u: UnitState, goal: CellPos): MovePlan {
-  return { goal, path: findPath(matchGrid(m), unitCell(u), goal) ?? [] };
+  const at = unitCell(u);
+  // Sent to the Cell it is in, the route is that Cell: a Unit that stopped off its centre ends on it, as after
+  // any other move. Not when the Cell cannot be walked (a Building went up over it), which `stepAlong` would
+  // plan again for ever.
+  if (at.x === goal.x && at.y === goal.y && isWalkable(m, goal.x, goal.y)) return { goal, path: [goal] };
+  return { goal, path: findPath(matchGrid(m), at, goal) ?? [] };
 }
 
-/** The start of a move or an Attack-move the Unit is being set on now. */
+/**
+ * The start of a move or an Attack-move the Unit is being set on now. One already on either keeps the start it
+ * has, the same object: a second Command on the way, to the same Cell or another, is the same drive, and a
+ * Troop Carrier is Collecting by how far it stops from where it last stood. Any other order between them,
+ * a stop included, ends the drive.
+ */
 export function moveStart(u: UnitState): MoveStart {
-  return { from: unitCell(u), empty: u.passengers.length === 0 };
+  if (isMoveOrAttackMove(u.order)) return u.order.start;
+  return { from: { x: u.x, y: u.y }, empty: u.passengers.length === 0 };
 }
 
 /** Sends one Unit walking to a Cell, replacing whatever it was doing. */
@@ -57,7 +68,7 @@ export function orderMoveTo(m: MatchState, u: UnitState, goal: CellPos): void {
  * has to say so itself.
  */
 export function noteMoves(m: MatchState): void {
-  for (const u of m.units.values()) u.moveAtTickStart = "start" in u.order ? u.order.start : null;
+  for (const u of m.units.values()) u.moveAtTickStart = isMoveOrAttackMove(u.order) ? u.order.start : null;
 }
 
 /**

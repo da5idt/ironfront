@@ -50,6 +50,24 @@ describe("the move Command", () => {
     expect(unit(match, r.id).x).toBe(8.5);
   });
 
+  it("brings a Unit standing off-centre onto the centre of its own Cell when sent to that Cell", () => {
+    const match = createMatch(openMap(20, 20), 1);
+    // On open ground of its own, so no other Unit has a claim on the Cell it stops in.
+    const r = { id: addTestUnit(match, 0, "rifleman", { x: 10, y: 10 }) };
+    expect(issueCommand(match, 0, { type: "move", unitIds: [r.id], target: { x: 16, y: 10 } })).toEqual({ ok: true });
+    // Stopped on its way, wherever in a Cell that leaves it.
+    run(match, TICKS_PER_SECOND);
+    while (unit(match, r.id).x % 1 === 0.5) run(match, 1);
+    expect(issueCommand(match, 0, { type: "stop", unitIds: [r.id] })).toEqual({ ok: true });
+    const stopped = unit(match, r.id);
+    const own = cellOf(stopped);
+    expect(stopped.x).not.toBe(own.x + 0.5);
+    expect(issueCommand(match, 0, { type: "move", unitIds: [r.id], target: own })).toEqual({ ok: true });
+    run(match, 3 * TICKS_PER_SECOND);
+    const after = unit(match, r.id);
+    expect({ x: after.x, y: after.y }).toEqual({ x: own.x + 0.5, y: own.y + 0.5 });
+  });
+
   it("moves at the Unit's speed, one Tick at a time, so drawing can interpolate", () => {
     const match = createMatch(openMap(20, 20), 1);
     const r = ownRiflemen(match)[0]!;

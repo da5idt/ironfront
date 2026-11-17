@@ -238,8 +238,8 @@ describe("Computer Opponent's wave with a Troop Carrier", () => {
     expect(apart(parked, { x: 1, y: 1 })).toBeLessThan(12);
   });
 
-  it("has a wave Board a Troop Carrier that could not get to its parking Cell, where it stopped after a second try", () => {
-    // Rock for five Cells every way from the parking Cell at (1, 9), which itself is open ground.
+  it("has a wave Board a Troop Carrier that could not get to its Parking Cell, where it stopped after a second try", () => {
+    // Rock for five Cells every way from the Parking Cell at (1, 9), which itself is open ground.
     const rows = Array.from({ length: 40 }, (_, y) =>
       Array.from({ length: 40 }, (_, x) => (x <= 5 && y >= 5 && y <= 13 && !(x === 1 && y === 9) ? "#" : ".")).join(""),
     );
@@ -277,7 +277,7 @@ describe("Computer Opponent's wave with a Troop Carrier", () => {
 
   it("sends Riflemen on by foot, and never to Board again, when their Troop Carrier is hit on the way", () => {
     const { match, carrier, wave } = staged();
-    // On its way from its parking Cell at (1, 9) to the gathering point at (25, 28):
+    // On its way from its Parking Cell at (1, 9) to the gathering point at (25, 28):
     // the Troop Carrier, faster than anyone on foot, meets them first. Raiders reach as far as its own gun.
     for (let i = 0; i < 2; i++) addTestUnit(match, 1, "raider", { x: 12 + i, y: 19 });
     const opponent = createOpponent(0, 1);

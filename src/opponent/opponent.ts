@@ -416,8 +416,8 @@ export function createOpponent(playerId: PlayerId, seed: number): Opponent {
     if (!led) return [];
     const commands: Command[] = [];
     // Out short of the gathering point (it was hit, or is gone): they go on by foot, and are not told to Board again.
-    const short = inWave.filter((u) => led.inside.includes(u.id) && !isGathered(w, u)).map((u) => u.id);
-    if (short.length > 0 && w.phase === "gather") commands.push({ type: "attackMove", unitIds: short, target: w.gatherAt });
+    const outOnTheWay = inWave.filter((u) => led.inside.includes(u.id) && !isGathered(w, u)).map((u) => u.id);
+    if (outOnTheWay.length > 0 && w.phase === "gather") commands.push({ type: "attackMove", unitIds: outOnTheWay, target: w.gatherAt });
     led.inside = led.inside.filter((id) => carrier?.passengers?.some((p) => p.id === id));
     if (!carrier || led.inside.length === 0) {
       w.withCarrier = null;
