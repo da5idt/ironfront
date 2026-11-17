@@ -13,19 +13,19 @@ import { isPassableTerrain } from "./types";
 // outside reads a PlayerView (view.ts). Tests use the public seam in index.ts.
 
 /**
- * How the drive a move or an Attack-move belongs to began, which is what
+ * How the Drive a move or an Attack-move belongs to began, which is what
  * decides whether a Troop Carrier is Collecting where it ends (passengers.ts).
  * Both orders must carry one, so no new way of setting a Unit off can leave
  * it out; `driveStart` in movement.ts makes it. A Unit sent on again while it
- * is on either order keeps the one it has, so it tells of the whole drive
+ * is on either order keeps the one it has, so it tells of the whole Drive
  * since the Unit last stood or did anything else. `beginDriveHere` in
- * movement.ts is the one place that begins a drive without the Unit standing,
+ * movement.ts is the one place that begins a Drive without the Unit standing,
  * and gives the order a new one.
  */
 export interface DriveStart {
-  /** Where the Unit was when the drive began, which need not be a Cell's centre. */
-  from: Vec;
-  /** True while the Unit has had no Passenger inside since the drive began. */
+  /** Where the Unit was when the Drive began, which need not be a Cell's centre. */
+  readonly from: Vec;
+  /** True while the Unit has had no Passenger inside since the Drive began. */
   empty: boolean;
 }
 
@@ -71,6 +71,8 @@ export interface Shot {
  */
 export interface Tended {
   readonly targetId: EntityId;
+  /** The support Units that worked on it in that Tick, in the order they did. */
+  readonly unitIds: EntityId[];
   readonly tick: number;
 }
 
@@ -119,13 +121,21 @@ export interface UnitState {
   /**
    * The move or Attack-move order the Unit was on when the current Tick began, or
    * null when it was on neither. Standing idle later in the same Tick, it has
-   * just finished that drive, which is when a Troop Carrier is Collecting.
-   * It is the order itself and how its drive began is read through it, so
+   * just finished that Drive, which is when a Troop Carrier is Collecting.
+   * It is the order itself and how its Drive began is read through it, so
    * whatever the Tick did to the order's `drive` (a Passenger got in, an
    * Unload began a new one) is what is read here: there is no second note of
-   * the drive to keep in step.
+   * the Drive to keep in step.
    */
-  driveAtTickStart: MoveOrAttackMoveOrder | null;
+  moveAtTickStart: MoveOrAttackMoveOrder | null;
+  /**
+   * The places a Troop Carrier put Passengers out that it has not yet left
+   * behind: it is not Collecting at a stop too near any of them, whatever it
+   * has done between. A place is dropped once it is off its Drive far
+   * enough from it (`collectPassengers` in passengers.ts), so the list stays
+   * as short as the Unloads round where it is.
+   */
+  putOutAt: Vec[];
   /**
    * The Unit's Tend back-offs: the Tend targets it found no way to, each with
    * the Tick until which it will not go to that one by itself again.
@@ -253,7 +263,8 @@ export function spawnUnit(m: MatchState, owner: PlayerId, kind: UnitKind, cell: 
     order: kind === "harvester" ? startHarvesting() : { type: "idle" },
     cargo: 0,
     passengers: [],
-    driveAtTickStart: null,
+    moveAtTickStart: null,
+    putOutAt: [],
     tendBackOff: new Map(),
     stoodAt: new Map(),
   };

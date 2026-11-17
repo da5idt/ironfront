@@ -403,7 +403,7 @@ export function createOpponent(playerId: PlayerId, seed: number): Opponent {
    * is empty, there or because it was hit on the way, it leaves the wave and
    * drives home: at the front it would stand alone in the other Player's
    * way, and the next wave looks for it parked at home. (An Unload
-   * on the way that leaves it empty begins a new drive, so it is Collecting
+   * on the way that leaves it empty begins a new Drive, so it is Collecting
    * again where it next stops far enough from there: sent home, that is at
    * home and not among the wave's Riflemen.)
    */

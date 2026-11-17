@@ -1,14 +1,14 @@
 import type { CommandResult } from "../commands";
 import { updateFog } from "../fog";
 import { advanceTick, createMatch, getPlayerView, issueCommand, type Match } from "../match";
-import { addBuilding, cellIndex, type MatchState, removeBuilding, spawnUnit } from "../state";
+import { addBuilding, cellIndex, isMoveOrAttackMove, type MatchState, removeBuilding, spawnUnit } from "../state";
 import type { BuildingKind, CellPos, EntityId, PlayerId, UnitKind, Vec } from "../types";
 import type { UnitView } from "../view";
 import { TROOP_CARRIER } from "../tuning";
 import { openMap } from "./maps";
 
-/** The fewest whole Cells along a row or a column that make a drive long enough to end in Collecting. */
-export const LONG_ENOUGH = Math.ceil(TROOP_CARRIER.collectAfterCells);
+/** The fewest whole Cells along a row or a column that make a Drive long enough to end in Collecting: more than the least. */
+export const LONG_DRIVE = Math.floor(TROOP_CARRIER.collectAfterCells) + 1;
 
 /**
  * A Match on a wide open Map. Its starting bases are in the corners, so a test
@@ -117,4 +117,13 @@ export function setTestBuildingHp(match: Match, id: EntityId, hp: number): void 
 export function setTestUnitHp(match: Match, id: EntityId, hp: number): void {
   const unit = (match as unknown as MatchState).units.get(id);
   if (unit) unit.hp = hp;
+}
+
+/**
+ * Says where the Drive a Unit is on began, so a test can end one at an exact length: Units stop on Cell centres,
+ * and an Unload on the way, which begins a Drive anywhere, cannot be timed to a chosen spot.
+ */
+export function setTestDriveFrom(match: Match, id: EntityId, from: Vec): void {
+  const unit = (match as unknown as MatchState).units.get(id);
+  if (unit && isMoveOrAttackMove(unit.order)) unit.order.drive = { ...unit.order.drive, from };
 }
