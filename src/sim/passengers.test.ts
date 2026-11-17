@@ -13,32 +13,23 @@ import {
   type UnitView,
 } from "./index";
 import { openMap, testMap } from "./testing/maps";
-import { addTestBuilding, addTestUnit, removeTestBuilding, setTestBuildingHp, setTestUnitHp } from "./testing/setup";
+import {
+  addTestBuilding,
+  addTestUnit,
+  find,
+  removeTestBuilding,
+  run,
+  runUntil,
+  setTestBuildingHp,
+  setTestUnitHp,
+  stage,
+} from "./testing/setup";
 import { TEND } from "./tuning";
 
 // Staged round Cell (20, 8) of a wide open Map, far from both starting bases in
 // the corners, so only the Units put there take part.
 const ROW = 8;
 const COL = 20;
-const stage = (): Match => createMatch(openMap(50, 40), 1);
-
-function run(match: Match, ticks: number): void {
-  for (let t = 0; t < ticks; t++) advanceTick(match);
-}
-
-function runUntil(match: Match, done: () => boolean, limit = 1200): number {
-  for (let t = 0; t < limit; t++) {
-    if (done()) return t;
-    advanceTick(match);
-  }
-  throw new Error(`still not so after ${limit} Ticks`);
-}
-
-/** A Unit as its owner sees it: a Player always sees its own Units. */
-const find = (match: Match, id: number): UnitView | undefined =>
-  getPlayerView(match, 0).units.find((u) => u.id === id && u.owner === 0) ??
-  getPlayerView(match, 1).units.find((u) => u.id === id && u.owner === 1);
-
 const cellOf = (u: UnitView) => ({ x: Math.floor(u.x), y: Math.floor(u.y) });
 
 /** True when the Unit stands in a Cell touching the other's Cell, corners included, and not in it. */
@@ -417,7 +408,7 @@ describe("a Passenger", () => {
     const [rifleman, medic] = boarded as [number, number];
     const outside = addTestUnit(match, 0, "rifleman", { x: COL - 4, y: ROW });
     setTestUnitHp(match, outside, 20);
-    const helper = addTestUnit(match, 0, "medic", { x: COL - 5, y: ROW + 3 });
+    const medicOutside = addTestUnit(match, 0, "medic", { x: COL - 5, y: ROW + 3 });
     // In sight and in reach, so nothing but being inside stands in a Passenger's way.
     const enemy = addTestUnit(match, 1, "harvester", { x: COL + 3, y: ROW });
     const before = snapshot(match);
@@ -429,8 +420,8 @@ describe("a Passenger", () => {
     expect(issueCommand(match, 0, { type: "stop", unitIds: boarded }).ok).toBe(false);
     expect(board(match, boarded, carrier).ok).toBe(false);
     expect(unload(match, boarded).ok).toBe(false);
-    expect(issueCommand(match, 0, { type: "tend", unitIds: [helper], targetId: rifleman }).ok).toBe(false);
-    expect(board(match, [helper], rifleman).ok).toBe(false);
+    expect(issueCommand(match, 0, { type: "tend", unitIds: [medicOutside], targetId: rifleman }).ok).toBe(false);
+    expect(board(match, [medicOutside], rifleman).ok).toBe(false);
     expect(snapshot(match)).toBe(before);
   });
 
@@ -477,7 +468,7 @@ describe("a Passenger", () => {
     const stood = find(match, medic)!;
     run(match, 1);
     expect(find(match, medic)).toMatchObject({ x: stood.x, y: stood.y });
-    // An empty Troop Carrier stops beside the Medic and takes it in while the patient still marches: no Command names the Medic.
+    // An empty Troop Carrier stops beside the Medic and Collects it while the patient still marches: no Command names the Medic.
     const carrier = addTestUnit(match, 0, "troopCarrier", { x: Math.floor(stood.x), y: ROW + 5 });
     issueCommand(match, 0, { type: "move", unitIds: [carrier], target: { x: Math.floor(stood.x), y: ROW + 1 } });
     runUntil(match, () => passengerIds(match, carrier).length === 1);

@@ -242,6 +242,12 @@ export const TROOP_CARRIER = {
    * Building that stands between them, and is too few to get round a river or a long wall.
    */
   collectWalk: 3,
+  /**
+   * The least a Troop Carrier must have driven, in Cells in a straight line from where its move or Attack-move began
+   * to where it stopped, to be Collecting there. Its own reach, so a nudge among Units that got out does not gather
+   * them up again: a stop that far off is among other Units, or was meant.
+   */
+  collectAfterCells: 2,
 } as const;
 
 /**
@@ -324,8 +330,33 @@ export const OPPONENT = {
   dangerTicks: 60 * TICKS_PER_SECOND,
   /** Once the enemy base is found, the scout explores everything this many Cells from the HQ, looking for Ore. */
   homeExploreRadius: 28,
-  /** The Opponent's own Tend back-off: how long it gives a Mechanic that found no way to a damaged Building no Tend Command onto it. */
-  tendBackOffTicks: 60 * TICKS_PER_SECOND,
+  /**
+   * The Leave-alone time: how long the Opponent keeps a support Unit off a target that Unit found no way to. Long,
+   * as ways open rarely (a Building sold or lost), and each try walks the Unit off and back.
+   */
+  leaveAloneTicks: 60 * TICKS_PER_SECOND,
+  /** How near its Building, in Cells, a Mechanic standing still counts as at work on it and not stopped on the way: beside it, as a Tend needs. */
+  atWorkCells: 1.5,
+  /**
+   * How far from the rally point, in Cells, a Medic may stand before it is sent back: half the seek radius, so
+   * the Units that come home and stop round the rally point are still within the reach it looks for work in.
+   */
+  medicStrayCells: TEND.seekRadius / 2,
+  /** How near where it last stopped, in Cells, a Medic sent back counts as not having left since: it is not sent again into the same crowd. */
+  medicSamePlaceCells: 0.5,
+  /** How near a Unit being Healed, in Cells, a Medic counts as the one Healing it: beside it, as a Tend needs. */
+  healingWithinCells: 1.5,
+  /**
+   * Thinks a strayed Medic and a hurt Unit near it must both have stood still before the Opponent takes it that
+   * the Medic has no way there. An idle Medic looks for work more often than that (TEND.seekTicks), so one with a
+   * way has set off by then.
+   */
+  medicNoWayThinks: 4,
+  /**
+   * How near its Parking Cell, in Cells, a Troop Carrier that stopped on its first drive there counts as parked:
+   * other Units may stand on the Cell itself, and this near is as good.
+   */
+  parkedOnCells: 3,
   /**
    * How near its Parking Cell, in Cells, a Troop Carrier that found no way onto it still counts as parked where it
    * stopped: about as far as the rally point is, so the Riflemen who Board it have a short walk and it is still at home.

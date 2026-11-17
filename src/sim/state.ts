@@ -19,10 +19,18 @@ import { isPassableTerrain } from "./types";
  * movement.ts makes it.
  */
 export interface MoveStart {
-  /** The Cell the Unit set off from. */
-  readonly from: CellPos;
+  /** Where the Unit stood when it set off, which need not be a Cell's centre. */
+  readonly from: Vec;
   /** True while the Unit has had no Passenger inside since it set off. */
   empty: boolean;
+}
+
+/** The orders that carry a `MoveStart`: a move and an Attack-move. */
+export type MovingOrder = Extract<UnitOrder, { readonly type: "move" | "attackMove" }>;
+
+/** True for a move or an Attack-move, the two orders a Troop Carrier is Collecting at the end of. */
+export function isMoving(order: UnitOrder): order is MovingOrder {
+  return order.type === "move" || order.type === "attackMove";
 }
 
 /** What a Unit is currently doing. Later features add their own variants. */
@@ -105,6 +113,9 @@ export interface UnitState {
    * The move or Attack-move the Unit was on when the current Tick began, or
    * null when it was on neither. Standing idle later in the same Tick, it has
    * just finished that move, which is when a Troop Carrier is Collecting.
+   * While the Unit is still on that order this is the order's own `start`,
+   * the same object and not a copy: `getIn` in passengers.ts marks the order's
+   * `start` as no longer empty and relies on this field showing it.
    */
   moveAtTickStart: MoveStart | null;
   /**

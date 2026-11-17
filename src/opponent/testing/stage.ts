@@ -18,9 +18,11 @@ import { openMap } from "../../sim/testing/maps";
 import { addTestBuilding, addTestUnit } from "../../sim/testing/setup";
 import { createOpponent, type Opponent, THINK_EVERY_TICKS } from "../opponent";
 
-// Staging shared by the Computer Opponent's tests. Everything here reaches its
-// state the way a Match does, by Commands and Ticks, so the Opponent is only
-// ever shown a view the Simulation made.
+// Staging shared by the Computer Opponent's tests. `base` and
+// `opponentPastItsFirstWave` put Buildings and Units on the Map directly
+// (addTestBuilding, addTestUnit), and everything after that happens by
+// Commands and Ticks. What matters is that the Opponent is only ever shown a
+// view the Simulation made of that Match, never one put together by hand.
 
 export const SECONDS = TICKS_PER_SECOND;
 export const PLENTY = 20_000;

@@ -155,10 +155,10 @@ export const handleTend: CommandHandler<"tend"> = (m, player, command): CommandR
   if (units.length === 0) return reject("no own Units selected");
   const target = ownTarget(m, player, command.targetId);
   if (!target) return reject("target is not an own Unit or Building");
-  const able = units.filter((u) => rateFor(u, target) > 0);
-  if (able.length === 0) return reject("no selected Unit can help that target");
+  const canHelp = units.filter((u) => rateFor(u, target) > 0);
+  if (canHelp.length === 0) return reject("no selected Unit can help that target");
   if (target.hp >= maxHp(target)) return reject("that target is at full health");
-  for (const u of able) startTend(u, target);
+  for (const u of canHelp) startTend(u, target);
   return OK;
 };
 
