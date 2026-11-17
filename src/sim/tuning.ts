@@ -220,7 +220,7 @@ export const TEND = {
   /** How often an idle support Unit looks: slow enough to be cheap, quick enough to feel willing. */
   seekTicks: Math.ceil(TICKS_PER_SECOND / 2),
   /** The Tend back-off: how long an idle support Unit leaves alone a target it found no way to, before it looks at it again. */
-  retryTicks: 5 * TICKS_PER_SECOND,
+  backOffTicks: 5 * TICKS_PER_SECOND,
   /**
    * Most Cells beside a target a Unit plans a route to before it settles for
    * getting as near as it can. Every Cell round a 3 by 3 Building, the largest

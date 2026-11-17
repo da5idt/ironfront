@@ -16,7 +16,7 @@ export * from "./types";
 export { HQ_BUILDS } from "./building";
 export type { ProductionView } from "./building";
 export type { UnitStats, BuildingStats, WeaponStats } from "./tuning";
-export { tendRate } from "./tuning";
+export { TEND, tendRate } from "./tuning";
 export { TROOP_CARRIER, passengerRoom, isTroopCarrier, isInfantry } from "./tuning";
 export { UNIT_STATS, BUILDING_STATS, isArmed, ECONOMY, PLACEMENT, TRAINING, OPPONENT, TICKS_PER_SECOND } from "./tuning";
 export { createRng, nextFloat, nextInt } from "./rng";

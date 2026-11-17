@@ -528,7 +528,7 @@ describe("a Passenger", () => {
     ticks += TEND.seekTicks + 2;
     run(match, TEND.seekTicks + 2);
     // Well inside the back-off it had before the ride.
-    expect(ticks).toBeLessThan(TEND.retryTicks);
+    expect(ticks).toBeLessThan(TEND.backOffTicks);
     expect(find(match, raider)!.hp).toBeGreaterThan(30);
   });
 

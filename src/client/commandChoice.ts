@@ -6,6 +6,7 @@ import {
   isTroopCarrier,
   type PlayerView,
   tendRate,
+  isInfantry,
   UNIT_STATS,
   type UnitView,
 } from "../sim";
@@ -75,7 +76,7 @@ function ownTargetCommands(selected: readonly UnitView[], target: UnitView | Bui
   }
 
   if (unit && isTroopCarrier(unit.kind)) {
-    const infantry = take((u) => UNIT_STATS[u.kind].class === "infantry");
+    const infantry = take((u) => isInfantry(u.kind));
     if (infantry.length > 0) commands.push({ type: "board", unitIds: infantry, targetId: target.id });
   }
   return commands;

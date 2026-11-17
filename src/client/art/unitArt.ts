@@ -1,4 +1,4 @@
-import { type PlayerId, UNIT_STATS, type UnitKind } from "../../sim";
+import { isInfantry, type PlayerId, UNIT_STATS, type UnitKind } from "../../sim";
 import { ART, type Ramp } from "./artPalette";
 import { FACINGS } from "./buildingArt";
 import { hash2 } from "./hash";
@@ -498,7 +498,7 @@ export function paintUnit(kind: UnitKind, owner: PlayerId, facing: number, frame
   const way = ((facing % FACINGS) + FACINGS) % FACINGS;
   PAINTERS[kind](buf, ramp, way, f);
   // A figure on foot is too small for patches: its burns are single pixels.
-  if (damaged) scorch(buf, SALT[kind], UNIT_STATS[kind].class === "infantry" ? 1 : 2);
+  if (damaged) scorch(buf, SALT[kind], isInfantry(kind) ? 1 : 2);
   castShadow(buf);
   return buf;
 }

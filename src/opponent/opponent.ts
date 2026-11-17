@@ -14,6 +14,7 @@ import {
   type PlayerId,
   type PlayerView,
   type Rng,
+  isInfantry,
   UNIT_STATS,
   type UnitView,
   type Vec,
@@ -348,7 +349,7 @@ export function createOpponent(playerId: PlayerId, seed: number): Opponent {
     // One Troop Carrier at most, and only one waiting at home: the wave is never held up for one.
     const carrier = ownCarriers(view).find((c) => isParked(carriers, c));
     const toBoard = carrier
-      ? sent.filter((u) => UNIT_STATS[u.kind].class === "infantry").slice(0, passengerRoom(carrier.kind))
+      ? sent.filter((u) => isInfantry(u.kind)).slice(0, passengerRoom(carrier.kind))
       : [];
     if (!carrier || toBoard.length === 0) {
       wave = { phase: "gather", gatherAt, thinks: 0, withCarrier: null };

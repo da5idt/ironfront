@@ -58,7 +58,7 @@ describe("an idle support Unit near a hurt target it cannot reach", () => {
     run(match, 2 * TEND.seekTicks);
     removeTestBuilding(match, door);
     // Looks go by all through the back-off, and the door is open, but it gave up less than the back-off ago.
-    run(match, TEND.retryTicks - 2 * TEND.seekTicks);
+    run(match, TEND.backOffTicks - 2 * TEND.seekTicks);
     expect(unitHp(match, raider)).toBe(30);
     // The back-off ends within two more looks; then two Cells to walk at 1.5 a second.
     run(match, 2 * TEND.seekTicks + 3 * TICKS_PER_SECOND);
@@ -74,7 +74,7 @@ describe("an idle support Unit near a hurt target it cannot reach", () => {
     run(match, 3 * TEND.seekTicks);
     for (const door of doors) removeTestBuilding(match, door);
     // Both ways are open now, and the first back-off still has a look or more to go.
-    run(match, TEND.retryTicks - 3 * TEND.seekTicks);
+    run(match, TEND.backOffTicks - 3 * TEND.seekTicks);
     expect(raiders.map((id) => unitHp(match, id))).toEqual([30, 30]);
     runUntil(match, () => raiders.every((id) => unitHp(match, id) > 30));
   });
@@ -95,7 +95,7 @@ describe("an idle support Unit near a hurt target it cannot reach", () => {
       return stopped;
     });
     removeTestBuilding(match, door);
-    run(match, TEND.retryTicks - TEND.seekTicks);
+    run(match, TEND.backOffTicks - TEND.seekTicks);
     expect(unitHp(match, raider)).toBe(30);
     run(match, 2 * TEND.seekTicks + 3 * TICKS_PER_SECOND);
     expect(unitHp(match, raider)).toBeGreaterThan(30);
@@ -110,7 +110,7 @@ describe("an idle support Unit near a hurt target it cannot reach", () => {
     // A second damaged Raider turns up farther off than the first, in the open.
     const inTheOpen = addTestUnit(match, 0, "raider", { x: 17, y: 21 });
     setTestUnitHp(match, inTheOpen, 100);
-    run(match, TEND.retryTicks - TICKS_PER_SECOND);
+    run(match, TEND.backOffTicks - TICKS_PER_SECOND);
     expect(unitHp(match, inTheOpen)).toBeGreaterThan(100);
     expect(unitHp(match, walledIn)).toBe(30);
   });

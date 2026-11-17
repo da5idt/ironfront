@@ -216,7 +216,7 @@ function advanceTend(m: MatchState, u: UnitState, tending: Tending): void {
 /** Ends a Tend the Unit found no way to the target of, and starts the Tend back-off so it does not come straight back by itself. */
 function giveUpOnUnreachable(m: MatchState, u: UnitState, t: TendTarget): void {
   u.order = { type: "idle" };
-  u.tendBackOff.set(t.id, m.tick + TEND.retryTicks);
+  u.tendBackOff.set(t.id, m.tick + TEND.backOffTicks);
 }
 
 /** Drops the targets that are gone and the back-offs that are over, so the memory does not grow through a long Match. */
