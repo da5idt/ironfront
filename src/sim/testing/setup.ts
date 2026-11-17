@@ -1,7 +1,64 @@
+import type { CommandResult } from "../commands";
 import { updateFog } from "../fog";
-import type { Match } from "../match";
+import { advanceTick, createMatch, getPlayerView, issueCommand, type Match } from "../match";
 import { addBuilding, cellIndex, type MatchState, removeBuilding, spawnUnit } from "../state";
-import type { BuildingKind, CellPos, EntityId, PlayerId, UnitKind } from "../types";
+import type { BuildingKind, CellPos, EntityId, PlayerId, UnitKind, Vec } from "../types";
+import type { UnitView } from "../view";
+import { openMap } from "./maps";
+
+/**
+ * A Match on a wide open Map. Its starting bases are in the corners, so a test
+ * that stages its Units along a row near the middle has only those take part.
+ */
+export function stage(): Match {
+  return createMatch(openMap(50, 40), 1);
+}
+
+export function run(match: Match, ticks: number): void {
+  for (let t = 0; t < ticks; t++) advanceTick(match);
+}
+
+/** Advances the Match until `done` is true and returns how many Ticks that took; throws when it is still not so at the limit. */
+export function runUntil(match: Match, done: () => boolean, limit = 1200): number {
+  for (let t = 0; t < limit; t++) {
+    if (done()) return t;
+    advanceTick(match);
+  }
+  throw new Error(`still not so after ${limit} Ticks`);
+}
+
+/** A Unit as its owner sees it: a Player always sees its own Units. Undefined once it is gone. */
+export function find(match: Match, id: EntityId): UnitView | undefined {
+  return (
+    getPlayerView(match, 0).units.find((u) => u.id === id && u.owner === 0) ??
+    getPlayerView(match, 1).units.find((u) => u.id === id && u.owner === 1)
+  );
+}
+
+export function hp(match: Match, id: EntityId): number {
+  return find(match, id)!.hp;
+}
+
+export function at(match: Match, id: EntityId): Vec {
+  const unit = find(match, id)!;
+  return { x: unit.x, y: unit.y };
+}
+
+/** Adds a Unit at that health and returns its id. */
+export function hurt(match: Match, owner: PlayerId, kind: UnitKind, x: number, y: number, health: number): EntityId {
+  const id = addTestUnit(match, owner, kind, { x, y });
+  setTestUnitHp(match, id, health);
+  return id;
+}
+
+export function tend(match: Match, unitIds: EntityId[], targetId: EntityId, player: PlayerId = 0): CommandResult {
+  return issueCommand(match, player, { type: "tend", unitIds, targetId });
+}
+
+/** Everything either Player can see, to show that a rejected Command changed nothing. */
+export function snapshot(match: Match): string {
+  return JSON.stringify([getPlayerView(match, 0), getPlayerView(match, 1)]);
+}
 
 /**
  * Puts a Building on the Map directly, skipping cost and placement rules, so

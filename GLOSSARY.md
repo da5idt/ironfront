@@ -32,6 +32,18 @@ _Avoid_: Aggressive move, a-move, assault
 A Command that sends support Units to one of the Player's own Units or Buildings to restore its health. Each Unit that can help the target walks until it is beside it and works until it is at full health, is gone, has moved too far off, or a new Command arrives. A Unit that cannot help that target ignores the Command, and a Tend on a target already at full health is rejected. An idle support Unit Tends the nearest target it can help by itself, but only one that is standing still, so it does not trail a marching group.
 _Avoid_: Assist, support (as a Command), treat, fix
 
+**Seek radius**:
+How far an idle support Unit looks, every so often, for a target to Tend by itself: an own Unit or Building below full health that it can help and that is standing still. To a Building it is measured from the nearest point of the footprint.
+_Avoid_: Aggro range, scan range, auto-heal range
+
+**Leash**:
+How far the target of a Tend may move before the support Unit gives up on it and stands idle. It is measured from the straight line between where the target and the support Unit were when the Tend began, not from where the support Unit is now. Buildings never move, so it only matters for Units.
+_Avoid_: Tether, chase range, follow distance
+
+**Tend back-off**:
+The wait after a support Unit found no way to a target: until it is over, the Unit does not go to that target by itself, though it still goes to others. Each target has its own, a Tend Command is always tried whatever the back-off, and getting into a Troop Carrier ends them all.
+_Avoid_: Cooldown, blacklist, retry timer
+
 **Board**:
 A Command that sends Infantry to one of the Player's own Troop Carriers to get in. Each walks until it is in a Cell touching the Troop Carrier's and becomes a Passenger if there is room; with no room it stops beside it. Vehicles ignore the Command.
 _Avoid_: Load, embark, enter, mount, garrison
@@ -135,6 +147,10 @@ _Avoid_: Engineer, repairman, technician, fitter
 **Repair**:
 To restore health to a Vehicle or a Building, which is what a Mechanic does when it Tends one. It costs nothing and never goes above full health.
 _Avoid_: Fix, mend, patch up, rebuild, service
+
+**Support Unit**:
+A Unit that can Tend: the Medic and the Mechanic. What each kind can help, and how fast, is a number in the tuning file; a kind with no number there is not one.
+_Avoid_: Helper, healer, support (alone), utility Unit
 
 **Raider**:
 The light attack Vehicle.

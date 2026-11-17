@@ -86,7 +86,7 @@ export function enterCarrier(m: MatchState, u: UnitState, carrier: UnitState): b
   // A ride is a new start for the Tend targets it found no way to: no look
   // reaches a Passenger to end those waits, and it will get out somewhere else.
   // Its reload is left as it was, or getting in and out would be a way to fire faster.
-  u.unreachable.clear();
+  u.tendBackOff.clear();
   carrier.passengers.push(u);
   noPickUp(carrier);
   note(m, "board", u);

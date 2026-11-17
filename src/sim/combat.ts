@@ -123,7 +123,8 @@ function canFight(u: UnitState): boolean {
   return isArmed(UNIT_STATS[u.kind]);
 }
 
-function distanceTo(t: KnownTarget, from: Vec): number {
+/** How far the target is from `from`: to a Unit's position, or to the nearest point of a Building's footprint. Tending measures its seek radius the same way. */
+export function distanceTo(t: KnownTarget, from: Vec): number {
   const p = aimPoint(t, from);
   return Math.hypot(p.x - from.x, p.y - from.y);
 }

@@ -70,8 +70,8 @@ function ownTargetCommands(selected: readonly UnitView[], target: UnitView | Bui
   // Tend comes before Board: on a damaged Troop Carrier the Mechanic repairs it and the others still get in.
   if (target.hp < target.maxHp) {
     const targetClass = unit ? UNIT_STATS[unit.kind].class : "building";
-    const helpers = take((u) => tendRate(u.kind, targetClass) > 0);
-    if (helpers.length > 0) commands.push({ type: "tend", unitIds: helpers, targetId: target.id });
+    const able = take((u) => tendRate(u.kind, targetClass) > 0);
+    if (able.length > 0) commands.push({ type: "tend", unitIds: able, targetId: target.id });
   }
 
   if (unit && isTroopCarrier(unit.kind)) {

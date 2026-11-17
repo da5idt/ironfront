@@ -93,10 +93,10 @@ export interface UnitState {
    */
   pickUp: "no" | "atStop" | "now";
   /**
-   * Tend targets this Unit found no way to, each with the Tick until which it
-   * will not go to that one by itself again.
+   * The Unit's Tend back-offs: the Tend targets it found no way to, each with
+   * the Tick until which it will not go to that one by itself again.
    */
-  readonly unreachable: Map<EntityId, number>;
+  readonly tendBackOff: Map<EntityId, number>;
   /**
    * Where each target this Unit could Tend within its seek radius stood at the
    * Unit's last look. By itself it goes only to one that has not moved since,
@@ -220,7 +220,7 @@ export function spawnUnit(m: MatchState, owner: PlayerId, kind: UnitKind, cell: 
     cargo: 0,
     passengers: [],
     pickUp: "no",
-    unreachable: new Map(),
+    tendBackOff: new Map(),
     stoodAt: new Map(),
   };
   m.units.set(unit.id, unit);

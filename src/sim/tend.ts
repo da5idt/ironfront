@@ -1,3 +1,4 @@
+import { distanceTo } from "./combat";
 import type { CommandResult } from "./commands";
 import { OK, reject } from "./commands";
 import type { CommandHandler } from "./handlers";
@@ -24,7 +25,7 @@ import type { CellPos, EntityId, PlayerId, TendTargetClass, Vec } from "./types"
 //   leash from the straight line between where it and the Unit were when the
 //   Tend began, the Unit gives up. Measured from that line, not from where the
 //   Unit is now, so a Unit sent across the Map still goes, and a target that
-//   walks to meet its helper is met, not dropped.
+//   walks to meet its support Unit is met, not dropped.
 // - It ends, leaving the Unit idle, when the target is at full health, is gone,
 //   is beyond the leash or cannot be reached. Several Units may work on one target; the rates add.
 // - An idle Unit that can Tend looks, every so often, for the nearest own
@@ -34,13 +35,14 @@ import type { CellPos, EntityId, PlayerId, TendTargetClass, Vec } from "./types"
 // - By itself it goes only to a target that is standing still: one found, at
 //   this look, where it stood at the last. Without that it would give up on a
 //   marching target at the leash, start afresh on it or on the next of its
-//   group at the following look, and trail a hurt army across the Map, a leash
+//   group at the following look, and trail a hurt group across the Map, a leash
 //   at a time. A target that has stopped within the seek radius is helped,
 //   wherever it came from. A Tend Command is always obeyed, moving target or not.
 // - A Unit that finds no way to a target leaves that one alone for a while when
-//   it looks by itself, so a walled-in target costs a route now and then, not
-//   on every look, and does not keep the Unit from others it can reach. Each
-//   such target has its own wait. A Tend Command is always tried.
+//   it looks by itself (the Tend back-off), so a walled-in target costs a route
+//   now and then, not on every look, and does not keep the Unit from others it
+//   can reach. Each such target has its own back-off. A Tend Command is always
+//   tried.
 // - Health comes back in whole points, at the Unit's rate a second.
 // - Health never goes above full, and nothing is paid.
 // - Only own targets: a Player always sees its own Units and Buildings, and
@@ -54,10 +56,10 @@ type TendTarget = UnitState | BuildingState;
 export interface Tending {
   readonly type: "tend";
   readonly targetId: EntityId;
-  /** Where the target was when the Tend began; the leash is measured from the line between here */
-  readonly from: Vec;
-  /** and here, where the Unit was then. */
-  readonly helperFrom: Vec;
+  /** Where the target was when the Tend began: one end of the line the leash is measured from. */
+  readonly targetFrom: Vec;
+  /** Where the Unit was when the Tend began: the other end of the line the leash is measured from. */
+  readonly unitFrom: Vec;
   /** The walk to a Cell beside the target, or null while standing. */
   walk: MovePlan | null;
   /** Ticks spent at work beside the target, which sets how many whole health points are due. */
@@ -65,7 +67,7 @@ export interface Tending {
 }
 
 function startTend(u: UnitState, t: TendTarget): void {
-  u.order = { type: "tend", targetId: t.id, from: { x: t.x, y: t.y }, helperFrom: { x: u.x, y: u.y }, walk: null, workedTicks: 0 };
+  u.order = { type: "tend", targetId: t.id, targetFrom: { x: t.x, y: t.y }, unitFrom: { x: u.x, y: u.y }, walk: null, workedTicks: 0 };
 }
 
 function targetClass(t: TendTarget): TendTargetClass {
@@ -102,9 +104,6 @@ export function isBeside(cell: CellPos, t: TendTarget): boolean {
 /** Added to the distance of a Cell another own Unit holds: more than any Map is wide. */
 const HELD_CELL_PENALTY = 1e6;
 
-/** Most Cells beside a target a Unit plans a route to before it settles for getting as near as it can. */
-const STAND_TRIES = 8;
-
 /**
  * The Cells beside the target the Unit could stand in, nearest to it first,
  * with those another own Unit holds last, so two Units on one target take a
@@ -135,7 +134,7 @@ function standGoals(m: MatchState, u: UnitState, t: TendTarget): CellPos[] {
  * it can get to the nearest; null when there is nowhere to stand at all.
  */
 function planStand(m: MatchState, u: UnitState, t: TendTarget): MovePlan | null {
-  const goals = standGoals(m, u, t).slice(0, STAND_TRIES);
+  const goals = standGoals(m, u, t).slice(0, TEND.standTries);
   let nearest: MovePlan | null = null;
   for (const goal of goals) {
     const plan = planMove(m, u, goal);
@@ -147,14 +146,19 @@ function planStand(m: MatchState, u: UnitState, t: TendTarget): MovePlan | null 
 }
 
 export const handleTend: CommandHandler<"tend"> = (m, player, command): CommandResult => {
+  // Another Player's Units named in the Command are dropped and the own ones
+  // still obey, as with every other Command: a selection can go stale between
+  // the click and the Tick (a Unit lost, or one that was never the Player's),
+  // and the rest of it should not stand idle for that. Only a Command with no
+  // own Unit in it is rejected.
   const units = ownUnits(m, player, command.unitIds);
   if (units.length === 0) return reject("no own Units selected");
   const target = ownTarget(m, player, command.targetId);
   if (!target) return reject("target is not an own Unit or Building");
-  const helpers = units.filter((u) => rateFor(u, target) > 0);
-  if (helpers.length === 0) return reject("no selected Unit can help that target");
+  const able = units.filter((u) => rateFor(u, target) > 0);
+  if (able.length === 0) return reject("no selected Unit can help that target");
   if (target.hp >= maxHp(target)) return reject("that target is at full health");
-  for (const u of helpers) startTend(u, target);
+  for (const u of able) startTend(u, target);
   return OK;
 };
 
@@ -175,7 +179,7 @@ function advanceTend(m: MatchState, u: UnitState, tending: Tending): void {
     u.order = { type: "idle" };
     return;
   }
-  if (isUnit(target) && gapToLine(target, tending.from, tending.helperFrom) > TEND.leash) {
+  if (isUnit(target) && gapToLine(target, tending.targetFrom, tending.unitFrom) > TEND.leash) {
     u.order = { type: "idle" };
     return;
   }
@@ -209,26 +213,18 @@ function advanceTend(m: MatchState, u: UnitState, tending: Tending): void {
   if (!m.tends.some((t) => t.targetId === target.id)) m.tends.push({ targetId: target.id, tick: m.tick });
 }
 
-/** Ends a Tend whose target cannot be reached, and notes it so the Unit does not come straight back by itself. */
+/** Ends a Tend the Unit found no way to the target of, and starts the Tend back-off so it does not come straight back by itself. */
 function giveUpOnUnreachable(m: MatchState, u: UnitState, t: TendTarget): void {
   u.order = { type: "idle" };
-  u.unreachable.set(t.id, m.tick + TEND.retryTicks);
+  u.tendBackOff.set(t.id, m.tick + TEND.retryTicks);
 }
 
-/** Drops the targets that are gone and the waits that are over, so the memory does not grow through a long Match. */
+/** Drops the targets that are gone and the back-offs that are over, so the memory does not grow through a long Match. */
 function forgetStale(m: MatchState, u: UnitState): void {
   const gone = (id: EntityId): boolean => !m.units.has(id) && !m.buildings.has(id);
-  for (const [id, untilTick] of u.unreachable) {
-    if (m.tick >= untilTick || gone(id)) u.unreachable.delete(id);
+  for (const [id, untilTick] of u.tendBackOff) {
+    if (m.tick >= untilTick || gone(id)) u.tendBackOff.delete(id);
   }
-}
-
-/** How far the target is from `from`: to a Unit's position, or to the nearest point of a Building's footprint. */
-function gapTo(t: TendTarget, from: Vec): number {
-  if (isUnit(t)) return Math.hypot(t.x - from.x, t.y - from.y);
-  const dx = Math.max(t.x - from.x, 0, from.x - (t.x + t.width));
-  const dy = Math.max(t.y - from.y, 0, from.y - (t.y + t.height));
-  return Math.hypot(dx, dy);
 }
 
 /**
@@ -243,12 +239,12 @@ function look(m: MatchState, u: UnitState): TendTarget | undefined {
   const stoodAt = new Map<EntityId, Vec>();
   const consider = (t: TendTarget): void => {
     if (t.owner !== u.owner || t.hp <= 0 || t.hp >= maxHp(t) || rateFor(u, t) <= 0) return;
-    const d = gapTo(t, u);
+    const d = distanceTo(t, u);
     if (d > TEND.seekRadius) return;
     stoodAt.set(t.id, { x: t.x, y: t.y });
     const stood = u.stoodAt.get(t.id);
     if (!stood || stood.x !== t.x || stood.y !== t.y) return;
-    if (m.tick < (u.unreachable.get(t.id) ?? 0)) return;
+    if (m.tick < (u.tendBackOff.get(t.id) ?? 0)) return;
     if (d < bestD || (d === bestD && best !== undefined && t.id < best.id)) {
       best = t;
       bestD = d;

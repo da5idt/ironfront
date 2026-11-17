@@ -1,7 +1,9 @@
 // The Simulation's public seam (ADR 0002). Everything outside src/sim goes
-// through these exports, and so do tests of the rules. The one exception is a
-// pure helper module with real logic of its own (pathfinding): its tests may
-// import it directly, since it has no Match to drive.
+// through these exports, and so do tests of the rules. Two exceptions: a pure
+// helper module with real logic of its own (pathfinding), whose tests may
+// import it directly since it has no Match to drive; and the balance numbers,
+// which tests of the rules read from tuning.ts, so the seam carries only the
+// numbers something outside src/sim uses.
 export { createMatch, issueCommand, advanceTick, getPlayerView, getMatchStatus } from "./match";
 export type { MatchOptions, StartOrder } from "./match";
 export type { Match } from "./match";
@@ -14,8 +16,7 @@ export * from "./types";
 export { HQ_BUILDS } from "./building";
 export type { ProductionView } from "./building";
 export type { UnitStats, BuildingStats, WeaponStats } from "./tuning";
-export type { TendRates } from "./tuning";
-export { TEND, TEND_RATES, tendRate } from "./tuning";
+export { tendRate } from "./tuning";
 export { TROOP_CARRIER, passengerRoom, isTroopCarrier } from "./tuning";
 export { UNIT_STATS, BUILDING_STATS, isArmed, ECONOMY, PLACEMENT, TRAINING, OPPONENT, TICKS_PER_SECOND } from "./tuning";
 export { createRng, nextFloat, nextInt } from "./rng";
