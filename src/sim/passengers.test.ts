@@ -8,13 +8,13 @@ import {
   issueCommand,
   type Match,
   type PlayerId,
-  TEND,
   UNIT_STATS,
   type UnitKind,
   type UnitView,
 } from "./index";
 import { openMap, testMap } from "./testing/maps";
 import { addTestBuilding, addTestUnit, removeTestBuilding, setTestBuildingHp, setTestUnitHp } from "./testing/setup";
+import { TEND } from "./tuning";
 
 // Staged round Cell (20, 8) of a wide open Map, far from both starting bases in
 // the corners, so only the Units put there take part.

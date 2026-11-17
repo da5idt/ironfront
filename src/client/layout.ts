@@ -62,8 +62,7 @@ export interface Layout {
   readonly soundStrip: Rect;
 }
 
-/** `menuButtons` is how many buttons the menu must have room for: the longest menu's, unless told otherwise. */
-export function computeLayout(screen: Size, menuButtons: number = MENU_SLOTS): Layout {
+export function computeLayout(screen: Size): Layout {
   const panelWidth = Math.min(PANEL_WIDTH, Math.max(0, screen.width - 200));
   const panel = { x: 0, y: 0, width: panelWidth, height: screen.height };
   const side = Math.max(0, panelWidth - MINIMAP_MARGIN * 2);
@@ -72,7 +71,8 @@ export function computeLayout(screen: Size, menuButtons: number = MENU_SLOTS): L
   // On a window too short for everything the sound strip gives way first, as its M key works without it:
   // down to its mute-all button, then to nothing. Only after that do the buttons go below their least size.
   const below = Math.max(0, screen.height - buttonsTop);
-  const menuRoom = menuRoomNeeded(menuButtons);
+  // Room for the longest menu, whichever one is showing, so the strip does not come and go from menu to menu.
+  const menuRoom = menuRoomNeeded(MENU_SLOTS);
   const stripHeight =
     [SOUND_STRIP_HEIGHT, SOUND_STRIP_COMPACT_HEIGHT].find((height) => below - height >= menuRoom) ?? 0;
   const stripTop = buttonsTop + below - stripHeight;

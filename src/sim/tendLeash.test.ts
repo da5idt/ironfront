@@ -1,23 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { advanceTick, createMatch, getPlayerView, issueCommand, type Match, TEND, TICKS_PER_SECOND } from "./index";
+import { createMatch, getPlayerView, issueCommand, type Match } from "./index";
 import { openMap } from "./testing/maps";
-import { addTestUnit, setTestUnitHp } from "./testing/setup";
+import { addTestUnit, run, runUntil, setTestUnitHp } from "./testing/setup";
+import { TEND, TICKS_PER_SECOND, UNIT_STATS } from "./tuning";
 
 // Staged along row 20 of a wide open Map, far from both starting bases.
 const ROW = 20;
 const stage = (): Match => createMatch(openMap(80, 40), 1);
-
-function run(match: Match, ticks: number): void {
-  for (let t = 0; t < ticks; t++) advanceTick(match);
-}
-
-function runUntil(match: Match, done: () => boolean, limit = 3000): void {
-  for (let t = 0; t < limit; t++) {
-    if (done()) return;
-    advanceTick(match);
-  }
-  throw new Error(`still not so after ${limit} Ticks`);
-}
 
 const find = (match: Match, id: number) => getPlayerView(match, 0).units.find((u) => u.id === id)!;
 
@@ -64,7 +53,7 @@ describe("an idle Medic and a hurt group that marches off", () => {
     const comer = addTestUnit(match, 0, "rifleman", { x: 15, y: ROW + 2 });
     setTestUnitHp(match, comer, 1);
     issueCommand(match, 0, { type: "move", unitIds: [comer], target: { x: 33, y: ROW + 2 } });
-    runUntil(match, () => find(match, comer).hp === 50);
+    runUntil(match, () => find(match, comer).hp === UNIT_STATS.rifleman.maxHp);
     expect(find(match, comer).x).toBe(33.5);
   });
 });
@@ -78,7 +67,7 @@ describe("a Tend Command on a target that then walks toward the Medic", () => {
     expect(issueCommand(match, 0, { type: "tend", unitIds: [medic], targetId: patient })).toEqual({ ok: true });
     // 19 Cells toward the Medic: far more than the leash from where the patient stood.
     issueCommand(match, 0, { type: "move", unitIds: [patient], target: { x: 6, y: ROW } });
-    runUntil(match, () => find(match, patient).hp === 50);
+    runUntil(match, () => find(match, patient).hp === UNIT_STATS.rifleman.maxHp);
   });
 
   it("still ends at the leash when the target walks on past the Medic and away", () => {

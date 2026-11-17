@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { advanceTick, type CellPos, createMatch, getPlayerView, issueCommand, type Match, TEND, TICKS_PER_SECOND } from "./index";
+import { type CellPos, createMatch, getPlayerView, issueCommand, type Match } from "./index";
 import { testMap } from "./testing/maps";
-import { addTestBuilding, addTestUnit, removeTestBuilding, setTestUnitHp } from "./testing/setup";
+import { addTestBuilding, addTestUnit, removeTestBuilding, run, runUntil, setTestUnitHp } from "./testing/setup";
+import { TEND, TICKS_PER_SECOND } from "./tuning";
 
 // Two pockets of open ground, 3 by 3 Cells, each inside a ring of rock with one
 // Cell left open as a door. The doors face each other across column 17, so a
@@ -29,18 +30,6 @@ function stage(): Match {
     issueCommand(match, player, { type: "stop", unitIds });
   }
   return match;
-}
-
-function run(match: Match, ticks: number): void {
-  for (let t = 0; t < ticks; t++) advanceTick(match);
-}
-
-function runUntil(match: Match, done: () => boolean, limit = 1200): void {
-  for (let t = 0; t < limit; t++) {
-    if (done()) return;
-    advanceTick(match);
-  }
-  throw new Error(`still not so after ${limit} Ticks`);
 }
 
 const unit = (match: Match, id: number) => getPlayerView(match, 0).units.find((u) => u.id === id)!;

@@ -303,102 +303,112 @@ function paintLegs(buf: PixelBuffer, dx: number, frame: number): void {
   for (const [x, y] of legs) setPixel(buf, x, y, y === legRow ? C[4] : C[2]);
 }
 
+/** What tells one unarmed figure on foot from another. */
+interface UnarmedLook {
+  /** Paints the headgear's two rows. */
+  readonly headgear: (buf: PixelBuffer, left: number, topRow: number) => void;
+  /** The back of the head, shown on the sides the face is not. */
+  readonly back: string;
+  readonly clothes: Ramp;
+  /** Rows of sleeve in the Player's colour, from the shoulder down. */
+  readonly sleeveRows: number;
+  /** What it carries, as two pixels: one near the body's middle and one at its edge. */
+  readonly carried: { readonly near: string; readonly edge: string };
+}
+
+/** How far from the middle of the body the thing an unarmed figure carries reaches, in art pixels: to the body's edge, where a rifle would reach well past it. */
+const CARRIED_REACH = 1.45;
+
 /**
- * Medic: a pale cap and coat with a green band and a green satchel, so it is
- * never taken for a Rifleman, whose headgear is his Player's colour over
- * khaki. The Medic's Player shows on its sleeves and belt instead. It carries
- * no weapon: the satchel hangs on the side it faces and stays close to the
- * body, where a rifle would reach out.
+ * The figure the Medic and the Mechanic share: clothes over a belt in the
+ * Player's colour, with a sleeve in that colour at each shoulder, since their
+ * headgear is not in it as the Rifleman's is. It carries no weapon: something
+ * small is held on the side it faces and stays close to the body.
  */
-function paintMedic(buf: PixelBuffer, colours: Ramp, facing: number, frame: number): void {
+function paintUnarmed(buf: PixelBuffer, colours: Ramp, facing: number, frame: number, look: UnarmedLook): void {
   const a = (facing / FACINGS) * Math.PI * 2;
   const dx = Math.cos(a);
   const dy = Math.sin(a);
   const left = FIGURE_LEFT;
   const topRow = FIGURE_TOP;
-  // Cap, two rows, with the green band across its middle.
-  setPixel(buf, left, topRow, ward.light);
-  setPixel(buf, left + 1, topRow, ward.light);
-  setPixel(buf, left + 2, topRow, ward.mid);
-  setPixel(buf, left, topRow + 1, ward.mid);
-  setPixel(buf, left + 1, topRow + 1, aid.mark);
-  setPixel(buf, left + 2, topRow + 1, ward.dark);
-  paintFace(buf, dx, dy, ward.dark);
-  // Coat, two rows, over a belt in the Player's colour, with a sleeve in that colour at each shoulder.
+  look.headgear(buf, left, topRow);
+  paintFace(buf, dx, dy, look.back);
   for (let row = 0; row < 2; row++) {
-    setPixel(buf, left, topRow + 3 + row, ward.light);
-    setPixel(buf, left + 1, topRow + 3 + row, ward.mid);
-    setPixel(buf, left + 2, topRow + 3 + row, ward.dark);
+    setPixel(buf, left, topRow + 3 + row, look.clothes.light);
+    setPixel(buf, left + 1, topRow + 3 + row, look.clothes.mid);
+    setPixel(buf, left + 2, topRow + 3 + row, look.clothes.dark);
   }
   setPixel(buf, left, topRow + 5, colours.mid);
   setPixel(buf, left + 1, topRow + 5, colours.mid);
   setPixel(buf, left + 2, topRow + 5, colours.dark);
-  for (const row of [0, 1]) {
+  for (let row = 0; row < look.sleeveRows; row++) {
     setPixel(buf, left - 1, topRow + 3 + row, row === 0 ? colours.light : colours.mid);
     setPixel(buf, left + 3, topRow + 3 + row, colours.dark);
   }
   paintLegs(buf, dx, frame);
-  // The satchel swings round the coat with the facing. It is put on before the outline, so where it
-  // passes the coat's edge the outline closes round it and the figure stays one compact shape.
+  // What it carries swings round the body with the facing. It is put on before the outline, so where it
+  // passes the body's edge the outline closes round it and the figure stays one compact shape.
   const midX = left + 1.5;
   const midY = topRow + 4.5;
-  const bag: [number, number] = [Math.floor(midX + dx * SATCHEL_REACH), Math.floor(midY + dy * SATCHEL_REACH)];
-  const strap: [number, number] = [Math.floor(midX + dx * SATCHEL_REACH * 0.4), Math.floor(midY + dy * SATCHEL_REACH * 0.4)];
-  setPixel(buf, strap[0], strap[1], aid.shade);
-  setPixel(buf, bag[0], bag[1], aid.mark);
+  const near = 0.4 * CARRIED_REACH;
+  setPixel(buf, Math.floor(midX + dx * near), Math.floor(midY + dy * near), look.carried.near);
+  setPixel(buf, Math.floor(midX + dx * CARRIED_REACH), Math.floor(midY + dy * CARRIED_REACH), look.carried.edge);
   outline(buf);
 }
 
-/** How far from the middle of the coat the Medic's satchel hangs, in art pixels: on the coat's edge, not beyond the sleeves. */
-const SATCHEL_REACH = 1.45;
+/**
+ * Medic: a pale cap and coat with a green band and a green satchel, so it is
+ * never taken for a Rifleman, whose headgear is his Player's colour over
+ * khaki. The satchel hangs from a darker strap.
+ */
+const MEDIC_LOOK: UnarmedLook = {
+  headgear: (buf, left, topRow) => {
+    // The green band runs across the cap's middle.
+    setPixel(buf, left, topRow, ward.light);
+    setPixel(buf, left + 1, topRow, ward.light);
+    setPixel(buf, left + 2, topRow, ward.mid);
+    setPixel(buf, left, topRow + 1, ward.mid);
+    setPixel(buf, left + 1, topRow + 1, aid.mark);
+    setPixel(buf, left + 2, topRow + 1, ward.dark);
+  },
+  back: ward.dark,
+  clothes: ward,
+  sleeveRows: 2,
+  carried: { near: aid.shade, edge: aid.mark },
+};
 
 /**
  * Mechanic: a yellow hard hat with a brim over oil-dark overalls, so it is
  * taken for neither the Rifleman (his Player's colour over khaki) nor the
- * Medic (pale, with green). Its Player shows on its sleeves, gloves and belt. It carries no weapon: a short tool with a bright steel head is
- * held on the side it faces, close to the body.
+ * Medic (pale, with green). It holds a short tool: a dark handle and a bright
+ * steel head.
  */
-function paintMechanic(buf: PixelBuffer, colours: Ramp, facing: number, frame: number): void {
-  const a = (facing / FACINGS) * Math.PI * 2;
-  const dx = Math.cos(a);
-  const dy = Math.sin(a);
-  const left = FIGURE_LEFT;
-  const topRow = FIGURE_TOP;
-  // Hard hat: a crown, and a brim a pixel wider than the head on each side.
-  setPixel(buf, left, topRow, hardHat.light);
-  setPixel(buf, left + 1, topRow, hardHat.light);
-  setPixel(buf, left + 2, topRow, hardHat.mid);
-  setPixel(buf, left - 1, topRow + 1, hardHat.mid);
-  setPixel(buf, left, topRow + 1, hardHat.mid);
-  setPixel(buf, left + 1, topRow + 1, hardHat.mid);
-  setPixel(buf, left + 2, topRow + 1, hardHat.dark);
-  setPixel(buf, left + 3, topRow + 1, hardHat.dark);
-  paintFace(buf, dx, dy, hardHat.dark);
-  // Overalls, two rows, over a belt in the Player's colour, with a sleeve in that colour at each shoulder.
-  for (let row = 0; row < 2; row++) {
-    setPixel(buf, left, topRow + 3 + row, overalls.light);
-    setPixel(buf, left + 1, topRow + 3 + row, overalls.mid);
-    setPixel(buf, left + 2, topRow + 3 + row, overalls.dark);
-  }
-  setPixel(buf, left, topRow + 5, colours.mid);
-  setPixel(buf, left + 1, topRow + 5, colours.mid);
-  setPixel(buf, left + 2, topRow + 5, colours.dark);
-  // Sleeves down to work gloves, a row longer than the Medic's, so the owner still reads when soot or the tool hides a pixel or two.
-  for (const row of [0, 1, 2]) {
-    setPixel(buf, left - 1, topRow + 3 + row, row === 0 ? colours.light : colours.mid);
-    setPixel(buf, left + 3, topRow + 3 + row, colours.dark);
-  }
-  paintLegs(buf, dx, frame);
-  // The tool swings round the body with the facing: a dark handle from the middle and one bright pixel for its head.
-  const midX = left + 1.5;
-  const midY = topRow + 4.5;
-  setPixel(buf, Math.floor(midX + dx * TOOL_REACH * 0.4), Math.floor(midY + dy * TOOL_REACH * 0.4), K);
-  setPixel(buf, Math.floor(midX + dx * TOOL_REACH), Math.floor(midY + dy * TOOL_REACH), ART.steelShine);
-  outline(buf);
+const MECHANIC_LOOK: UnarmedLook = {
+  headgear: (buf, left, topRow) => {
+    // The brim is a pixel wider than the head on each side.
+    setPixel(buf, left, topRow, hardHat.light);
+    setPixel(buf, left + 1, topRow, hardHat.light);
+    setPixel(buf, left + 2, topRow, hardHat.mid);
+    setPixel(buf, left - 1, topRow + 1, hardHat.mid);
+    setPixel(buf, left, topRow + 1, hardHat.mid);
+    setPixel(buf, left + 1, topRow + 1, hardHat.mid);
+    setPixel(buf, left + 2, topRow + 1, hardHat.dark);
+    setPixel(buf, left + 3, topRow + 1, hardHat.dark);
+  },
+  back: hardHat.dark,
+  clothes: overalls,
+  // Down to work gloves, a row longer than the Medic's, so the owner still reads when soot or the tool hides a pixel or two.
+  sleeveRows: 3,
+  carried: { near: K, edge: ART.steelShine },
+};
+
+function paintMedic(buf: PixelBuffer, colours: Ramp, facing: number, frame: number): void {
+  paintUnarmed(buf, colours, facing, frame, MEDIC_LOOK);
 }
 
-/** How far from the middle of the overalls the head of the Mechanic's tool is, in art pixels: at the body's edge, where a rifle would reach well past it. */
-const TOOL_REACH = 1.45;
+function paintMechanic(buf: PixelBuffer, colours: Ramp, facing: number, frame: number): void {
+  paintUnarmed(buf, colours, facing, frame, MECHANIC_LOOK);
+}
 
 /**
  * Rifleman: a helmet in his Player's colour over a khaki jacket and dark legs.

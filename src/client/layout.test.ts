@@ -57,14 +57,12 @@ describe("the side panel on a short window", () => {
     expect(menuRoomNeeded(4)).toBe(200);
     expect(menuRoomNeeded(5)).toBe(246);
     expect(menuRoomNeeded(1)).toBe(62);
-    // The longest menu is the HQ's five, and the layout plans for it unless told otherwise.
+    // The longest menu is the HQ's five, and the layout plans for it.
     expect(MENU_SLOTS).toBe(5);
-    const strip = (height: number, buttons?: number) => computeLayout({ width: 1024, height }, buttons).soundStrip.height;
+    const strip = (height: number) => computeLayout({ width: 1024, height }).soundStrip.height;
     // 220 pixels of minimap and margins, the menu's least room, and the strip.
     expect(strip(220 + 246 + SOUND_STRIP_HEIGHT)).toBe(SOUND_STRIP_HEIGHT);
     expect(strip(220 + 246 + SOUND_STRIP_HEIGHT - 1)).toBe(SOUND_STRIP_COMPACT_HEIGHT);
-    expect(strip(220 + 246 + SOUND_STRIP_HEIGHT - 1, 4)).toBe(SOUND_STRIP_HEIGHT);
-    expect(strip(220 + 200 + SOUND_STRIP_HEIGHT - 1, 4)).toBe(SOUND_STRIP_COMPACT_HEIGHT);
   });
 
   it("gives every part of a button to the buttons and none of it to the sound strip", () => {

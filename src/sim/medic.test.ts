@@ -1,45 +1,21 @@
 import { describe, expect, it } from "vitest";
 import {
   advanceTick,
-  createMatch,
-  ECONOMY,
   getPlayerView,
-  isArmed,
   issueCommand,
   type Match,
   type PlayerId,
-  TICKS_PER_SECOND,
-  TRAINING,
   TRAINS,
-  UNIT_STATS,
   type UnitClass,
   type UnitKind,
   type UnitView,
 } from "./index";
-import { openMap } from "./testing/maps";
-import { addTestBuilding, addTestUnit, setTestCredits } from "./testing/setup";
+import { addTestBuilding, addTestUnit, find, run, runUntil, setTestCredits, stage } from "./testing/setup";
+import { ECONOMY, isArmed, TICKS_PER_SECOND, TRAINING, UNIT_STATS } from "./tuning";
 
-// Fights are staged along row 8 of a wide open Map, far from both starting
-// bases in the corners, so only the Units put there take part.
+// Fights are staged along row 8 of the open Map, so only the Units put there take part.
 const ROW = 8;
-const stage = (): Match => createMatch(openMap(50, 40), 1);
-
-function run(match: Match, ticks: number): void {
-  for (let t = 0; t < ticks; t++) advanceTick(match);
-}
-
-function runUntil(match: Match, done: () => boolean, limit = 1200): number {
-  for (let t = 0; t < limit; t++) {
-    if (done()) return t;
-    advanceTick(match);
-  }
-  throw new Error(`still not so after ${limit} Ticks`);
-}
-
-/** A Unit as its owner sees it: a Player always sees its own Units. */
-const find = (match: Match, id: number): UnitView | undefined =>
-  getPlayerView(match, 0).units.find((u) => u.id === id && u.owner === 0) ??
-  getPlayerView(match, 1).units.find((u) => u.id === id && u.owner === 1);
+const { cost: COST, maxHp: FULL } = UNIT_STATS.medic;
 
 /** Adds a Hospital for the Player and returns its id. */
 function hospital(match: Match, owner: PlayerId, x: number, y: number): number {
@@ -78,8 +54,8 @@ describe("armed and unarmed", () => {
 });
 
 describe("the Medic", () => {
-  it("has its numbers in the tuning file: 200 Credits, 40 health, the Rifleman's speed, no weapon", () => {
-    expect(UNIT_STATS.medic).toMatchObject({ name: "Medic", cost: 200, maxHp: 40, speed: 1.5, damage: 0, range: 0 });
+  it("is Infantry that walks at the Rifleman's speed", () => {
+    expect(UNIT_STATS.medic.class).toBe("infantry");
     expect(UNIT_STATS.medic.speed).toBe(UNIT_STATS.rifleman.speed);
   });
 
@@ -99,13 +75,13 @@ describe("the Medic", () => {
     const ward = hospital(match, 0, 10, 10);
     expect(training(match, ward)).toEqual({ queue: [], progress: 0, rallyPoint: null });
     expect(train(match, ward)).toEqual({ ok: true });
-    expect(getPlayerView(match, 0).credits).toBe(ECONOMY.startingCredits - 200);
+    expect(getPlayerView(match, 0).credits).toBe(ECONOMY.startingCredits - COST);
     expect(training(match, ward)).toEqual({ queue: ["medic"], progress: 0, rallyPoint: null });
     run(match, UNIT_STATS.medic.trainTicks - 1);
     expect(medics(match, 0)).toEqual([]);
     run(match, 1);
     const [medic] = medics(match, 0);
-    expect(medic).toMatchObject({ hp: 40, maxHp: 40 });
+    expect(medic).toMatchObject({ hp: FULL, maxHp: FULL });
     // Beside the 2 by 2 footprint at (10, 10): within one Cell of it, and not on it.
     const cell = { x: Math.floor(medic!.x), y: Math.floor(medic!.y) };
     expect(cell.x >= 9 && cell.x <= 12 && cell.y >= 9 && cell.y <= 12).toBe(true);
@@ -119,9 +95,9 @@ describe("the Medic", () => {
     setTestCredits(match, 0, 5000);
     for (let i = 0; i < TRAINING.queueSize; i++) expect(train(match, ward).ok).toBe(true);
     expect(train(match, ward).ok).toBe(false);
-    expect(getPlayerView(match, 0).credits).toBe(5000 - TRAINING.queueSize * 200);
+    expect(getPlayerView(match, 0).credits).toBe(5000 - TRAINING.queueSize * COST);
     expect(issueCommand(match, 0, { type: "cancelTraining", buildingId: ward })).toEqual({ ok: true });
-    expect(getPlayerView(match, 0).credits).toBe(5000 - (TRAINING.queueSize - 1) * 200);
+    expect(getPlayerView(match, 0).credits).toBe(5000 - (TRAINING.queueSize - 1) * COST);
     expect(training(match, ward)?.queue).toHaveLength(TRAINING.queueSize - 1);
   });
 
@@ -191,13 +167,13 @@ describe("the Medic", () => {
     const medic = addTestUnit(match, 0, "medic", { x: 20, y: ROW });
     addTestUnit(match, 1, "rifleman", { x: 22, y: ROW });
     run(match, 1);
-    expect(find(match, medic)!.hp).toBe(40 - UNIT_STATS.rifleman.damage);
+    expect(find(match, medic)!.hp).toBe(FULL - UNIT_STATS.rifleman.damage);
     runUntil(match, () => find(match, medic) === undefined);
 
     const other = stage();
     const second = addTestUnit(other, 0, "medic", { x: 20, y: ROW });
     addTestBuilding(other, 1, "turret", { x: 23, y: ROW });
-    runUntil(other, () => find(other, second)!.hp < 40, 5);
+    runUntil(other, () => find(other, second)!.hp < FULL, 5);
   });
 
   it("can be attacked by Command, and an Attack-move stops for it only after enemies that can shoot back", () => {
@@ -207,10 +183,10 @@ describe("the Medic", () => {
     const medic = addTestUnit(match, 1, "medic", { x: 22, y: ROW });
     const rifleman = addTestUnit(match, 1, "rifleman", { x: 23, y: ROW + 1 });
     expect(issueCommand(match, 0, { type: "attackMove", unitIds: [raider], target: { x: 40, y: ROW } })).toEqual({ ok: true });
-    runUntil(match, () => find(match, rifleman) === undefined || find(match, medic)!.hp < 40);
+    runUntil(match, () => find(match, rifleman) === undefined || find(match, medic)!.hp < FULL);
     // The armed Rifleman goes first although the Medic is nearer.
     expect(find(match, rifleman)).toBeUndefined();
-    expect(find(match, medic)?.hp).toBe(40);
+    expect(find(match, medic)?.hp).toBe(FULL);
     runUntil(match, () => find(match, medic) === undefined);
 
     const other = stage();

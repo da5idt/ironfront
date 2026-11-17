@@ -81,7 +81,7 @@ function getIn(m: MatchState, u: UnitState, carrier: UnitState): boolean {
   // A ride is a new start for the Tend targets it found no way to: no look
   // reaches a Passenger to end those waits, and it will get out somewhere else.
   // Its reload is left as it was, or getting in and out would be a way to fire faster.
-  u.unreachable.clear();
+  u.tendBackOff.clear();
   carrier.passengers.push(u);
   // Whatever move the Troop Carrier is on no longer ends in Collecting, even if this one is out again before the stop.
   if ("start" in carrier.order) carrier.order.start.empty = false;

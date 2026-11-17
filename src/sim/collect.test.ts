@@ -3,7 +3,6 @@ import {
   advanceTick,
   type CellPos,
   createMatch,
-  TEND,
   getPlayerView,
   issueCommand,
   type Match,
@@ -14,6 +13,7 @@ import {
 import { openMap, testMap } from "./testing/maps";
 import { TROOP_CARRIER } from "./tuning";
 import { addTestBuilding, addTestUnit, setTestCredits, setTestUnitHp } from "./testing/setup";
+import { TEND } from "./tuning";
 
 // Staged round Cell (20, 8) of a wide open Map, far from both starting bases in
 // the corners, so only the Units put there take part.

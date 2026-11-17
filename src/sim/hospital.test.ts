@@ -1,40 +1,17 @@
 import { describe, expect, it } from "vitest";
-import {
-  advanceTick,
-  BUILDING_STATS,
-  createMatch,
-  ECONOMY,
-  getMatchStatus,
-  getPlayerView,
-  HQ_BUILDS,
-  issueCommand,
-  type Match,
-  type PlayerId,
-  TICKS_PER_SECOND,
-  TRAINS,
-} from "./index";
+import { createMatch, getMatchStatus, getPlayerView, HQ_BUILDS, issueCommand, type Match, type PlayerId, TRAINS } from "./index";
 import { openMap } from "./testing/maps";
-import { addTestBuilding, addTestUnit, removeTestBuilding, setTestBuildingHp } from "./testing/setup";
+import { addTestBuilding, addTestUnit, removeTestBuilding, run, setTestBuildingHp } from "./testing/setup";
+import { BUILDING_STATS, ECONOMY, isArmed } from "./tuning";
 
-function run(match: Match, ticks: number): void {
-  for (let t = 0; t < ticks; t++) advanceTick(match);
-}
+const HOSPITAL = BUILDING_STATS.hospital;
 
 const own = (match: Match, owner: PlayerId, kind: string) =>
   getPlayerView(match, owner).buildings.filter((b) => b.owner === owner && b.kind === kind);
 
 describe("the Hospital", () => {
-  it("has its numbers in the tuning file: 800 Credits, 2 by 2 Cells, 700 health, 15 seconds to build, no weapon", () => {
-    expect(BUILDING_STATS.hospital).toMatchObject({
-      name: "Hospital",
-      cost: 800,
-      width: 2,
-      height: 2,
-      maxHp: 700,
-      buildTicks: 15 * TICKS_PER_SECOND,
-      damage: 0,
-      range: 0,
-    });
+  it("is unarmed", () => {
+    expect(isArmed(HOSPITAL)).toBe(false);
   });
 
   it("is the fifth thing the HQ builds, after the four it built before", () => {
@@ -46,14 +23,14 @@ describe("the Hospital", () => {
     for (const [player, at] of [[0, { x: 0, y: 6 }], [1, { x: 28, y: 22 }]] as const) {
       const match = createMatch(openMap(30, 30), 1);
       expect(issueCommand(match, player, { type: "startBuilding", kind: "hospital" })).toEqual({ ok: true });
-      expect(getPlayerView(match, player).credits).toBe(ECONOMY.startingCredits - 800);
-      run(match, 15 * TICKS_PER_SECOND - 1);
+      expect(getPlayerView(match, player).credits).toBe(ECONOMY.startingCredits - HOSPITAL.cost);
+      run(match, HOSPITAL.buildTicks - 1);
       expect(getPlayerView(match, player).production).toMatchObject({ kind: "hospital", ready: false });
       run(match, 1);
       expect(getPlayerView(match, player).production).toEqual({ kind: "hospital", progress: 1, ready: true });
       expect(issueCommand(match, player, { type: "placeBuilding", at }), `Player ${player}`).toEqual({ ok: true });
       expect(own(match, player, "hospital")).toEqual([
-        expect.objectContaining({ x: at.x, y: at.y, width: 2, height: 2, hp: 700, maxHp: 700 }),
+        expect.objectContaining({ x: at.x, y: at.y, width: HOSPITAL.width, height: HOSPITAL.height, hp: HOSPITAL.maxHp, maxHp: HOSPITAL.maxHp }),
       ]);
       expect(getPlayerView(match, player).production).toBeNull();
     }
@@ -62,7 +39,7 @@ describe("the Hospital", () => {
   it("follows the usual placement rules: not on another Building, not far from the Player's own", () => {
     const match = createMatch(openMap(30, 30), 1);
     issueCommand(match, 0, { type: "startBuilding", kind: "hospital" });
-    run(match, 15 * TICKS_PER_SECOND);
+    run(match, HOSPITAL.buildTicks);
     expect(getPlayerView(match, 0).production?.ready).toBe(true);
     expect(issueCommand(match, 0, { type: "placeBuilding", at: { x: 1, y: 1 } }).ok).toBe(false);
     expect(issueCommand(match, 0, { type: "placeBuilding", at: { x: 14, y: 14 } }).ok).toBe(false);
