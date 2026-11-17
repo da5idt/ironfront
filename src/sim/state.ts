@@ -12,17 +12,30 @@ import { isPassableTerrain } from "./types";
 // Internal state of a Match. Only code inside src/sim may touch it; everything
 // outside reads a PlayerView (view.ts). Tests use the public seam in index.ts.
 
+/**
+ * How a move or an Attack-move began, which is what decides whether a Troop
+ * Carrier is Collecting where it ends (passengers.ts). Both orders must carry
+ * one, so no new way of setting a Unit off can leave it out; `moveStart` in
+ * movement.ts makes it.
+ */
+export interface MoveStart {
+  /** The Cell the Unit set off from. */
+  readonly from: CellPos;
+  /** True while the Unit has had no Passenger inside since it set off. */
+  empty: boolean;
+}
+
 /** What a Unit is currently doing. Later features add their own variants. */
 export type UnitOrder =
   | { readonly type: "idle" }
-  | { readonly type: "move"; readonly plan: MovePlan }
+  | { readonly type: "move"; readonly plan: MovePlan; readonly start: MoveStart }
   | { readonly type: "attack"; readonly targetId: EntityId; chase: MovePlan | null }
   /**
    * On an Attack-move: walking the plan, and standing (`firing`) whenever an enemy is in range.
    * `spot` is the short walk to a Cell of its own when it stopped on top of another own Unit;
    * `settled` says it has taken its place for this stand and will not shuffle again.
    */
-  | { readonly type: "attackMove"; readonly plan: MovePlan; firing: boolean; spot: MovePlan | null; settled: boolean }
+  | { readonly type: "attackMove"; readonly plan: MovePlan; readonly start: MoveStart; firing: boolean; spot: MovePlan | null; settled: boolean }
   | HarvestOrder
   | Tending
   | Boarding;
@@ -48,8 +61,10 @@ export interface Tended {
 
 /**
  * A Unit that got into ("board") or out of ("unload") a Troop Carrier, kept
- * until the next Tick is over so drawing and sound can show it. It does not
- * name the Troop Carrier, which may be out of the sight of a Player shown it.
+ * until the next Tick is over so drawing and sound can show it. "board" is for
+ * every way in: a Unit taken in by Collecting looks and sounds the same as one
+ * a Board Command sent, so it has no event of its own. It does not name the
+ * Troop Carrier, which may be out of the sight of a Player shown it.
  */
 export interface PassengerEvent {
   readonly type: "board" | "unload";
@@ -87,11 +102,11 @@ export interface UnitState {
    */
   readonly passengers: UnitState[];
   /**
-   * Where a Troop Carrier is on the way to collecting (passengers.ts):
-   * "atStop" while on a move or an Attack-move it began with no Passengers and
-   * has had none on since, "now" on the Tick that move ends, "no" otherwise.
+   * The move or Attack-move the Unit was on when the current Tick began, or
+   * null when it was on neither. Standing idle later in the same Tick, it has
+   * just finished that move, which is when a Troop Carrier is Collecting.
    */
-  pickUp: "no" | "atStop" | "now";
+  moveAtTickStart: MoveStart | null;
   /**
    * Tend targets this Unit found no way to, each with the Tick until which it
    * will not go to that one by itself again.
@@ -219,7 +234,7 @@ export function spawnUnit(m: MatchState, owner: PlayerId, kind: UnitKind, cell: 
     order: kind === "harvester" ? startHarvesting() : { type: "idle" },
     cargo: 0,
     passengers: [],
-    pickUp: "no",
+    moveAtTickStart: null,
     unreachable: new Map(),
     stoodAt: new Map(),
   };

@@ -2,7 +2,7 @@ import { buildProgress, deliverFreeHarvesters, dropOrphanedProduction } from "./
 import { fight, removeDead } from "./combat";
 import { updateFog } from "./fog";
 import { harvestOre } from "./harvest";
-import { moveUnits } from "./movement";
+import { moveUnits, noteMoves } from "./movement";
 import { boardTroopCarriers, collectPassengers, forgetShownPassengerEvents, getOutUnderFire } from "./passengers";
 import { tendTargets } from "./tend";
 import { trainUnits } from "./training";
@@ -14,6 +14,8 @@ import { decideVictory } from "./victory";
 // Victory comes after the dead are removed, so it sees who has Buildings left.
 // Passengers get out under fire straight after the fight and before the dead
 // are removed, so those of a Troop Carrier destroyed this Tick still get out.
+// The moves under way are noted before anything walks, which is how Collecting
+// knows a Troop Carrier arrived this Tick.
 // Collecting comes after the fight, which is what tells it that a Troop Carrier
 // lost health on the Tick it stopped, and before the Tend, so an idle support
 // Unit is taken in before it looks for work.
@@ -21,6 +23,7 @@ export type System = (m: MatchState) => void;
 
 export const SYSTEMS: readonly System[] = [
   forgetShownPassengerEvents,
+  noteMoves,
   buildProgress,
   trainUnits,
   deliverFreeHarvesters,

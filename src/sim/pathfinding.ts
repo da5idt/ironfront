@@ -157,6 +157,40 @@ export function nearestReachable(
   return null;
 }
 
+/**
+ * Every Cell at most `steps` 8-way steps from one of the `starts`, as
+ * `y * width + x` values, walking only through walkable Cells and never
+ * cutting a corner. The starts themselves are in it, walkable or not.
+ */
+export function cellsWithinSteps(grid: Grid, starts: readonly CellPos[], steps: number): Set<number> {
+  const { width, height } = grid;
+  const inside = (x: number, y: number) => x >= 0 && y >= 0 && x < width && y < height;
+  const seen = new Set<number>();
+  let edge: number[] = [];
+  for (const s of starts) {
+    if (!inside(s.x, s.y) || seen.has(s.y * width + s.x)) continue;
+    seen.add(s.y * width + s.x);
+    edge.push(s.y * width + s.x);
+  }
+  for (let step = 0; step < steps && edge.length > 0; step++) {
+    const next: number[] = [];
+    for (const i of edge) {
+      const x = i % width;
+      const y = (i - x) / width;
+      for (const [dx, dy] of NEIGHBOURS) {
+        const nx = x + dx;
+        const ny = y + dy;
+        if (!inside(nx, ny) || seen.has(ny * width + nx) || !grid.walkable(nx, ny)) continue;
+        if (dx !== 0 && dy !== 0 && (!grid.walkable(x + dx, y) || !grid.walkable(x, y + dy))) continue;
+        seen.add(ny * width + nx);
+        next.push(ny * width + nx);
+      }
+    }
+    edge = next;
+  }
+  return seen;
+}
+
 /** Binary min-heap of Cell indices by f, then h, then insertion order. */
 class MinHeap {
   private readonly items: { i: number; f: number; h: number; seq: number }[] = [];

@@ -37,11 +37,11 @@ A Command that sends Infantry to one of the Player's own Troop Carriers to get i
 _Avoid_: Load, embark, enter, mount, garrison
 
 **Unload**:
-A Command that has every Passenger of a Troop Carrier get out onto a free Cell beside it, nearest first; a Passenger with no free Cell stays inside. A Troop Carrier that loses health Unloads by itself on that Tick. Units that get out are idle. (A Harvester emptying its Ore at a Refinery is not this.)
+A Command that has every Passenger of a Troop Carrier get out onto a free Cell beside it, nearest first; a Passenger with no free Cell stays inside. The Command is rejected when none of the Troop Carriers holds a Passenger. A Troop Carrier that loses health Unloads by itself on that Tick. Units that get out are idle. (A Harvester emptying its Ore at a Refinery is not this.)
 _Avoid_: Disembark, deploy, drop off, eject, evacuate
 
 **Collecting**:
-What a Troop Carrier does, once, on the Tick it finishes a move or an Attack-move that it began with no Passengers and had none on since: idle Infantry of its own Player within the pick-up radius (two Cells) become its Passengers from where they stand, nearest first and lowest id first among those as near as each other, until it is full. No Command asks for it. A Troop Carrier that stands takes nobody, so Units that got out, and Units sent beside a parked one, stay on the Map until it has been sent off empty and has stopped again. A move on which it held a Passenger or put one out ends without it, and so does a stop on a Tick it lost health.
+What a Troop Carrier does, once, on the Tick it finishes a move or an Attack-move that took it to another Cell, that it began with no Passengers and had none on since: idle Infantry of its own Player within the Collecting radius (two Cells) become its Passengers from where they stand, nearest first and lowest id first among those as near as each other, until it is full. It takes only Units that have a way on foot of at most three Cells to a Cell touching its own, so none across water or behind a wall. No Command asks for it, and a Unit it takes is shown and heard getting in exactly as one that Boards. A Troop Carrier that stands takes nobody, so Units that got out, and Units sent beside a parked one, stay on the Map until it has been sent off empty and has stopped again in another Cell; sent to the Cell it stands on, or somewhere it has no way to, it has not moved. A move on which it held a Passenger or put one out ends without it, and so does a stop on a Tick it lost health.
 _Avoid_: Auto-load, auto-board, pick-up mode
 
 **Victory**:

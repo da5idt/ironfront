@@ -227,8 +227,13 @@ export const TEND = {
 export const TROOP_CARRIER = {
   /** Most Passengers a Troop Carrier holds. */
   capacity: 5,
-  /** How far, in Cells, a Troop Carrier reaches for idle Infantry of its own Player when it collects. */
-  pickupRadius: 2,
+  /** How far, in Cells, a Troop Carrier reaches for idle Infantry of its own Player when it is Collecting. */
+  collectRadius: 2,
+  /**
+   * Most steps on foot, Cell to Cell, between a Unit it takes when Collecting and a Cell touching its own.
+   * One more than open ground ever asks within the radius, so a corner in the way is walked round and a river is not.
+   */
+  collectWalk: 3,
 } as const;
 
 /**
@@ -242,6 +247,11 @@ export function passengerRoom(kind: UnitKind): number {
 /** True for a Unit kind that carries Passengers. */
 export function isTroopCarrier(kind: UnitKind): boolean {
   return passengerRoom(kind) > 0;
+}
+
+/** True for a Unit kind of the Infantry class. */
+export function isInfantry(kind: UnitKind): boolean {
+  return UNIT_STATS[kind].class === "infantry";
 }
 
 export const PLACEMENT = {

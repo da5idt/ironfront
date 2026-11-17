@@ -9,7 +9,6 @@ import {
   type Match,
   type PlayerId,
   TEND,
-  TROOP_CARRIER,
   UNIT_STATS,
   type UnitKind,
   type UnitView,
@@ -92,10 +91,6 @@ function withPassengers(match: Match, kinds: readonly UnitKind[], owner: PlayerI
 const FIVE = ["rifleman", "rifleman", "rifleman", "rifleman", "rifleman"] as const;
 
 describe("Board", () => {
-  it("has room for five in the tuning file", () => {
-    expect(TROOP_CARRIER.capacity).toBe(5);
-  });
-
   it("walks Infantry to an own Troop Carrier and takes them in when beside it: off the view's Units, in the owner's Passengers", () => {
     const match = stage();
     const carrier = addTestUnit(match, 0, "troopCarrier", { x: COL, y: ROW });
@@ -312,9 +307,19 @@ describe("Unload", () => {
     expect(snapshot(match)).toBe(before);
     expect(unload(match, [raider, carrier])).toEqual({ ok: true });
     expect(passengers(match, carrier)).toEqual([]);
-    // An empty one takes the Command and nothing happens.
+  });
+
+  it("is rejected, with the Match unchanged, when no Troop Carrier named has a Passenger, and accepted when one of them has", () => {
+    const match = stage();
+    const { carrier } = withPassengers(match, ["rifleman"]);
+    const empty = addTestUnit(match, 0, "troopCarrier", { x: COL, y: ROW + 6 });
+    const before = snapshot(match);
+    expect(unload(match, [empty]).ok).toBe(false);
+    expect(snapshot(match)).toBe(before);
+    expect(unload(match, [empty, carrier])).toEqual({ ok: true });
+    expect(passengers(match, carrier)).toEqual([]);
     const after = snapshot(match);
-    expect(unload(match, [carrier])).toEqual({ ok: true });
+    expect(unload(match, [empty, carrier]).ok).toBe(false);
     expect(snapshot(match)).toBe(after);
   });
 
@@ -472,7 +477,7 @@ describe("a Passenger", () => {
     const stood = find(match, medic)!;
     run(match, 1);
     expect(find(match, medic)).toMatchObject({ x: stood.x, y: stood.y });
-    // An empty Troop Carrier stops beside the Medic and collects it while the patient still marches: no Command names the Medic.
+    // An empty Troop Carrier stops beside the Medic and takes it in while the patient still marches: no Command names the Medic.
     const carrier = addTestUnit(match, 0, "troopCarrier", { x: Math.floor(stood.x), y: ROW + 5 });
     issueCommand(match, 0, { type: "move", unitIds: [carrier], target: { x: Math.floor(stood.x), y: ROW + 1 } });
     runUntil(match, () => passengerIds(match, carrier).length === 1);
