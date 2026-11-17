@@ -19,11 +19,11 @@ import {
   type Vec,
 } from "../sim";
 import { hqCentre, isOpenGround, ownBuildings, ownPassengers, type Standing } from "./base";
-import { createCarrierMemory, driveToParking, isParked, ownCarriers, parkCommands } from "./carrier";
+import { createCarrierMemory, driveToParking, isParked, ownCarriers, parkCommands, recall } from "./carrier";
 import { buildCommands, rallyCommands, rallyPoint, trainCommands, type WaveNeeds } from "./economy";
 import { type DangerMemory, harvestCommands, rememberDanger } from "./harvesting";
-import { type TendMemory, tendCommands } from "./support";
-import { DEFEND_RADIUS, distanceTo, nearest, STUCK_THINKS, waveReady, waveThreshold } from "./tactics";
+import { createMedicMemory, createTendMemory, medicCommands, tendCommands } from "./support";
+import { DEFEND_RADIUS, distanceTo, distanceToCell, nearest, STUCK_THINKS, waveReady, waveThreshold } from "./tactics";
 
 // The Computer Opponent. It plays by the person's rules: it reads only its own
 // PlayerView, so Fog of War applies, and answers with Commands the caller
@@ -48,7 +48,7 @@ interface UnitNotes {
   lastX: number;
   lastY: number;
   lastCargo: number;
-  /** Thinks in a row it has not moved (and, for a Harvester, its load not changed). */
+  /** Thinks in a row it has not moved (and, for a Harvester, its cargo not changed). */
   still: number;
 }
 
@@ -87,7 +87,7 @@ interface BoardingWave {
 }
 
 /** The Troop Carrier that travels with a wave, until it is empty. */
-interface Ride {
+interface WaveCarrier {
   readonly carrierId: EntityId;
   /** The wave's Units inside it at the last think. */
   inside: readonly EntityId[];
@@ -99,7 +99,7 @@ interface WaveOut {
   readonly gatherAt: CellPos;
   /** Thinks since it set off. */
   thinks: number;
-  ride: Ride | null;
+  withCarrier: WaveCarrier | null;
 }
 
 type Wave = BoardingWave | WaveOut;
@@ -121,7 +121,8 @@ export function createOpponent(playerId: PlayerId, seed: number): Opponent {
   let homeExplored = false;
   const danger: DangerMemory = new Map();
   const fields = new Map<EntityId, CellPos>();
-  const tendJobs: TendMemory = new Map();
+  const tendJobs = createTendMemory();
+  const medics = createMedicMemory();
   const carriers = createCarrierMemory();
   const standing: Standing = {
     thinks: (id) => notes.get(id)?.still ?? 0,
@@ -160,12 +161,14 @@ export function createOpponent(playerId: PlayerId, seed: number): Opponent {
     const army = own.filter((u) => isArmed(UNIT_STATS[u.kind]) && !isTroopCarrier(u.kind));
 
     // Decided before the wave is led: a Troop Carrier the wave lets go in this think still
-    // shows its Passengers, and must not be taken for one at home that took in the wrong Units.
+    // shows its Passengers, and must not be taken for one at home that Collected the wrong Units.
     const parking = parkCommands(view, carriers, standing, waveCarrierId());
+    // Worked out before a wave is launched in this think, so the wave that leaves now is not yet counted as sent.
+    const needs = waveNeeds(army);
 
     return [
-      ...buildCommands(view, placeFailures, waveNeeds(army)),
-      ...trainCommands(view, waveNeeds(army)),
+      ...buildCommands(view, placeFailures, needs),
+      ...trainCommands(view, needs),
       ...rallyCommands(view),
       ...harvestCommands(view, danger, fields, (u) => standing.thinks(u.id)),
       ...defend(view, army),
@@ -173,6 +176,7 @@ export function createOpponent(playerId: PlayerId, seed: number): Opponent {
       ...scout(view, army),
       ...parking,
       ...tendCommands(view, tendJobs, standing),
+      ...medicCommands(view, medics, standing),
     ];
   }
 
@@ -258,16 +262,21 @@ export function createOpponent(playerId: PlayerId, seed: number): Opponent {
    */
   function callOff(view: PlayerView, w: BoardingWave): Command[] {
     standDown();
-    wavesSent--;
-    lastWaveTick = w.waveTickBefore;
+    uncount(w);
     const carrier = ownCarriers(view).find((c) => c.id === w.carrierId);
     return carrier?.passengers?.length ? [{ type: "unload", unitIds: [carrier.id] }] : [];
+  }
+
+  /** Takes a wave that never left home out of the count, so the next one is as large and as soon as this one was. */
+  function uncount(w: BoardingWave): void {
+    wavesSent--;
+    lastWaveTick = w.waveTickBefore;
   }
 
   /** The Troop Carrier with the wave, which is not one at home. */
   function waveCarrierId(): EntityId | null {
     if (!wave) return null;
-    return wave.phase === "board" ? wave.carrierId : (wave.ride?.carrierId ?? null);
+    return wave.phase === "board" ? wave.carrierId : (wave.withCarrier?.carrierId ?? null);
   }
 
   /**
@@ -281,10 +290,12 @@ export function createOpponent(playerId: PlayerId, seed: number): Opponent {
     if (!wave) return commands;
     const inWave = withRole(army, "wave");
     const carrier = ownCarriers(view).find((c) => c.id === waveCarrierId());
-    const riding = (carrier?.passengers ?? []).some((p) => notes.get(p.id)?.role === "wave");
-    if (inWave.length === 0 && !riding) {
+    const aboard = (carrier?.passengers ?? []).some((p) => notes.get(p.id)?.role === "wave");
+    if (inWave.length === 0 && !aboard) {
       // Left at the front it would stand alone in the other Player's way, and the next wave looks for it at home.
       if (carrier && wave.phase !== "board") commands.push(driveToParking(view, carriers, standing, carrier));
+      // Lost before it left home, it was never sent: the wave due is this one again.
+      if (wave.phase === "board") uncount(wave);
       wave = null;
       return commands;
     }
@@ -295,13 +306,17 @@ export function createOpponent(playerId: PlayerId, seed: number): Opponent {
     if (out.phase === "gather") {
       const gathered = inWave.filter((u) => isGathered(out, u));
       // Passengers still on their way count as not gathered, whatever share of the others has arrived.
-      const waiting = gathered.length < inWave.length * GATHER_SHARE || out.ride !== null;
+      const waiting = gathered.length < inWave.length * GATHER_SHARE || out.withCarrier !== null;
       if (waiting && out.thinks < GATHER_THINKS) return commands;
       out.phase = "attack";
       // Out of time with the Troop Carrier still on its way: its Passengers get out where it is and walk.
-      if (out.ride && carrier) commands.push({ type: "unload", unitIds: [carrier.id] });
+      // (One that has gathered was told to Unload just now, when it was led.)
+      if (out.withCarrier && carrier && !isGathered(out, carrier)) commands.push({ type: "unload", unitIds: [carrier.id] });
     }
     if (!hasTarget) {
+      // Its Troop Carrier may still be out and full: left where it is, it would stand
+      // at the front with its note saying parked, and the next wave would be sent there to Board.
+      if (out.withCarrier && carrier) commands.push(recall(view, carriers, standing, carrier));
       standDown();
       return [...commands, ...sendHome(view, inWave)];
     }
@@ -311,7 +326,8 @@ export function createOpponent(playerId: PlayerId, seed: number): Opponent {
   /**
    * Ends the wave with Units left: all of them are the army at home again.
    * Those inside its Troop Carrier are not on the Map to be sent anywhere; the
-   * Troop Carrier is one at home from now on, which puts them out and sends them back.
+   * Troop Carrier is one at home from now on, which puts them out and sends
+   * them back. A Troop Carrier that has left home is recalled before this.
    */
   function standDown(): void {
     for (const n of notes.values()) if (n.role === "wave") Object.assign(n, { role: "home", target: null });
@@ -335,7 +351,7 @@ export function createOpponent(playerId: PlayerId, seed: number): Opponent {
       ? sent.filter((u) => UNIT_STATS[u.kind].class === "infantry").slice(0, passengerRoom(carrier.kind))
       : [];
     if (!carrier || toBoard.length === 0) {
-      wave = { phase: "gather", gatherAt, thinks: 0, ride: null };
+      wave = { phase: "gather", gatherAt, thinks: 0, withCarrier: null };
       // An Attack-move, so a wave met on its way out fights back instead of walking on under fire.
       return [{ type: "attackMove", unitIds: sent.map((u) => u.id), target: gatherAt }];
     }
@@ -372,8 +388,8 @@ export function createOpponent(playerId: PlayerId, seed: number): Opponent {
     const coming = w.toBoard.filter((id) => inWave.some((u) => u.id === id) && standing.thinks(id) < STUCK_THINKS);
     if (carrier && !putOut && coming.length > 0 && view.tick < w.boardBy) return [];
     // An empty Troop Carrier stays parked: it would bring nobody.
-    const ride = carrier && inside.length > 0 ? { carrierId: carrier.id, inside } : null;
-    wave = { phase: "gather", gatherAt: w.gatherAt, thinks: 0, ride };
+    const withCarrier = carrier && inside.length > 0 ? { carrierId: carrier.id, inside } : null;
+    wave = { phase: "gather", gatherAt: w.gatherAt, thinks: 0, withCarrier };
     // The Troop Carrier is not sent with them: it is led after them, or it would be there long before them.
     return inWave.length > 0 ? [{ type: "attackMove", unitIds: inWave.map((u) => u.id), target: w.gatherAt }] : [];
   }
@@ -387,7 +403,7 @@ export function createOpponent(playerId: PlayerId, seed: number): Opponent {
    * drives home: at the front it would stand alone in the other Player's
    * way, and the next wave looks for it parked at home. (Nothing else calls
    * for the drive: a move on which it held or put out a Passenger ends
-   * without a pick-up, so it would not take the wave's Riflemen back in.)
+   * without Collecting, so it would not take the wave's Riflemen back in.)
    */
   function leadCarrier(
     view: PlayerView,
@@ -395,22 +411,22 @@ export function createOpponent(playerId: PlayerId, seed: number): Opponent {
     carrier: UnitView | undefined,
     inWave: readonly UnitView[],
   ): Command[] {
-    const ride = w.ride;
-    if (!ride) return [];
+    const led = w.withCarrier;
+    if (!led) return [];
     const commands: Command[] = [];
     // Out short of the gathering point (it was hit, or is gone): they go on by foot, and are not told to Board again.
-    const short = inWave.filter((u) => ride.inside.includes(u.id) && !isGathered(w, u)).map((u) => u.id);
+    const short = inWave.filter((u) => led.inside.includes(u.id) && !isGathered(w, u)).map((u) => u.id);
     if (short.length > 0 && w.phase === "gather") commands.push({ type: "attackMove", unitIds: short, target: w.gatherAt });
-    ride.inside = ride.inside.filter((id) => carrier?.passengers?.some((p) => p.id === id));
-    if (!carrier || ride.inside.length === 0) {
-      w.ride = null;
+    led.inside = led.inside.filter((id) => carrier?.passengers?.some((p) => p.id === id));
+    if (!carrier || led.inside.length === 0) {
+      w.withCarrier = null;
       if (carrier) commands.push(driveToParking(view, carriers, standing, carrier));
       return commands;
     }
     if (isGathered(w, carrier) || w.phase === "attack") return [...commands, { type: "unload", unitIds: [carrier.id] }];
     if (w.thinks % FOLLOW_THINKS !== 0) return commands;
     const next = foremostCell(w.gatherAt, inWave);
-    if (Math.hypot(carrier.x - (next.x + 0.5), carrier.y - (next.y + 0.5)) <= FOLLOW_SLACK) return commands;
+    if (distanceToCell(next, carrier) <= FOLLOW_SLACK) return commands;
     return [...commands, { type: "attackMove", unitIds: [carrier.id], target: next }];
   }
 

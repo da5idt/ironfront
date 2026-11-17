@@ -305,6 +305,8 @@ export const OPPONENT = {
   dangerTicks: 60 * TICKS_PER_SECOND,
   /** Once the enemy base is found, the scout explores everything this many Cells from the HQ, looking for Ore. */
   homeExploreRadius: 28,
+  /** How long a Mechanic that found no way to a damaged Building is kept off it before it is sent there again. */
+  tendRetryTicks: 60 * TICKS_PER_SECOND,
 } as const;
 
 export const TRAINING = {

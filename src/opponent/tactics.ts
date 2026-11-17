@@ -1,4 +1,4 @@
-import { type BuildingView, OPPONENT, type UnitView, type Vec } from "../sim";
+import { type BuildingView, type CellPos, OPPONENT, type UnitView, type Vec } from "../sim";
 
 // The Computer Opponent's fighting decisions that are worth testing on their own:
 // how big an attack wave must be, and which of several candidates is nearest.
@@ -36,6 +36,11 @@ export function distanceTo(t: UnitView | BuildingView, from: Vec): number {
   const x = Math.min(t.x + t.width, Math.max(t.x, from.x));
   const y = Math.min(t.y + t.height, Math.max(t.y, from.y));
   return Math.hypot(x - from.x, y - from.y);
+}
+
+/** From a Unit to the middle of a Cell, in Cells. */
+export function distanceToCell(cell: CellPos, u: Vec): number {
+  return Math.hypot(u.x - (cell.x + 0.5), u.y - (cell.y + 0.5));
 }
 
 /**

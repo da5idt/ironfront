@@ -110,7 +110,7 @@ function homeOf(view: PlayerView, u: UnitView): { x: number; y: number } {
   return best ?? { x: hq.x + 0.5, y: hq.y + 0.5 };
 }
 
-/** Thinks a Harvester may stand still with the same load before it counts as idle. */
+/** Thinks a Harvester may stand still with the same cargo before it counts as idle. */
 const IDLE_THINKS = 6;
 
 /**
